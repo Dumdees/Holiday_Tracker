@@ -5,6 +5,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
+import { existsSync } from 'node:fs';
+
+const PREINSTALLED_CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, '../..');
@@ -20,7 +23,7 @@ export async function openApp({ viewport = { width: 1280, height: 860 }, onboard
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'mhm-profile-'));
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: true,
-    executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium',
+    ...(existsSync(PREINSTALLED_CHROMIUM) ? { executablePath: PREINSTALLED_CHROMIUM } : {}),
     viewport,
     locale: 'en-GB',
     timezoneId: 'Europe/London',

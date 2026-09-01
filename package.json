@@ -8,7 +8,9 @@
     "build": "node build.mjs",
     "test": "node --test tests/unit/*.test.js",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
-    "check": "npm run test && npm run build && npm run test:e2e"
+    "check": "npm run test && npm run build && npm run test:e2e",
+    "gallery": "node scripts/gallery.mjs && node scripts/gallery-shot.mjs",
+    "charts:shot": "node scripts/charts-shot.mjs"
   },
   "dependencies": {
     "@preact/signals": "2.11.1",

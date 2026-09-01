@@ -1,0 +1,46 @@
+MONTEITH PERSONAL CARE - HOLIDAY MANAGER
+========================================
+
+HOW TO OPEN IT
+--------------
+1. Double-click the file called "Monteith Holiday Manager".
+   It opens in your web browser (Microsoft Edge or Google Chrome).
+   That is all - there is nothing to install.
+
+2. Prefer a tidy window without the browser bar at the top?
+   Double-click "Open Monteith Holiday Manager" instead.
+   If Windows asks "Are you sure you want to open this file?", click Run.
+
+TIP: To keep it handy, right-click the file, choose "Send to", then
+"Desktop (create shortcut)". You can then open it from your desktop.
+
+THE FIRST TIME
+--------------
+A short welcome screen asks for your holiday year and your teams.
+You can choose "Explore with sample data" to have a look around first,
+then clear it from Settings > Advanced when you are ready to add real carers.
+
+WHERE IS MY INFORMATION KEPT?
+-----------------------------
+Everything you enter is saved automatically on this computer, inside the
+web browser you use to open the app. Nothing is sent over the internet.
+
+Because of that:
+ - Always open the app in the SAME browser (for example, always Edge).
+   Each browser keeps its own separate copy.
+ - Do not "clear browsing data" in that browser without saving a backup
+   first, or you could lose your holiday records.
+ - To move to a new computer: Settings > Backup > "Save a backup file",
+   copy that file across, then use "Restore from a backup file".
+
+BACKUPS
+-------
+Go to Settings > Backup and click "Save a backup file" about once a week
+(the app reminds you on the Home screen). Keep the file somewhere safe,
+such as OneDrive or a memory stick.
+
+NEED TO START AGAIN?
+--------------------
+Settings > Advanced > "Clear all data".
+
+This app was made for Monteith Personal Care.

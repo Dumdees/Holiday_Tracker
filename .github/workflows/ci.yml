@@ -1,0 +1,24 @@
+name: Check
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Built file is up to date
+        run: |
+          if ! git diff --quiet -- "Monteith Holiday Manager/Monteith Holiday Manager.html"; then
+            echo "The built app is out of date. Run 'npm run build' and commit the result."
+            exit 1
+          fi
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
