@@ -1,0 +1,21 @@
+{
+  "name": "monteith-holiday-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Holiday manager for carers at Monteith Personal Care - a single-file, install-free app.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
+    "check": "npm run test && npm run build && npm run test:e2e"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.1",
+    "preact": "10.28.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.62.1"
+  }
+}

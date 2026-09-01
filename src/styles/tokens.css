@@ -1,0 +1,59 @@
+/* Design tokens – the peach palette and shared measurements. Change colours here, nowhere else. */
+:root {
+  --peach-50: #FFF9F5;
+  --peach-100: #FFF0E6;
+  --peach-200: #FFDFCB;
+  --peach-300: #FFC8A8;
+  --peach-400: #FFAD82;
+  --peach-500: #F7915E;
+  --peach-600: #E5734A;
+  --peach-700: #C4583A;
+  --peach-800: #8F3F2B;
+
+  --cream: #FFFCFA;
+  --paper: #FFFFFF;
+  --ink: #3A2A24;
+  --ink-soft: #6B5850;
+  --ink-muted: #9C8A82;
+  --ink-faint: #C9B8B0;
+  --line: #F3E2D6;
+  --line-strong: #E8CDBC;
+
+  --sage: #6FA582;
+  --sage-soft: #E6F3EA;
+  --sage-ink: #2F6A45;
+  --sky: #5F9BD1;
+  --sky-soft: #E4F0FA;
+  --sky-ink: #24568A;
+  --amber: #E39A2E;
+  --amber-soft: #FCEFD6;
+  --amber-ink: #8A5A0C;
+  --rose: #D64F4B;
+  --rose-soft: #FBE3E2;
+  --rose-ink: #8F2622;
+  --plum: #9576B8;
+  --plum-soft: #EFE7F6;
+  --plum-ink: #55397A;
+
+  --accent: var(--peach-500);
+  --accent-strong: var(--peach-600);
+  --accent-soft: var(--peach-100);
+  --accent-ink: var(--peach-800);
+  --focus: 0 0 0 4px rgba(247, 145, 94, .35);
+
+  --radius-lg: 22px;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --shadow: 0 10px 30px rgba(140, 80, 50, .08), 0 2px 6px rgba(140, 80, 50, .04);
+  --shadow-sm: 0 2px 8px rgba(140, 80, 50, .06);
+  --shadow-lg: 0 24px 60px rgba(120, 60, 30, .18);
+
+  --font: "Segoe UI", "Segoe UI Variable Text", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+
+  --sidebar-w: 248px;
+  --content-max: 1240px;
+  --gap: 20px;
+  --tap: 44px;
+}
