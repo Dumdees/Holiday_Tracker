@@ -51,9 +51,10 @@ open it, drag the `Monteith Holiday Manager` folder to your Desktop, and double-
   options are tucked away under *Advanced*.
 - **Undo** on every change, half days, bank-holiday-aware day counting, and a friendly first-run
   welcome.
-- **Care Empire** – an optional tea-break game in the menu: click a carer to do visits, hire the
-  real team, grow from one street to the stars, meet prismatic carers, and earn Legacy Stars each
-  time you expand. Switch it off under *Settings → General* if it's not for you.
+- **Care Empire** – an optional tea-break game in the menu: an animated street where your carers
+  (named after the real team) walk to visits, residents wave and coins fly in. Tap a house to send your
+  star carer over, hire, upgrade, and grow from one street to the whole world and beyond. Completely
+  separate from the holiday records; hide it under Settings → General.
 
 ## What it looks like
 

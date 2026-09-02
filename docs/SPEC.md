@@ -65,6 +65,15 @@ threshold (`LEVELS`) lets you expand: the run resets, Legacy Stars (cbrt(lifetim
 carers (rainbow rush ×7, click frenzy ×77, care burst cash, permanent lucky hire +3%) and
 thank-you cards (cash or ×2). Achievements +1% each. Offline earnings at half speed (full with the
 Night shift perk), capped at 8 hours. News ticker and confetti for flavour.
+The street is an animated canvas (`src/ui/game/scene.js`, pure drawing, no game logic): houses
+laid out for the level, carers (named after the team, max 14 drawn) walking office → house → office
+with hearts on arrival and a coin flying to the funds display when they leave, residents waving in
+the doorway, care cars on the road, lamp posts and lit windows at night (4-minute day), showers,
+chimney smoke, birds, landmark buildings appearing as they are bought, domes and space suits from
+Orbit onwards, fireworks for achievements and expansions. Clicking anywhere on the street sends the
+star carer dashing to the nearest house (`playerVisit`). Prismatic carers walk across the street for
+their 13-second lifetime and cards float down; a transparent button (`data-test="spawn"`) tracks
+them for clicks and tests.
 
 ## 3. Behaviour rules
 - **Holiday year**: starts on `settings.holidayYearStart` (default 1 April). Year key = start year,
