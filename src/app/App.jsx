@@ -12,12 +12,19 @@ import { Holidays } from '../ui/views/Holidays.jsx';
 import { Reports } from '../ui/views/Reports.jsx';
 import { Settings } from '../ui/views/Settings.jsx';
 import { Onboarding } from '../ui/views/Onboarding.jsx';
+import { Game } from '../ui/views/Game.jsx';
 
-const VIEW_COMPONENTS = { home: Home, calendar: Calendar, carers: Carers, holidays: Holidays, reports: Reports, settings: Settings };
+const VIEW_COMPONENTS = { home: Home, calendar: Calendar, carers: Carers, holidays: Holidays, reports: Reports, settings: Settings, game: Game };
+
+/** Sections shown in the menu – optional ones only when their setting is on. */
+function visibleViews() {
+  const s = db.value?.settings || {};
+  return VIEWS.filter((v) => !v.optional || s[v.optional] !== false);
+}
 
 function NavItems({ compact = false }) {
   const current = route.value.view;
-  return VIEWS.map((v) => (
+  return visibleViews().map((v) => (
     <button
       key={v.id}
       type="button"
@@ -122,7 +129,8 @@ export function App() {
     );
   }
 
-  const View = VIEW_COMPONENTS[route.value.view] || Home;
+  const current = visibleViews().some((v) => v.id === route.value.view) ? route.value.view : 'home';
+  const View = VIEW_COMPONENTS[current] || Home;
   return (
     <div class="app">
       <Sidebar />

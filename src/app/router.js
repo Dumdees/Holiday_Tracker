@@ -8,6 +8,7 @@ export const VIEWS = [
   { id: 'carers', label: 'Carers', icon: 'users', hint: 'Your team and their entitlement' },
   { id: 'holidays', label: 'Holidays', icon: 'sun', hint: 'Add, change or remove holidays' },
   { id: 'reports', label: 'Reports', icon: 'chart', hint: 'Usage, trends and statistics' },
+  { id: 'game', label: 'Care Empire', icon: 'gamepad', hint: 'A little game for your tea break', optional: 'gameEnabled' },
   { id: 'settings', label: 'Settings', icon: 'settings', hint: 'Holiday year, teams, backups' },
 ];
 

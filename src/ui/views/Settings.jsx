@@ -106,6 +106,9 @@ function GeneralTab() {
           <RadioCards options={[{ value: '1', label: 'Monday' }, { value: '7', label: 'Sunday' }]} value={weekStart} onChange={setWeekStart} columns={2} />
         </Field>
       </Card>
+      <Card title="Care Empire game" icon="gamepad" subtitle="A light-hearted clicker game for tea breaks. It has nothing to do with your real holiday records.">
+        <Toggle checked={s.gameEnabled !== false} onChange={(v) => { updateSettings({ gameEnabled: v }); toast(v ? 'Care Empire added to the menu' : 'Care Empire hidden'); }} label="Show Care Empire in the menu" description="Turn this off to hide the game. Progress is kept either way." />
+      </Card>
       <div class="settings-save-bar">
         <Button variant="primary" icon="check" onClick={save} disabled={!dirty}>Save changes</Button>
         {!dirty ? <span class="muted">Everything is saved</span> : null}

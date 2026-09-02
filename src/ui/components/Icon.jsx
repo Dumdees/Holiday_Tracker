@@ -63,6 +63,7 @@ const PATHS = {
   database: 'M12 8c5 0 9-1.3 9-3s-4-3-9-3-9 1.3-9 3 4 3 9 3zM21 12c0 1.7-4 3-9 3s-9-1.3-9-3M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5',
   'external': 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3',
   menu: 'M3 12h18M3 6h18M3 18h18',
+  gamepad: 'M6 12h4M8 10v4M15 13h.01M18 11h.01M17.3 5H6.7a4 4 0 0 0-4 3.6L2 17a2.5 2.5 0 0 0 4.5 1.5L8.5 16h7l2 2.5A2.5 2.5 0 0 0 22 17l-.7-8.4a4 4 0 0 0-4-3.6z',
 };
 
 export function Icon({ name, size = 24, className = '', style, title, strokeWidth = 2 }) {

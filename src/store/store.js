@@ -397,6 +397,7 @@ export async function resetAll() {
   const fresh = createEmptyDb();
   batch(() => { db.value = fresh; undoStack.value = []; lastChange.value = { label: 'Cleared all data', at: Date.now() }; });
   await storage.clearAll();
+  try { localStorage.removeItem('mhm:game'); } catch { /* ignore */ }
   await flushSave();
 }
 

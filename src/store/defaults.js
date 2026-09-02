@@ -72,6 +72,7 @@ export function defaultSettings() {
     backupReminderDays: 7,
     lastBackupAt: null,
     onboardingComplete: false,
+    gameEnabled: true, // show the Care Empire game in the menu
     roles: ['Carer', 'Senior carer', 'Care coordinator', 'Team leader', 'Office'],
     unusedLeaveWarningDays: 5, // warn when a carer has this many (or more) days unused near year end
     unusedLeaveWarningWeeks: 12, // ... in the last N weeks of the holiday year
