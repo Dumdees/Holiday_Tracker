@@ -12,6 +12,7 @@ export const saveState = signal('saved'); // 'saved' | 'saving' | 'error'
 export const saveError = signal(null);
 export const undoStack = signal([]); // [{ label, snapshot }]
 export const lastChange = signal(null); // { label, at } – for toasts
+export const notice = signal(null); // { message, at } – information toasts with no undo
 
 const UNDO_LIMIT = 25;
 let saveTimer = null;
@@ -27,6 +28,20 @@ export async function initStore() {
   db.value = doc ? normalise(migrate(doc)) : createEmptyDb();
   ready.value = true;
   if (typeof window !== 'undefined') {
+    // If the app is open in another window and saves there, pick up the newer copy here.
+    window.addEventListener('storage', (e) => {
+      if (e.key !== 'mhm:db' || !e.newValue) return;
+      try {
+        const incoming = JSON.parse(e.newValue);
+        if (String(incoming.savedAt || '') > String(db.value?.savedAt || '')) {
+          batch(() => {
+            db.value = normalise(incoming);
+            undoStack.value = [];
+            notice.value = { message: 'Updated with changes made in another window', at: Date.now() };
+          });
+        }
+      } catch { /* ignore */ }
+    });
     window.addEventListener('beforeunload', (e) => {
       if (saveTimer) { flushSave(); }
       if (saveState.value === 'saving') { e.preventDefault(); e.returnValue = ''; }

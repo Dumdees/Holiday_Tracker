@@ -1,7 +1,7 @@
 /* Printing: hide navigation and controls, keep content clean and black-on-white. */
 @media print {
   body { background: #fff; color: #000; font-size: 12px; }
-  .sidebar, .bottom-nav, .toast-host, .modal-backdrop, .drawer-backdrop, .no-print, .page-actions, .btn, .icon-btn { display: none !important; }
+  .sidebar, .bottom-nav, .toast-host, .modal-backdrop, .drawer-backdrop, .no-print, .page-actions, .toolbar, .btn, .icon-btn { display: none !important; }
   .app { display: block; }
   .main, .page { max-width: none; padding: 0; margin: 0; }
   .card { box-shadow: none !important; border: 1px solid #ddd; break-inside: avoid; }

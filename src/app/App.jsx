@@ -1,7 +1,7 @@
 // The shell: brand, navigation, the current section, toasts and the undo bar.
 import { useEffect } from 'preact/hooks';
 import { route, navigate, VIEWS } from './router.js';
-import { ready, db, saveState, saveError, canUndo, undoLabel, undo, lastChange } from '../store/store.js';
+import { ready, db, saveState, saveError, canUndo, undoLabel, undo, lastChange, notice } from '../store/store.js';
 import { Icon, BrandMark } from '../ui/components/Icon.jsx';
 import { ToastHost, toast } from '../ui/components/Toast.jsx';
 import { ModalHost } from '../ui/components/Modal.jsx';
@@ -70,6 +70,12 @@ function UndoBar() {
   return <UndoToast key={change.at} label={change.label} />;
 }
 
+function NoticeToast() {
+  const n = notice.value;
+  useEffect(() => { if (n) toast.info(n.message); }, [n?.at]);
+  return null;
+}
+
 function UndoToast({ label }) {
   useEffect(() => {
     const id = toast(label, {
@@ -114,6 +120,7 @@ export function App() {
       <ToastHost />
       <ModalHost />
       <UndoBar />
+      <NoticeToast />
     </div>
   );
 }
