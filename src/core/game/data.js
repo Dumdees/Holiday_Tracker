@@ -5,7 +5,7 @@ export const COST_GROWTH = 1.15;
 
 /** Things that deliver visits on their own. `rate` = visits per second each. `level` = expansion level needed. */
 export const BUILDINGS = [
-  { id: 'carer', name: 'Carer', plural: 'Carers', emoji: '👩‍⚕️', baseCost: 15, rate: 0.1, level: 0, blurb: 'A kind pair of hands doing visits on foot.' },
+  { id: 'carer', name: 'Carer', plural: 'Carers', emoji: '👩‍⚕️', baseCost: 15, rate: 0.2, level: 0, blurb: 'A kind pair of hands doing visits on foot.' },
   { id: 'car', name: 'Care car', plural: 'Care cars', emoji: '🚗', baseCost: 100, rate: 1, level: 0, blurb: 'Gets the team from door to door.' },
   { id: 'rota', name: 'Rota app', plural: 'Rota apps', emoji: '📱', baseCost: 1100, rate: 8, level: 0, blurb: 'No more double-booked Tuesdays.' },
   { id: 'office', name: 'Local office', plural: 'Local offices', emoji: '🏢', baseCost: 12000, rate: 47, level: 1, blurb: 'Somewhere for the kettle and the paperwork.' },
@@ -42,7 +42,7 @@ export function levelInfo(level) {
 
 /** Permanent perks bought with Legacy Stars. */
 export const PERKS = [
-  { id: 'admin', name: 'Head office', emoji: '🏛️', cost: 3, blurb: 'Every new run starts with payments collected automatically.' },
+  { id: 'admin', name: 'Head office', emoji: '🏛️', cost: 2, blurb: 'Every new run starts with payments collected automatically.' },
   { id: 'alumni', name: 'Alumni network', emoji: '🎓', cost: 8, blurb: 'Start each run with 5 carers already on the team.' },
   { id: 'magnet', name: 'Prismatic magnet', emoji: '🌈', cost: 15, blurb: 'Prismatic carers appear twice as often.' },
   { id: 'cards', name: 'Card collector', emoji: '💌', cost: 20, blurb: 'Thank-you cards appear twice as often.' },
@@ -86,7 +86,7 @@ UPGRADES.push(
   { id: 'click-3', name: 'Helping hands', emoji: '🤝', kind: 'clickpct', cost: 12000, blurb: 'Each of your visits also earns 1% of what your team makes per second.', unlock: (s) => s.clicks >= 200 },
   { id: 'click-4', name: 'Legendary hugs', emoji: '🫂', kind: 'click', cost: 400000, blurb: 'Each of your visits is worth twice as much.', unlock: (s) => s.clicks >= 600 },
   { id: 'click-5', name: 'Golden touch', emoji: '✨', kind: 'clickpct', cost: 5e7, blurb: 'Each of your visits also earns another 1% of your per-second income.', unlock: (s) => s.clicks >= 1500 },
-  { id: 'admin', name: 'Office admin', emoji: '🗂️', kind: 'collect', cost: 300, blurb: 'Payments are collected for you every few seconds.', unlock: (s) => s.runEarned >= 120 },
+  { id: 'admin', name: 'Office admin', emoji: '🗂️', kind: 'collect', cost: 150, blurb: 'Payments are collected for you every few seconds.', unlock: (s) => s.runEarned >= 60 },
   { id: 'direct-debit', name: 'Direct debit', emoji: '🏦', kind: 'collect', cost: 6000, blurb: 'Payments arrive instantly. No more chasing invoices.', unlock: (s) => s.upgrades.includes('admin') },
   { id: 'value-1', name: 'Private clients', emoji: '💷', kind: 'value', cost: 10000, blurb: 'Every visit pays twice as much.', unlock: (s) => s.runEarned >= 5000 },
   { id: 'value-2', name: 'Council contract', emoji: '📜', kind: 'value', cost: 1e6, blurb: 'Every visit pays twice as much.', unlock: (s) => s.runEarned >= 3e5 },

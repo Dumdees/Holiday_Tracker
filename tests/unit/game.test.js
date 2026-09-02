@@ -31,9 +31,9 @@ test('buildings cost 15% more each time and produce into invoices until collecte
   g.tick(s, 5, T0 + 5000, () => 0.99);
   g.tick(s, 5, T0 + 10000, () => 0.99);
   assert.equal(s.funds, before, 'nothing lands in funds without collecting');
-  assert.ok(s.invoices > 0.99 && s.invoices < 1.01, `10s of 0.1 visits/s = ~£1 owed (${s.invoices})`);
+  assert.ok(s.invoices > 1.95 && s.invoices < 2.1, `10s of 0.2 visits/s = ~£2 owed (${s.invoices})`);
   const got = g.collect(s);
-  assert.ok(got > 0.99);
+  assert.ok(got > 1.99);
   assert.equal(s.invoices, 0);
   assert.equal(s.collections, 1);
 });
@@ -83,7 +83,7 @@ test('breakpoints gate buildings and expanding resets the run but keeps legacy',
   assert.ok(g.canExpand(s));
   assert.equal(g.nextLevel(s).name, 'The village');
   const gained = g.starsOnExpand(s);
-  assert.equal(gained, Math.floor(Math.cbrt(6)));
+  assert.equal(gained, Math.floor(Math.cbrt(60)));
   const r = g.expand(s, T0 + 1000);
   assert.deepEqual(r, { gained, level: 1 });
   assert.equal(s.funds, 0);

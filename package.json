@@ -1,6 +1,6 @@
 {
   "name": "monteith-holiday-manager",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "description": "Holiday manager for carers at Monteith Personal Care - a single-file, install-free app.",
   "type": "module",

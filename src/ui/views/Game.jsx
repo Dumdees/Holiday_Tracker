@@ -56,9 +56,17 @@ export function Game() {
   const hudRef = useRef(null);
   const sceneRef = useRef(null);
   const lastTick = useRef(Date.now());
+  const firstSeen = useRef(new Map()); // upgrade id → when it first appeared, for the NEW tag
+  const prevEffects = useRef('');
+  const effectMeta = useRef(new Map());
   const s = game.value;
   const hasGame = !!s;
   const away = offlineReport.value;
+
+  useEffect(() => {
+    document.body.classList.add('game-open');
+    return () => document.body.classList.remove('game-open');
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setTickerIndex((i) => (i + 1 + Math.floor(Math.random() * 3)) % TICKER.length), 11000);
@@ -81,12 +89,11 @@ export function Game() {
           return;
         }
         const events = G.tick(st, dt, now, Math.random, names);
+        const badges = events.filter((e) => e.kind === 'achievement').map((e) => e.achievement);
+        if (badges.length === 1) toast(`${badges[0].emoji} Achievement: ${badges[0].name} – +1% to everything`, { kind: 'success', duration: 5000 });
+        else if (badges.length > 1) toast(`🎉 ${badges.length} achievements at once: ${badges.map((b) => b.name).join(', ')} – +${badges.length}% to everything`, { kind: 'success', duration: 6000 });
+        if (badges.length) { setConfetti((c) => c + 1); sceneRef.current?.celebrate('achievement'); }
         for (const e of events) {
-          if (e.kind === 'achievement') {
-            toast(`${e.achievement.emoji} Achievement: ${e.achievement.name} – +1% to everything`, { kind: 'success', duration: 5000 });
-            setConfetti((c) => c + 1);
-            sceneRef.current?.celebrate('achievement');
-          }
           if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 A prismatic ${e.spawn.name} is walking down the street – catch them!`, { kind: 'info', duration: 6000 });
           if (e.kind === 'spawn' && e.spawn.type === 'card') toast('💌 A thank-you card is floating down – click it!', { kind: 'info', duration: 5000 });
         }
@@ -109,6 +116,19 @@ export function Game() {
 
   // Keep the street in step with the game after every render (cheap).
   useEffect(() => { if (s) sceneRef.current?.sync(s, names, Date.now()); });
+
+  // Say when a boost runs out, so the chip does not just vanish.
+  const effectKey = s ? s.effects.filter((e) => e.until > Date.now()).map((e) => e.id).join(',') : '';
+  useEffect(() => {
+    if (s) for (const e of s.effects) effectMeta.current.set(e.id, e);
+    const before = prevEffects.current ? prevEffects.current.split(',') : [];
+    const nowIds = effectKey ? effectKey.split(',') : [];
+    prevEffects.current = effectKey;
+    for (const id of before) if (!nowIds.includes(id)) {
+      const e = effectMeta.current.get(id);
+      toast(`${e ? `${e.emoji} ${e.name}` : 'The boost'} is over – back to normal speed`, { kind: 'info', duration: 3500 });
+    }
+  }, [effectKey]);
 
   useEffect(() => {
     if (!away) return;
@@ -136,6 +156,10 @@ export function Game() {
   const activeEffects = s.effects.filter((e) => e.until > now);
   const frenzy = activeEffects.some((e) => e.clickMult);
   const spawnBox = s.spawn ? sceneRef.current?.spawnPos() : null;
+  const nextBadge = G.achievementList(s).find((a) => !a.done);
+  const upgrades = G.availableUpgrades(s).slice(0, 12);
+  const firstRender = firstSeen.current.size === 0;
+  for (const u of upgrades) if (!firstSeen.current.has(u.id)) firstSeen.current.set(u.id, firstRender ? 0 : now); // no NEW tags on what was already there
 
   function addFloater(text, x, y, cls = '') {
     const id = Math.random();
@@ -217,7 +241,6 @@ export function Game() {
     if (ok) { resetGame(); toast('Back to the beginning. Good luck!'); }
   }
 
-  const upgrades = G.availableUpgrades(s).slice(0, 12);
   const progress = G.expandProgress(s);
   const nextLocked = G.nextLockedBuilding(s);
   const onShift = s.buildings.carer || 0;
@@ -281,9 +304,10 @@ export function Game() {
           <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? 'Hover for details. Click to buy.' : 'Keep going – upgrades appear as you grow.'}>
             <div class="upgrade-row">
               {upgrades.map((u) => (
-                <button key={u.id} type="button" class={`upgrade-tile ${s.funds >= u.cost ? 'affordable' : ''}`} onClick={() => onUpgrade(u)} disabled={s.funds < u.cost} title={`${u.name} – ${u.blurb} (${fmtMoney(u.cost)})`} data-test={`upgrade-${u.id}`}>
+                <button key={u.id} type="button" class={`upgrade-tile ${s.funds >= u.cost ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={s.funds < u.cost} title={`${u.name} – ${u.blurb} (${fmtMoney(u.cost)})`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
-                  <span class="upgrade-cost">{fmtNum(u.cost, { short: true })}</span>
+                  <span class="upgrade-name">{u.name}</span>
+                  <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
                 </button>
               ))}
             </div>
@@ -331,6 +355,7 @@ export function Game() {
               <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
                 {G.canExpand(s) ? `Expand to ${next.name.toLowerCase()} · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
               </Button>
+              {nextBadge ? <p class="small mt next-goal">🎯 <strong>Next badge:</strong> {nextBadge.emoji} {nextBadge.name} – {nextBadge.blurb}</p> : null}
               {s.level > 0 ? <p class="muted small mt">Level {s.level}: {level.name} {level.emoji}. Total earned ever: {fmtMoney(s.lifetimeEarned)}.</p> : null}
             </Card>
           ) : null}

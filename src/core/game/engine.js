@@ -35,6 +35,7 @@ export function newGame(now = Date.now()) {
     perks: [],
     effects: [],            // { id, name, emoji, until, prodMult?, clickMult? }
     spawn: null,            // { type: 'prismatic'|'card', name, x, y, until }
+    spawnsThisRun: 0,
     prismaticHires: [],     // names of permanent prismatic carers this run
     prismaticsMet: 0,
     cardsOpened: 0,
@@ -63,6 +64,8 @@ export function loadGame(saved, now = Date.now()) {
   state.version = SAVE_VERSION;
   const offline = applyOffline(state, now);
   state.lastSeen = now;
+  // A thank-you card waits for anyone who has been away half a day or more – a little reason to come back.
+  if (offline && offline.seconds >= 4 * 3600) state.spawn = { type: 'card', name: pickName([], null, Math.random), x: 40, y: 30, until: now + 120000, born: now };
   return { state, offline };
 }
 
@@ -228,7 +231,7 @@ export function buyUpgrade(state, id) {
 
 // ---------- Legacy (prestige) ----------
 export function starsForLifetime(lifetimeEarned) {
-  return Math.floor(Math.cbrt(Math.max(0, lifetimeEarned) / 1e4));
+  return Math.floor(Math.cbrt(Math.max(0, lifetimeEarned) / 1e3));
 }
 
 export function starsAvailable(state) {
@@ -239,9 +242,13 @@ export function nextLevel(state) {
   return levelInfo(state.level + 1);
 }
 
+/** How far through this run, 0..1. Log-scaled so the bar keeps moving through the long middle. */
 export function expandProgress(state) {
   const next = nextLevel(state);
-  return Math.min(1, state.runEarned / next.threshold);
+  const floor = next.threshold / 100;
+  const earned = Math.max(0, state.runEarned);
+  if (earned <= floor) return (earned / floor) * 0.15;
+  return Math.min(1, 0.15 + 0.85 * (Math.log(earned / floor) / Math.log(100)));
 }
 
 export function canExpand(state) {
@@ -257,7 +264,7 @@ export function starsOnExpand(state) {
 export function expand(state, now = Date.now()) {
   if (!canExpand(state)) return null;
   const gained = starsOnExpand(state);
-  const keep = { startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements, level: state.level + 1, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent, perks: state.perks, prismaticsMet: state.prismaticsMet, cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate, clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log };
+  const keep = { startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements, level: state.level + 1, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent, perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet, cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate, clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log };
   const fresh = newGame(now);
   Object.assign(state, fresh, keep, { runStartedAt: now, lastSeen: now });
   applyStartPerks(state);
@@ -299,12 +306,12 @@ export function clickSpawn(state, now = Date.now(), rng = Math.random) {
   if (spawn.type === 'prismatic') {
     state.prismaticsMet += 1;
     effect = pickWeighted(PRISMATIC_EFFECTS, rng);
-    if (effect.id === 'care-burst') amount = Math.max(prod * 900, state.funds * 0.13, 25);
+    if (effect.id === 'care-burst') amount = Math.max(25, Math.min(prod * 900, Math.max(state.funds * 0.15, prod * 120)));
     if (effect.id === 'lucky-hire') state.prismaticHires = [...(state.prismaticHires || []), spawn.name];
   } else {
     state.cardsOpened += 1;
     effect = pickWeighted(CARD_EFFECTS, rng);
-    if (effect.id === 'card-cash') amount = Math.max(prod * (60 + Math.floor(rng() * 240)), state.funds * 0.05, 10);
+    if (effect.id === 'card-cash') amount = Math.max(10, Math.min(prod * (60 + Math.floor(rng() * 240)), Math.max(state.funds * 0.1, prod * 60)));
   }
   if (amount > 0) credit(state, amount);
   if (effect.seconds) {
@@ -346,11 +353,13 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
   if (state.spawn && state.spawn.until < now) state.spawn = null;
   if (!state.spawn && dt > 0) {
     const pChance = PRISMATIC_CHANCE_PER_SECOND * (state.perks.includes('magnet') ? 2 : 1) * dt;
-    const cChance = CARD_CHANCE_PER_SECOND * (state.perks.includes('cards') ? 2 : 1) * dt;
+    // Nobody should wait long for their first surprise of a run: after 40 seconds without one, cards come thick and fast.
+    const firstSurprise = state.spawnsThisRun === 0 && now - state.runStartedAt > 40000 ? 12 : 1;
+    const cChance = CARD_CHANCE_PER_SECOND * (state.perks.includes('cards') ? 2 : 1) * firstSurprise * dt;
     const r = rng();
     if (r < pChance) state.spawn = { type: 'prismatic', name: pickName(names, null, rng), x: 22 + rng() * 56, y: 18 + rng() * 50, until: now + SPAWN_LIFETIME * 1000, born: now };
     else if (r < pChance + cChance) state.spawn = { type: 'card', name: pickName(names, null, rng), x: 22 + rng() * 56, y: 18 + rng() * 50, until: now + SPAWN_LIFETIME * 1000, born: now };
-    if (state.spawn) events.push({ kind: 'spawn', spawn: state.spawn });
+    if (state.spawn) { state.spawnsThisRun = (state.spawnsThisRun || 0) + 1; events.push({ kind: 'spawn', spawn: state.spawn }); }
   }
   const hour = new Date(now).getHours();
   if (hour >= 22 || hour < 5) state.playedLate = true;
