@@ -52,6 +52,20 @@ jargon. British English. Dates like "Mon 3 Mar 2026". Money never appears. Days 
    bank holiday region, (3) add your teams (chips) → "Start with sample data to explore" or "Start
    fresh". Skippable. Sets `settings.onboardingComplete`.
 
+### Care Empire (optional game, `settings.gameEnabled`)
+A Cookie-Clicker-style idle game in the menu, kept entirely separate from holiday data (saved under
+`localStorage['mhm:game']`). Pure engine in `src/core/game/` (`data.js` content, `engine.js` maths,
+`format.js` numbers), screen in `src/ui/views/Game.jsx`, state in `src/ui/game/gameStore.js`.
+Loop: click the star carer to do a visit → payments pile up as invoices until collected by hand →
+buy carers (named after the real team), cars, rota apps, offices, academies, hubs, networks,
+sensors, franchises, satellites, lunar bases and starships (cost ×1.15 each) → upgrades unlock by
+ownership/clicks/earnings → office admin then direct debit automate collection → reaching a level
+threshold (`LEVELS`) lets you expand: the run resets, Legacy Stars (cbrt(lifetime/1e4)) are kept
+(+2% each) and spent on perks → higher levels unlock bigger buildings. Random spawns: prismatic
+carers (rainbow rush ×7, click frenzy ×77, care burst cash, permanent lucky hire +3%) and
+thank-you cards (cash or ×2). Achievements +1% each. Offline earnings at half speed (full with the
+Night shift perk), capped at 8 hours. News ticker and confetti for flavour.
+
 ## 3. Behaviour rules
 - **Holiday year**: starts on `settings.holidayYearStart` (default 1 April). Year key = start year,
   label "2026/27" (or "2026" for January starts). A holiday spanning the boundary is split, each piece
