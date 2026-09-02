@@ -19,7 +19,16 @@ jobs:
       - run: npm run build
       - name: Zip the app folder
         run: zip -r "Monteith-Holiday-Manager.zip" "Monteith Holiday Manager"
+      - name: Release notes
+        run: |
+          if [ -f "docs/release-notes/${{ github.ref_name }}.md" ]; then
+            cp "docs/release-notes/${{ github.ref_name }}.md" release-body.md
+          else
+            echo "Download Monteith-Holiday-Manager.zip below, open it, and double-click Monteith Holiday Manager inside the folder." > release-body.md
+          fi
       - uses: softprops/action-gh-release@v2
         with:
+          name: Monteith Holiday Manager ${{ github.ref_name }}
+          body_path: release-body.md
           files: Monteith-Holiday-Manager.zip
           generate_release_notes: true
