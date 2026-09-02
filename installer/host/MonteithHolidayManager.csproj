@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A small Windows program that shows the single-file app in its own window using the
+       Microsoft Edge WebView2 component that ships with Windows 10/11. Built by the release workflow. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>Monteith Holiday Manager</AssemblyName>
+    <RootNamespace>MonteithHolidayManager</RootNamespace>
+    <ApplicationIcon>..\icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>Monteith Holiday Manager</Product>
+    <Company>Monteith Personal Care</Company>
+    <Copyright>Made for Monteith Personal Care</Copyright>
+    <Description>Holiday manager for carers at Monteith Personal Care</Description>
+    <Version>$(AppVersion)</Version>
+    <AppVersion Condition="'$(AppVersion)' == ''">0.0.0</AppVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+</Project>

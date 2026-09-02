@@ -1,5 +1,5 @@
 @echo off
-rem Opens the Monteith Holiday Manager in a tidy app-style window (no address bar).
+rem Opens the Monteith Holiday Manager in a new browser window.
 rem Tries Microsoft Edge, then Google Chrome. If neither is found it opens the app in your usual browser.
 setlocal
 set "APP=%~dp0Monteith Holiday Manager.html"
@@ -12,7 +12,7 @@ if not defined BROWSER if exist "%ProgramFiles%\Google\Chrome\Application\chrome
 if not defined BROWSER if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "BROWSER=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if not defined BROWSER if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" set "BROWSER=%LocalAppData%\Google\Chrome\Application\chrome.exe"
 if defined BROWSER (
-  start "" "%BROWSER%" --app="%URL%"
+  start "" "%BROWSER%" --new-window "%URL%"
 ) else (
   start "" "%APP%"
 )

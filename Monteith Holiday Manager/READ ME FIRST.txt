@@ -3,17 +3,12 @@ MONTEITH PERSONAL CARE - HOLIDAY MANAGER
 
 HOW TO OPEN IT
 --------------
-If you used the installer: double-click the "Monteith Holiday Manager"
-icon on your Desktop or in the Start menu. That is all you need to do.
+Double-click the "Monteith Holiday Manager" icon on your Desktop or in the
+Start menu (if you used the installer), or the "Monteith Holiday Manager"
+program in this folder. It opens in its own window. That is all.
 
-If you have the folder instead:
-1. Double-click the file called "Monteith Holiday Manager".
-   It opens in your web browser (Microsoft Edge or Google Chrome).
-   That is all - there is nothing to install.
-
-2. Prefer a tidy window without the browser bar at the top?
-   Double-click "Open Monteith Holiday Manager" instead.
-   If Windows asks "Are you sure you want to open this file?", click Run.
+If Windows says "Windows protected your PC" the first time, click
+"More info" and then "Run anyway".
 
 TIP: To keep it handy, right-click the file, choose "Send to", then
 "Desktop (create shortcut)". You can then open it from your desktop.
@@ -26,16 +21,12 @@ then clear it from Settings > Advanced when you are ready to add real carers.
 
 WHERE IS MY INFORMATION KEPT?
 -----------------------------
-Everything you enter is saved automatically on this computer, inside the
-web browser you use to open the app. Nothing is sent over the internet.
+Everything you enter is saved automatically on this computer, in your own
+Windows account. Nothing is sent over the internet. It stays put when the
+program is updated.
 
-Because of that:
- - Always open the app in the SAME browser (for example, always Edge).
-   Each browser keeps its own separate copy.
- - Do not "clear browsing data" in that browser without saving a backup
-   first, or you could lose your holiday records.
- - To move to a new computer: Settings > Backup > "Save a backup file",
-   copy that file across, then use "Restore from a backup file".
+To move to a new computer: Settings > Backup > "Save a backup file", copy
+that file across, then use "Restore from a backup file" on the new one.
 
 BACKUPS
 -------

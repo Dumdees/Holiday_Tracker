@@ -24,3 +24,22 @@ jobs:
           fi
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  windows-app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - name: Build the Windows program
+        shell: pwsh
+        run: node scripts/windows-package.mjs --version 0.0.0 --no-installer
+      - name: Smoke-test the packaged program
+        shell: pwsh
+        run: node scripts/windows-package.mjs --smoke-test

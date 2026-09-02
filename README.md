@@ -5,7 +5,7 @@ It keeps track of every carer's annual leave entitlement, shows who is off on a 
 lets you add or remove holidays in bulk with simple dropdowns, warns you about clashes,
 and gives you clear reports and charts – all without anything to install.
 
-It runs as **one file** that opens in Microsoft Edge or Google Chrome. Everything is saved
+It installs like any other Windows program and opens in its own window. Everything is saved
 on the computer it runs on. Nothing is sent over the internet.
 
 ## Getting it onto a Windows computer
@@ -25,13 +25,12 @@ on the computer it runs on. Nothing is sent over the internet.
 The first time, a short welcome screen asks for your holiday year and teams. You can start
 with sample data to explore, and clear it later from *Settings → Advanced*.
 
-> **Keep it in one browser.** Your data lives inside the browser that opens the app (the icon
-> uses Microsoft Edge), so always open it from the icon. Use *Settings → Backup* to save a
-> backup file every week – the Home screen reminds you.
+> Your records are kept on that computer, in your own Windows account. Use *Settings → Backup*
+> to save a backup file every week – the Home screen reminds you.
 
 **Prefer not to install anything?** The release also has `Monteith-Holiday-Manager.zip`:
-open it, drag the `Monteith Holiday Manager` folder to your Desktop, and double-click
-`Monteith Holiday Manager` inside it. `READ ME FIRST.txt` in the folder explains the rest.
+open it, drag the `Monteith Holiday Manager` folder to your Desktop, and double-click the
+`Monteith Holiday Manager` program inside it. `READ ME FIRST.txt` in the folder explains the rest.
 
 ## What it does
 
@@ -79,6 +78,8 @@ Source lives in `src/` (Preact + signals, plain CSS). `npm install`, then:
 | `npm run check` | All of the above |
 
 See `CLAUDE.md` and `docs/SPEC.md` for the architecture, data model and product spec.
-The built file is committed so the download-ZIP route always works. The Windows installer is
-built by the Release workflow with Inno Setup from `installer/MonteithHolidayManager.iss`; run
-`node scripts/make-icon.mjs` to regenerate the icon.
+The built file is committed. On Windows, `node scripts/windows-package.mjs --version v1.1.0`
+builds the small host program in `installer/host` (a WebView2 window around the single file,
+.NET Framework 4.8), assembles `dist/`, smoke-tests it and builds the installer with Inno Setup
+from `installer/MonteithHolidayManager.iss`. The Release workflow does all of this on a Windows
+runner. `node scripts/make-icon.mjs` regenerates the icon.

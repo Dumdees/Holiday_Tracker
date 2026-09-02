@@ -154,10 +154,11 @@ below is stable – add optional parameters rather than changing or removing any
 - Never show raw ids, JSON, or technical words. Errors are sentences a person would say.
 
 ## 7. Windows deployment
-Folder `Monteith Holiday Manager/` contains the built HTML, a `.bat` launcher that opens it in Edge as
-an app-style window, and a plain-English `READ ME FIRST.txt`. The Release workflow (Windows runner)
-builds `Monteith-Holiday-Manager-Setup-<version>.exe` with Inno Setup from
-`installer/MonteithHolidayManager.iss` – a per-user install (no admin) to
-`%LocalAppData%\Programs\Monteith Holiday Manager` with Desktop and Start menu icons that launch Edge or
-Chrome in `--app` mode (falling back to the default browser) – and attaches it plus the ZIP to the
-GitHub release. README.md explains the download in plain English.
+`installer/host` is a small .NET Framework 4.8 WinForms program hosting the single file in a WebView2
+window (virtual host `monteith-holiday-manager.app`, data under `%LocalAppData%\Monteith Holiday Manager\Data`).
+`scripts/windows-package.mjs` builds it, assembles `dist/Monteith Holiday Manager/` (program + HTML +
+read-me), runs the program's `--smoke-test`, zips the folder and builds
+`Monteith-Holiday-Manager-Setup-<version>.exe` with Inno Setup (`installer/MonteithHolidayManager.iss`:
+per-user install, Desktop and Start menu icons, WebView2 runtime bootstrapped if missing). The Release
+workflow runs all of this on a Windows runner and attaches both files to the GitHub release. The
+`Monteith Holiday Manager/` folder in the repo keeps the plain HTML route working (double-click the file).

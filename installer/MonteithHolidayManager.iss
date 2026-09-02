@@ -1,15 +1,17 @@
 ; Inno Setup script for the Monteith Holiday Manager.
-; Builds a per-user installer (no administrator prompt) that copies the app folder,
-; adds Desktop and Start menu icons that open the app in an app-style browser window,
-; and registers an uninstaller. Build with: ISCC.exe /DAppVersion=1.0.0 installer\MonteithHolidayManager.iss
+; Installs the app (a small Windows program that shows the single-file app in its own window)
+; for the current user – no administrator prompt – with Desktop and Start menu icons and an uninstaller.
+; The release workflow assembles ..\dist\Monteith Holiday Manager\ first, then runs:
+;   ISCC.exe /DAppVersion=1.1.0 installer\MonteithHolidayManager.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
 #define AppName "Monteith Holiday Manager"
 #define AppPublisher "Monteith Personal Care"
-#define AppFolder "..\Monteith Holiday Manager"
-#define AppHtml "Monteith Holiday Manager.html"
+#define AppExe "Monteith Holiday Manager.exe"
+#define DistFolder "..\dist\Monteith Holiday Manager"
+#define WebView2Bootstrapper "MicrosoftEdgeWebview2Setup.exe"
 
 [Setup]
 AppId={{7E1D4C0B-5B3E-4B7E-9C1A-2F6B8D3A9E10}
@@ -26,14 +28,15 @@ PrivilegesRequired=lowest
 OutputDir=Output
 OutputBaseFilename=Monteith-Holiday-Manager-Setup-{#AppVersion}
 SetupIconFile=icon.ico
-UninstallDisplayIcon={app}\icon.ico
+UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ShowLanguageDialog=no
-CloseApplications=no
+CloseApplications=yes
 ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -48,79 +51,74 @@ FinishedLabel={#AppName} is ready. You will find it on your Desktop and in the S
 Name: "desktopicon"; Description: "Put an icon on the Desktop"; GroupDescription: "Shortcuts:"
 
 [Files]
-Source: "{#AppFolder}\{#AppHtml}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#AppFolder}\READ ME FIRST.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#AppFolder}\Open Monteith Holiday Manager.bat"; DestDir: "{app}"; Flags: ignoreversion
-Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#WebView2Bootstrapper}"; Flags: dontcopy
 
 [Icons]
-; When Microsoft Edge or Google Chrome is present, the icons open the app in its own window.
-Name: "{autoprograms}\{#AppName}"; Filename: "{code:BrowserPath}"; Parameters: "--app=""{code:AppUrl}"""; IconFilename: "{app}\icon.ico"; Comment: "Plan carers' holidays"; Check: BrowserFound
-Name: "{autodesktop}\{#AppName}"; Filename: "{code:BrowserPath}"; Parameters: "--app=""{code:AppUrl}"""; IconFilename: "{app}\icon.ico"; Comment: "Plan carers' holidays"; Tasks: desktopicon; Check: BrowserFound
-; Otherwise the icons open the app in whatever browser is the default.
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppHtml}"; IconFilename: "{app}\icon.ico"; Comment: "Plan carers' holidays"; Check: NoBrowserFound
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppHtml}"; IconFilename: "{app}\icon.ico"; Comment: "Plan carers' holidays"; Tasks: desktopicon; Check: NoBrowserFound
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; Comment: "Plan carers' holidays"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Comment: "Plan carers' holidays"; Tasks: desktopicon
 Name: "{autoprograms}\Read me first"; Filename: "{app}\READ ME FIRST.txt"
 Name: "{autoprograms}\Remove {#AppName}"; Filename: "{uninstallexe}"
 
 [Run]
-Filename: "{code:BrowserPath}"; Parameters: "--app=""{code:AppUrl}"""; Description: "Open {#AppName} now"; Flags: postinstall nowait skipifsilent; Check: BrowserFound
-Filename: "{app}\{#AppHtml}"; Description: "Open {#AppName} now"; Flags: postinstall nowait skipifsilent shellexec; Check: NoBrowserFound
+Filename: "{app}\{#AppExe}"; Description: "Open {#AppName} now"; Flags: postinstall nowait skipifsilent
 
 [Code]
-{ Find Microsoft Edge (on every modern Windows) or Google Chrome. Returns '' if neither exists. }
-function FindBrowser(): String;
+const
+  WebView2ClientKey = 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  WebView2ClientKey64 = 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  WebView2ClientKeyUser = 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function VersionPresent(Root: Integer; const Key: String): Boolean;
 var
-  Paths: TStringList;
-  I: Integer;
+  V: String;
 begin
-  Result := '';
-  Paths := TStringList.Create;
-  try
-    Paths.Add(ExpandConstant('{commonpf32}\Microsoft\Edge\Application\msedge.exe'));
-    if IsWin64 then Paths.Add(ExpandConstant('{commonpf64}\Microsoft\Edge\Application\msedge.exe'));
-    Paths.Add(ExpandConstant('{localappdata}\Microsoft\Edge\Application\msedge.exe'));
-    Paths.Add(ExpandConstant('{commonpf32}\Google\Chrome\Application\chrome.exe'));
-    if IsWin64 then Paths.Add(ExpandConstant('{commonpf64}\Google\Chrome\Application\chrome.exe'));
-    Paths.Add(ExpandConstant('{localappdata}\Google\Chrome\Application\chrome.exe'));
-    for I := 0 to Paths.Count - 1 do
-      if FileExists(Paths[I]) then
-      begin
-        Result := Paths[I];
-        exit;
-      end;
-  finally
-    Paths.Free;
+  Result := RegQueryStringValue(Root, Key, 'pv', V) and (V <> '') and (V <> '0.0.0.0');
+end;
+
+{ The Edge WebView2 component is part of Windows 11 and up-to-date Windows 10, but not guaranteed. }
+function WebView2Installed(): Boolean;
+begin
+  Result := VersionPresent(HKLM32, WebView2ClientKey) or VersionPresent(HKCU, WebView2ClientKeyUser);
+  if (not Result) and IsWin64 then
+    Result := VersionPresent(HKLM64, WebView2ClientKey64) or VersionPresent(HKLM64, WebView2ClientKey);
+end;
+
+{ .NET Framework 4.8 has been part of Windows 10 since 2019 and of every Windows 11. }
+function DotNet48Installed(): Boolean;
+var
+  Release: Cardinal;
+begin
+  Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if not DotNet48Installed() then
+  begin
+    MsgBox('This computer needs a Windows update before {#AppName} can be installed.' + #13#10#13#10 +
+           'Please run Windows Update, restart, and then run this setup again.', mbError, MB_OK);
+    Result := False;
   end;
 end;
 
-function BrowserFound(): Boolean;
-begin
-  Result := FindBrowser() <> '';
-end;
-
-function NoBrowserFound(): Boolean;
-begin
-  Result := FindBrowser() = '';
-end;
-
-function BrowserPath(Param: String): String;
-begin
-  Result := FindBrowser();
-end;
-
-{ file:///C:/Users/Jo/AppData/Local/Programs/Monteith Holiday Manager/Monteith Holiday Manager.html }
-function AppUrl(Param: String): String;
+procedure CurStepChanged(CurStep: TSetupStep);
 var
-  P: String;
+  ResultCode: Integer;
 begin
-  P := ExpandConstant('{app}\{#AppHtml}');
-  StringChangeEx(P, '\', '/', True);
-  Result := 'file:///' + P;
+  if (CurStep = ssPostInstall) and (not WebView2Installed()) then
+  begin
+    WizardForm.StatusLabel.Caption := 'Adding a Windows component the app needs (this can take a minute)...';
+    ExtractTemporaryFile('{#WebView2Bootstrapper}');
+    if not Exec(ExpandConstant('{tmp}\{#WebView2Bootstrapper}'), '/silent /install', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      MsgBox('The Microsoft Edge WebView2 component could not be added automatically. ' +
+             'Please make sure the computer is connected to the internet and run this setup again.', mbInformation, MB_OK);
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
-    MsgBox('{#AppName} has been removed. Your holiday records are kept by your web browser, so they will still be there if you install it again.', mbInformation, MB_OK);
+    MsgBox('{#AppName} has been removed. Your holiday records are kept safe on this computer and will still be there if you install it again.', mbInformation, MB_OK);
 end;

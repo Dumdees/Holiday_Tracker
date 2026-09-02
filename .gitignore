@@ -4,3 +4,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 installer/Output/
+dist/
+build/
+installer/MicrosoftEdgeWebview2Setup.exe
+installer/host/bin/
+installer/host/obj/

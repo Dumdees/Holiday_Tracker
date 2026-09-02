@@ -29,6 +29,7 @@ import { MONTHS, daysInMonth, formatShort, formatLong, parts, diffDays } from '.
 import { downloadText, pickFile, readFileText, datedFilename } from '../shared/download.js';
 import { ctx } from '../shared/context.js';
 import { today } from '../shared/today.js';
+import { isDesktopApp } from '../shared/host.js';
 
 const TABS = [
   { id: 'general', label: 'General', icon: 'sliders' },
@@ -434,7 +435,7 @@ function BackupTab() {
   return (
     <div class="stack">
       <Card title="Save a backup" icon="save" tone="peach">
-        <p>Your holiday records live inside this web browser on this computer. A backup is a single file you can keep somewhere safe – OneDrive, a memory stick or an email to yourself – and restore later if the computer is replaced or the browser is cleared.</p>
+        <p>{isDesktopApp() ? 'Your holiday records live on this computer.' : 'Your holiday records live inside this web browser on this computer.'} A backup is a single file you can keep somewhere safe – OneDrive, a memory stick or an email to yourself – and restore later if the computer is replaced{isDesktopApp() ? '' : ' or the browser is cleared'}.</p>
         <p class={info.due ? 'backup-due' : 'soft'}>{info.text}</p>
         <div class="row mt">
           <Button variant="primary" size="lg" icon="download" onClick={saveBackupFile}>Save a backup file</Button>
@@ -529,7 +530,9 @@ function AdvancedTab() {
     <div class="stack">
       <Banner tone="info" icon="info" title="For the technically curious">Most people never need this section. Everything here is safe to look at.</Banner>
       <Card title="Where your information is kept" icon="database">
-        <p>Everything is stored inside <strong>{browserName()}</strong> on this computer – nothing is sent over the internet. Always open the app in the same browser, and save backups regularly.</p>
+        {isDesktopApp()
+          ? <p>Everything is stored by the <strong>Monteith Holiday Manager</strong> program on this computer, in your own Windows account – nothing is sent over the internet. It stays put if the program is updated or reinstalled, so save backups regularly all the same.</p>
+          : <p>Everything is stored inside <strong>{browserName()}</strong> on this computer – nothing is sent over the internet. Always open the app in the same browser, and save backups regularly.</p>}
         <p class="muted">Your records currently take up about {kb} KB{info.engine === 'localStorage' ? ' (using the browser’s simple storage)' : ''}.</p>
       </Card>
       <Card title="Spreadsheets" icon="file-text" subtitle="Files that open in Excel.">

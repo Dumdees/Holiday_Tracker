@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish, e.g. v1.0.0 (the tag is created if it does not exist)'
+        description: 'Version to publish, e.g. v1.1.0 (the tag is created if it does not exist)'
         required: true
 jobs:
   release:
@@ -25,18 +25,9 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm test
       - run: npm run build
-      - name: Zip the app folder
+      - name: Build the Windows program, smoke-test it and build the installer
         shell: pwsh
-        run: Compress-Archive -Path "Monteith Holiday Manager" -DestinationPath "Monteith-Holiday-Manager.zip"
-      - name: Build the Windows installer
-        shell: pwsh
-        run: |
-          $ver = "${{ env.VERSION }}".TrimStart("v")
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { throw "Inno Setup not found at $iscc" }
-          & $iscc "/DAppVersion=$ver" "installer\MonteithHolidayManager.iss"
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
-          Get-ChildItem installer\Output
+        run: node scripts/windows-package.mjs --version "${{ env.VERSION }}" --smoke-test --zip
       - name: Release notes
         shell: pwsh
         run: |
