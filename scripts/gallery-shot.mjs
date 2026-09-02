@@ -50,7 +50,8 @@ try {
     }
 
     const file = path.join(outDir, `gallery-${name}.png`);
-    await page.screenshot({ path: file, fullPage: true });
+    // Animations off: a full-page capture otherwise catches entry animations half way and overlays look faded.
+    await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
     console.log(`Saved ${path.relative(root, file)}`);
     await page.close();
   }

@@ -7,7 +7,7 @@ import { Card } from '../components/Card.jsx';
 import { Button } from '../components/Button.jsx';
 import { Field, DateField, SelectField, TextArea, RadioCards, SearchBox, Checkbox } from '../components/Field.jsx';
 import { MultiSelect } from '../components/MultiSelect.jsx';
-import { YearPicker } from '../components/YearPicker.jsx';
+import { yearOptions } from '../components/YearPicker.jsx';
 import { Avatar } from '../components/Avatar.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { StatusBadge } from '../components/StatusBadge.jsx';
@@ -238,7 +238,7 @@ function RemoveTab() {
             <MultiSelect options={options} value={carerIds} onChange={setCarerIds} placeholder="Everyone" itemNoun="carer" />
           </Field>
           <div class="grid grid-2">
-            <Field label="From"><DateField value={start} onChange={setStart} /></Field>
+            <Field label="From" hint="Clear this to include past holidays."><DateField value={start} onChange={setStart} /></Field>
             <Field label="To" hint="Leave empty for no end."><DateField value={end} onChange={setEnd} min={start || undefined} /></Field>
           </div>
           <Field label="Type of leave"><SelectField options={leaveTypeOptions(leaveTypes.value, { includeAll: true, includeArchived: true })} value={typeId} onChange={setTypeId} /></Field>
@@ -310,7 +310,7 @@ function AllTab({ params }) {
         <SelectField ariaLabel="Team" options={teamOptions(teams.value)} value={teamId} onChange={setTeamId} />
         <SelectField ariaLabel="Type" options={leaveTypeOptions(leaveTypes.value, { includeAll: true, includeArchived: true })} value={typeId} onChange={setTypeId} />
         <SelectField ariaLabel="Status" options={statusOptions({ includeAll: true })} value={status} onChange={setStatus} />
-        <YearPicker value={yearKey === 'all' ? currentYear.value.key : yearKey} onChange={setYearKey} settings={settings.value} extraDates={holidays.value.flatMap((h) => [h.start, h.end])} today={today.value} />
+        <SelectField ariaLabel="Holiday year" options={[...yearOptions(settings.value, holidays.value.flatMap((h) => [h.start, h.end]), today.value, yearKey === 'all' ? null : yearKey), { value: 'all', label: 'All years' }]} value={yearKey} onChange={(v) => setYearKey(String(v))} />
         <Button icon="download" onClick={exportCsv} disabled={!rows.length}>Save as spreadsheet</Button>
       </div>
       <div class="grid grid-3">
@@ -320,7 +320,7 @@ function AllTab({ params }) {
       </div>
       <Card padded={false}>
         <Table columns={columns} rows={pageRows} rowKey="id" sort={sort} onSortChange={setSort} onRowClick={(r) => openHolidayDialog({ holidayId: r.id })}
-          emptyState={<EmptyState compact icon="sun" title="No holidays here" message={query || teamId || typeId || status ? 'Try clearing the search or filters.' : 'Nothing recorded for this year yet.'} action={{ label: 'Add holidays', onClick: () => navigate('holidays', { tab: 'add' }), icon: 'plus' }} />} ariaLabel="All holidays" />
+          emptyState={<EmptyState compact icon="sun" title="No holidays here" message={query || teamId || typeId || status ? 'Try clearing the search or filters.' : yb ? `Nothing recorded for ${yb.label} yet.` : 'Nothing recorded yet.'} action={{ label: 'Add holidays', onClick: () => navigate('holidays', { tab: 'add' }), icon: 'plus' }} />} ariaLabel="All holidays" />
         {rows.length > PAGE_SIZE ? <div class="table-foot"><Pagination page={page} pageSize={PAGE_SIZE} total={rows.length} onPageChange={setPage} /></div> : null}
       </Card>
     </div>

@@ -4,6 +4,8 @@
 .text-rose { color: var(--rose-ink); }
 .report-print-head { margin-bottom: 12px; }
 @media print {
-  .reports-page .page-head, .reports-page .toolbar, .report-tiles .stat-tile { break-inside: avoid; }
+  /* The printed report has its own heading, so hide the on-screen one to avoid saying it twice. */
+  .reports-page .page-head { display: none; }
+  .report-tiles .stat-tile { break-inside: avoid; }
   .reports-page .card { margin-bottom: 12px; }
 }

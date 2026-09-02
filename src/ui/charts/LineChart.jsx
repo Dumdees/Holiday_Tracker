@@ -106,7 +106,7 @@ export function LineChart({ series = [], data = [], height = 220, area = true, s
       <svg ref={svgRef} class="chart-svg chart-line-svg" viewBox={`0 0 ${width} ${height}`} width="100%" role="img" aria-label={aria} tabIndex={0} onKeyDown={onKey} onBlur={clear} onPointerLeave={clear}>
         {ticks.map((t, j) => <line key={`g${j}`} class={t === 0 ? 'chart-axis' : 'chart-grid'} x1={px(left)} y1={px(y(t))} x2={px(right)} y2={px(y(t))} />)}
         {ticks.map((t, j) => <text key={`t${j}`} class="chart-axis-text" x={px(left - 8)} y={px(y(t) + 4)} text-anchor="end">{tickLabels[j]}</text>)}
-        {labels.map((l, i) => (i % every ? null : <text key={`x${i}`} class="chart-axis-text" x={px(x(i))} y={px(bottom + 16)} text-anchor={anchorFor(i)}>{l}</text>))}
+        {labels.map((l, i) => (i % every ? null : <text key={`x${i}`} class="chart-axis-text" x={px(x(i))} y={px(bottom + 18)} text-anchor={anchorFor(i)}>{l}</text>))}
         {active != null ? <line class="chart-crosshair" x1={px(x(active))} y1={px(top)} x2={px(x(active))} y2={px(bottom)} /> : null}
         {area ? lines.map((l) => (l.areaD ? <path key={`a${l.key}`} class="chart-area-path" d={l.areaD} fill={l.colour} /> : null)) : null}
         {lines.map((l) => <path key={`l${l.key}`} class="chart-line-path" d={l.line} stroke={l.colour} />)}

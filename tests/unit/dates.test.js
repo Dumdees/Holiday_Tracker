@@ -60,8 +60,8 @@ test('formatting', () => {
   assert.equal(d.formatNumeric('2026-03-03'), '03/03/2026');
   assert.equal(d.formatRange('2026-03-03', '2026-03-03'), 'Tue 3 Mar 2026');
   assert.equal(d.formatRange('2026-03-02', '2026-03-06'), 'Mon 2 – Fri 6 Mar 2026');
-  assert.equal(d.formatRange('2026-03-28', '2026-04-02'), '28 Mar – 2 Apr 2026');
-  assert.equal(d.formatRange('2025-12-30', '2026-01-02'), '30 Dec 2025 – 2 Jan 2026');
+  assert.equal(d.formatRange('2026-03-28', '2026-04-02'), 'Sat 28 Mar – Thu 2 Apr 2026');
+  assert.equal(d.formatRange('2025-12-30', '2026-01-02'), 'Tue 30 Dec 2025 – Fri 2 Jan 2026');
   assert.equal(d.formatMonthYear('2026-04'), 'April 2026');
   assert.equal(d.relativeDay('2026-04-01', '2026-04-01'), 'Today');
   assert.equal(d.relativeDay('2026-04-02', '2026-04-01'), 'Tomorrow');

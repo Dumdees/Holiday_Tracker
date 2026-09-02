@@ -95,9 +95,10 @@ export function usageForYear(carer, yearBounds, holidays, ctx, today = ctx?.toda
   const byTypeStatus = new Map();
   const items = [];
   let taken = 0, booked = 0, pending = 0, declinedDays = 0;
+  const carerId = carer?.id;
 
   for (const holiday of holidays || []) {
-    if (holiday.carerId !== carer.id) continue;
+    if (!holiday || !carerId || holiday.carerId !== carerId) continue;
     const clipped = clipToRange(holiday, yearBounds.start, yearBounds.end);
     if (!clipped) continue;
     const breakdown = leaveDaysBreakdown(clipped, carer, ctx);

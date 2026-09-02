@@ -1,5 +1,5 @@
 // Numbers for the Home screen and Reports. All pure; all take the ctx from buildContext.
-import { eachDay, rangesOverlap, addDays, diffDays, monthName, parts, addMonths, isoWeekday, WEEKDAYS_SHORT } from './dates.js';
+import { eachDay, rangesOverlap, addDays, diffDays, monthName, parts, addMonths, isoWeekday, isValidISO, WEEKDAYS_SHORT } from './dates.js';
 import { countLeaveDays, leaveDaysBreakdown, clipToRange } from './leaveDays.js';
 import { usageForAll } from './entitlement.js';
 
@@ -10,7 +10,13 @@ function typeOf(db, ctx, id) { return (ctx && ctx.leaveTypesById && ctx.leaveTyp
 function byName(a, b) { return `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'en', { sensitivity: 'base' }); }
 function isSickType(t) { return !!t && (t.id === 'lt_sick' || /sick/i.test(t.name || '')); }
 function inTeam(carer, teamId) { return !teamId || carer.teamId === teamId; }
-function round2(n) { return Math.round(n * 100) / 100; }
+function round2(n) { return Math.round(n * 100) / 100 + 0; }
+/** A setting as a number, or the fallback when it is missing, blank or not a number. */
+function numberSetting(value, fallback) {
+  if (value == null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 /** Everyone off on a day. */
 export function whoIsOff(db, iso, ctx, { teamId, includePending = true } = {}) {
@@ -88,11 +94,16 @@ function yearItems(db, yearBounds, ctx, teamId) {
   return out;
 }
 
-/** Days off in each month of the holiday year, by leave type. */
+/**
+ * Days off in each calendar month of the holiday year, by leave type. Twelve months,
+ * or thirteen when the year starts part-way through a month (1–5 April then belong to
+ * a short final month rather than being lost).
+ */
 export function monthlyLeave(db, yearBounds, ctx, { teamId } = {}) {
   const months = [];
+  const last = yearBounds.end.slice(0, 7);
   let cur = yearBounds.start.slice(0, 7) + '-01';
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 13 && cur.slice(0, 7) <= last; i++) {
     const p = parts(cur);
     months.push({ month: cur.slice(0, 7), label: `${monthName(p.m, true)} ${p.y}`, byType: new Map(), total: 0 });
     cur = addMonths(cur, 1);
@@ -121,7 +132,7 @@ export function leaveByType(db, yearBounds, ctx, { teamId } = {}) {
     row.days = round2(row.days + item.breakdown.days);
     row.count += 1;
   }
-  return [...map.values()].sort((a, b) => b.days - a.days);
+  return [...map.values()].sort((a, b) => b.days - a.days || b.count - a.count || a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
 }
 
 /** Days off by weekday (1 = Monday). */
@@ -183,12 +194,13 @@ export function unusedLeaveAlerts(db, yearBounds, ctx, today = ctx && ctx.today)
   const s = ctx.settings;
   if (!today || today > yearBounds.end) return [];
   const weeksLeft = diffDays(today, yearBounds.end) / 7;
-  if (weeksLeft > (s.unusedLeaveWarningWeeks || 12)) return [];
+  if (weeksLeft > numberSetting(s.unusedLeaveWarningWeeks, 12)) return [];
+  const threshold = numberSetting(s.unusedLeaveWarningDays, 5);
   const { people, usages } = activeUsages(db, yearBounds, ctx, today);
   return people
     .map((c) => ({ carer: c, remaining: usages.get(c.id)?.remaining ?? 0, weeksLeft: Math.round(weeksLeft * 10) / 10 }))
-    .filter((r) => r.remaining >= (s.unusedLeaveWarningDays ?? 5))
-    .sort((a, b) => b.remaining - a.remaining);
+    .filter((r) => r.remaining >= threshold)
+    .sort((a, b) => b.remaining - a.remaining || byName(a.carer, b.carer));
 }
 
 /** Carers with only a little holiday left (0 to threshold). */
@@ -197,7 +209,7 @@ export function lowRemainingAlerts(db, yearBounds, ctx, today = ctx && ctx.today
   return people
     .map((c) => ({ carer: c, remaining: usages.get(c.id)?.remaining ?? 0 }))
     .filter((r) => r.remaining >= 0 && r.remaining <= threshold && (usages.get(r.carer.id)?.entitlement.total ?? 0) > 0)
-    .sort((a, b) => a.remaining - b.remaining);
+    .sort((a, b) => a.remaining - b.remaining || byName(a.carer, b.carer));
 }
 
 /** Carers who have gone over their entitlement. */
@@ -206,7 +218,7 @@ export function overdrawnAlerts(db, yearBounds, ctx, today = ctx && ctx.today) {
   return people
     .map((c) => ({ carer: c, remaining: usages.get(c.id)?.remaining ?? 0 }))
     .filter((r) => r.remaining < 0)
-    .sort((a, b) => a.remaining - b.remaining);
+    .sort((a, b) => a.remaining - b.remaining || byName(a.carer, b.carer));
 }
 
 /** Holidays waiting for a decision, soonest first. */
@@ -221,13 +233,18 @@ export function pendingApprovals(db, ctx) {
   return out.sort((a, b) => a.holiday.start.localeCompare(b.holiday.start) || byName(a.carer, b.carer));
 }
 
-/** Is a backup due? */
+/**
+ * Is a backup due? Reminders are off when `backupReminderDays` is 0 (or missing). A last
+ * backup date that can't be read counts as no backup at all. Days are never negative,
+ * so a backup stamped later today (or by a clock that was ahead) reads as 0 days ago.
+ */
 export function backupStatus(settings, today) {
-  const last = settings.lastBackupAt ? String(settings.lastBackupAt).slice(0, 10) : null;
-  const daysSince = last ? diffDays(last, today) : null;
-  const every = Number(settings.backupReminderDays) || 0;
+  const raw = settings?.lastBackupAt ? String(settings.lastBackupAt).slice(0, 10) : null;
+  const last = raw && isValidISO(raw) ? raw : null;
+  const daysSince = last && isValidISO(today) ? Math.max(0, diffDays(last, today)) : null;
+  const every = Math.max(0, numberSetting(settings?.backupReminderDays, 0));
   const due = every > 0 && (daysSince === null || daysSince >= every);
-  return { lastBackupAt: settings.lastBackupAt || null, daysSince, due };
+  return { lastBackupAt: (settings?.lastBackupAt) || null, daysSince, due };
 }
 
 /** Every active carer with their usage, most days left first. */

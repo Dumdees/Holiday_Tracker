@@ -30,18 +30,22 @@ export function HelpTip({ text, label = 'More information', defaultOpen = false,
   }, [pinned]);
 
   // Keep the popover inside the window: nudge sideways, flip below when there is no room above.
+  // Worked out from the button's position and the popover's own size rather than the popover's
+  // rendered box, which is mid-animation (and mid-transform) at this point.
   useLayoutEffect(() => {
     const pop = popRef.current;
-    if (!open || !pop) return;
-    pop.style.setProperty('--shift', '0px');
-    pop.classList.remove('is-below');
-    const rect = pop.getBoundingClientRect();
+    const btn = ref.current?.querySelector('.helptip-btn');
+    if (!open || !pop || !btn) return;
     const pad = 12;
-    let shift = 0;
-    if (rect.left < pad) shift = pad - rect.left;
-    else if (rect.right > window.innerWidth - pad) shift = window.innerWidth - pad - rect.right;
-    pop.style.setProperty('--shift', `${Math.round(shift)}px`);
-    if (rect.top < pad) pop.classList.add('is-below');
+    // The layout viewport, not window.innerWidth: phones report the zoomed-out visual viewport there.
+    const viewW = document.documentElement.clientWidth || window.innerWidth;
+    const b = btn.getBoundingClientRect();
+    const w = pop.offsetWidth;
+    const h = pop.offsetHeight;
+    const wanted = b.left + b.width / 2 - w / 2; // centred on the button
+    const left = Math.max(pad, Math.min(viewW - pad - w, wanted));
+    pop.style.setProperty('--shift', `${Math.round(left - wanted)}px`);
+    pop.classList.toggle('is-below', b.top - h - 10 < pad);
   }, [open, text]);
 
   return (
@@ -56,7 +60,7 @@ export function HelpTip({ text, label = 'More information', defaultOpen = false,
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         onFocus={() => setHover(true)}
-        onBlur={() => setHover(false)}
+        onBlur={() => { setHover(false); setPinned(false); }}
       >
         ?
       </button>

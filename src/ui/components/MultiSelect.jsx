@@ -20,6 +20,11 @@ function groupOptions(options) {
   return { hasGroups, groups: [...map.entries()].map(([name, items]) => ({ name, items })) };
 }
 
+/** True while the keyboard is in a text box, so Home/End keep their usual meaning there. */
+function isTyping(el) {
+  return el instanceof HTMLInputElement && el.type !== 'checkbox';
+}
+
 function matches(o, q) {
   if (!q) return true;
   return `${o.label ?? ''} ${o.sub ?? ''} ${o.group ?? ''}`.toLowerCase().includes(q);
@@ -61,6 +66,8 @@ function Row({ option: o, selected, onToggle }) {
 /**
  * MultiSelect – trigger button showing chips of the chosen items; panel with search, select all / clear,
  * optional group headers and tick-box rows. Closes on outside click, Escape or when focus leaves it.
+ * Keyboard: Enter/Space/ArrowDown open it, Up/Down/Home/End move through the rows, Space ticks a row,
+ * Enter in the search box ticks the only match, Escape closes and returns to the trigger.
  * @param {object} props
  * @param {Array<{ value: any, label: string, group?: string, colour?: string, sub?: string, disabled?: boolean }>} [props.options]
  * @param {any[]} [props.value] – chosen values, in the order they were chosen
@@ -131,14 +138,23 @@ export function MultiSelect({ options = [], value = [], onChange, placeholder = 
   const onRootKey = (e) => {
     if (!open) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); return; }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || ((e.key === 'Home' || e.key === 'End') && !isTyping(e.target))) {
       const inputs = [...(rootRef.current?.querySelectorAll('.ms-list input:not(:disabled)') || [])];
       if (!inputs.length) return;
       const i = inputs.indexOf(document.activeElement);
-      const next = i === -1 ? (e.key === 'ArrowDown' ? 0 : inputs.length - 1) : Math.min(inputs.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)));
+      let next;
+      if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = inputs.length - 1;
+      else if (i === -1) next = e.key === 'ArrowDown' ? 0 : inputs.length - 1;
+      else next = Math.min(inputs.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)));
       e.preventDefault();
       inputs[next].focus();
     }
+  };
+  // Enter in the search box ticks the one option left when the search has narrowed it down to a single match.
+  const onSearchEnter = () => {
+    const enabled = visible.filter((o) => !o.disabled);
+    if (q && enabled.length === 1) toggleOne(enabled[0].value);
   };
   const onTriggerKey = (e) => {
     if (e.target !== e.currentTarget || disabled) return;
@@ -185,7 +201,7 @@ export function MultiSelect({ options = [], value = [], onChange, placeholder = 
         <div class="multiselect-panel" id={`${baseId}-panel`} role="dialog" aria-label={ariaLabel || `Choose ${plural}`}>
           {searchable ? (
             <div class="ms-search">
-              <SearchBox value={query} onChange={setQuery} placeholder={`Search ${plural}…`} ariaLabel={`Search ${plural}`} autoFocus />
+              <SearchBox value={query} onChange={setQuery} placeholder={`Search ${plural}…`} ariaLabel={`Search ${plural}`} autoFocus onEnter={onSearchEnter} />
             </div>
           ) : null}
           <div class="ms-tools">

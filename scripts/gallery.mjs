@@ -49,9 +49,13 @@ const galleryCss = `
 .g-col { display: flex; flex-direction: column; gap: 12px; }
 .g-label { font-size: 12.5px; color: var(--ink-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 8px; }
 .g-label:first-child { margin-top: 0; }
-.g-stage { position: relative; transform: translateZ(0); overflow: hidden; border-radius: 16px; border: 1px dashed var(--line-strong); background: var(--peach-50); }
+.g-stage { position: relative; overflow: hidden; border-radius: 16px; border: 1px dashed var(--line-strong); background: var(--peach-50); }
+/* Overlays are pinned to their stage rather than the window (fixed boxes inside a transformed
+   container look washed out in full-page screenshots). */
+.g-stage .drawer-backdrop, .g-stage .modal-backdrop, .g-stage .toast-host { position: absolute; }
 .g-stage .loading-screen { min-height: 100%; height: 100%; }
 .g-box { max-width: 520px; }
+.g-narrow { max-width: 220px; }
 @media (max-width: 700px) { .gallery { padding: 18px 16px 60px; } }
 `;
 

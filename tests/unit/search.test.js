@@ -217,3 +217,117 @@ test('groupBy keeps first-seen key order', () => {
   assert.equal(groupBy([], (x) => x).size, 0);
   assert.equal(groupBy(undefined, (x) => x).size, 0);
 });
+
+test('search never throws when options, lookups, filters or items are missing', () => {
+  assert.equal(searchCarers(carers, 'priya', null, null).length, 1);
+  assert.equal(searchCarers(carers, 'priya', undefined, undefined).length, 1);
+  assert.equal(searchCarers(carers, null, {}, lookups).length, 4, 'a null query matches everyone active');
+  assert.equal(searchCarers([c1, null, undefined], 'priya').length, 1, 'gaps in the list are skipped');
+  assert.equal(carerMatches(null, 'x'), false);
+  assert.equal(carerMatches(c1, 'priya', null), true);
+  assert.deepEqual(ids(searchHolidays(holidays, 'spain', null, null)), ['h1'], 'no lookups → notes still searchable');
+  assert.deepEqual(ids(searchHolidays(holidays, 'priya', null, null)), [], 'no lookups → carer names unknown');
+  assert.deepEqual(ids(searchHolidays(holidays, 'spain', null, lookups)), ['h1']);
+  assert.deepEqual(ids(searchHolidays([h1, null], '', {}, lookups)), ['h1']);
+  assert.equal(holidayMatches(null, 'x'), false);
+  assert.equal(holidayMatches(h1, 'spain', null), true);
+  assert.deepEqual(searchHolidays(null, '', {}, lookups), []);
+  assert.deepEqual(ids(searchHolidays(holidays, '', { carerIds: 'c1', typeIds: null, statuses: undefined }, lookups)), ['h3', 'h2', 'h4', 'h1'], 'a non-list filter is ignored');
+});
+
+test('tokenise drops punctuation wrapped around a token but keeps it inside', () => {
+  assert.deepEqual(tokenise('Patel, Priya'), ['patel', 'priya']);
+  assert.deepEqual(tokenise('"Priya"'), ['priya']);
+  assert.deepEqual(tokenise("O'Brien priya.patel@example.com (07700)"), ["o'brien", 'priya.patel@example.com', '07700']);
+  assert.deepEqual(tokenise('-'), ['-'], 'pure punctuation is kept so it matches nothing rather than everything');
+  assert.ok(carerMatches(c1, 'Patel, Priya', lookups), 'a pasted "Surname, First" still finds the carer');
+  assert.ok(carerMatches(c1, '"priya"', lookups));
+  assert.ok(!carerMatches(c1, '-', lookups));
+  assert.ok(carerMatches(c1, 'p.p.', lookups), 'dotted initials');
+  assert.ok(carerMatches(c1, 'P. P.', lookups) === true || carerMatches(c1, 'p p', lookups), 'spaced initials still match as prefixes');
+  assert.ok(!carerMatches(c2, 'p.p.', lookups));
+});
+
+test('normaliseText folds letters that have no accent to strip', () => {
+  assert.equal(normaliseText('Søren Ålund'), 'soren alund');
+  assert.equal(normaliseText('Łukasz Đorđević'), 'lukasz dordevic');
+  assert.equal(normaliseText('Straße Æbleskiver Œuvre'), 'strasse aebleskiver oeuvre');
+  assert.equal(normaliseText('Þór Ýr'), 'thor yr');
+  const soren = carer({ id: 's', firstName: 'Søren', lastName: 'Łukasz' });
+  assert.ok(carerMatches(soren, 'soren lukasz', lookups));
+  assert.ok(carerMatches(soren, 'Søren', lookups));
+  assert.ok(carerMatches(soren, 'sl', lookups), 'initials from folded letters');
+  assert.deepEqual(highlight('Søren Ålund', 'soren al'), [{ text: 'Søren Ål', match: true }, { text: 'und', match: false }]);
+  assert.deepEqual(highlight('Straße', 'strasse'), [{ text: 'Straße', match: true }], 'one letter that folds to two is still highlighted whole');
+  assert.deepEqual(highlight('Straße Ende', 'ende'), [{ text: 'Straße ', match: false }, { text: 'Ende', match: true }]);
+});
+
+test('compareCarerNames sorts someone with only one name by that name', () => {
+  const madonna = carer({ id: 'm', firstName: 'Madonna', lastName: '' });
+  const blank = carer({ id: 'b', firstName: '', lastName: '' });
+  assert.deepEqual(ids([c1, madonna, c3, c4].sort(compareCarerNames)), ['c3', 'm', 'c1', 'c4'], 'Madonna sits among the M surnames');
+  assert.deepEqual(ids([madonna, blank, c3].sort(compareCarerNames)), ['b', 'c3', 'm']);
+  assert.equal(compareCarerNames(null, undefined), 0);
+  assert.equal(compareCarerNames(madonna, madonna), 0);
+});
+
+test('every sort option copes with missing values and puts them last', () => {
+  const all = { active: 'all' };
+  const noFirst = carer({ id: 'nf', firstName: '', lastName: 'Aardvark', role: '', startDate: undefined });
+  const nothing = carer({ id: 'nn', firstName: 'Bo', lastName: 'Bland', role: null, teamId: 'team_gone', startDate: null });
+  const list = [c1, noFirst, nothing, c5];
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: 'first' }, lookups)), ['nn', 'c5', 'c1', 'nf'], 'blank first name last');
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: 'role' }, lookups)), ['c5', 'c1', 'nf', 'nn'], 'blank and null roles last, in name order');
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: 'team' }, lookups)), ['c1', 'c5', 'nf', 'nn'], 'a team that no longer exists counts as no team');
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: 'start' }, lookups)), ['c1', 'c5', 'nf', 'nn']);
+  const usages = { c1: { remaining: NaN }, nn: { remaining: 0 }, c5: { remaining: 2 } };
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: 'remaining', usages }, lookups)), ['c5', 'nn', 'nf', 'c1'], 'a plain object works as usages; NaN counts as missing');
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: null }, lookups)), ['nf', 'nn', 'c5', 'c1'], 'null sort → name order');
+  assert.deepEqual(ids(searchCarers(list, '', { ...all, sort: 'name', teamId: '' }, lookups)), ['nf', 'nn', 'c5', 'c1'], 'empty team id means every team');
+});
+
+test('searchHolidays: date overlap with missing dates and status filters together', () => {
+  const noEnd = holiday({ id: 'ne', carerId: 'c1', start: '2026-06-01', end: null });
+  const noDates = holiday({ id: 'nd', carerId: 'c1', start: null, end: null });
+  const list = [...holidays, noEnd, noDates];
+  assert.deepEqual(ids(searchHolidays(list, '', { start: '2026-06-01', end: '2026-06-01' }, lookups)), ['ne'], 'a holiday with no end date is one day long');
+  assert.deepEqual(ids(searchHolidays(list, '', { start: '2026-06-02' }, lookups)), [], 'and does not stretch past its start');
+  assert.deepEqual(ids(searchHolidays(list, '', { end: '2026-03-31' }, lookups)), [], 'a holiday with no dates never overlaps a range');
+  assert.deepEqual(ids(searchHolidays(list, '', {}, lookups)), ['ne', 'h3', 'h2', 'h4', 'h1', 'nd'], 'undated holidays sort last');
+  assert.deepEqual(ids(searchHolidays(list, '', { start: '2026-04-08', end: '2026-04-08', statuses: ['approved', 'pending'] }, lookups)), ['h2', 'h1']);
+  assert.deepEqual(ids(searchHolidays(list, 'priya', { start: '2026-04-08', end: '2026-04-08', statuses: ['pending'] }, lookups)), []);
+  assert.deepEqual(ids(searchHolidays(list, '', { start: '2026-04-10', end: '2026-04-06' }, lookups)), ['h1'], 'an inside-out range still uses both bounds');
+  assert.deepEqual(ids(searchHolidays(list, '', { statuses: ['nonsense'] }, lookups)), []);
+  assert.deepEqual(ids(searchHolidays(list, '', { start: '', end: '' }, lookups)), ['ne', 'h3', 'h2', 'h4', 'h1', 'nd'], 'blank bounds are no bounds');
+});
+
+test('holiday search also matches the team name and half-day wording', () => {
+  assert.deepEqual(ids(searchHolidays(holidays, 'night', {}, lookups)), ['h2', 'h4']);
+  assert.deepEqual(ids(searchHolidays(holidays, 'day team', {}, lookups)), ['h3', 'h1']);
+  assert.deepEqual(ids(searchHolidays(holidays, 'morning', {}, lookups)), ['h3']);
+  assert.deepEqual(ids(searchHolidays(holidays, 'half day', {}, lookups)), ['h3']);
+  assert.deepEqual(ids(searchHolidays(holidays, 'afternoon', {}, lookups)), []);
+  assert.deepEqual(ids(searchHolidays(holidays, 'night', {}, { carersById: lookups.carersById })), [], 'no team lookup → no team words');
+});
+
+test('carerMatches: tokens across every field with accents and initials', () => {
+  const carla = carer({ id: 'cc', firstName: 'Ćarla', lastName: 'Núñez-Ōta', role: 'Care coordinator', teamId: 'team_night', notes: 'Prefers évenings', phone: '+44 (0)7700 900 456', email: 'Carla.Nunez@Example.co.uk' });
+  assert.ok(carerMatches(carla, 'carla nunez', lookups));
+  assert.ok(carerMatches(carla, 'ota', lookups), 'part of a hyphenated surname');
+  assert.ok(carerMatches(carla, 'nunez-ota', lookups));
+  assert.ok(carerMatches(carla, 'nunezota', lookups), 'hyphen may be left out');
+  assert.ok(carerMatches(carla, 'cn', lookups), 'initials');
+  assert.ok(carerMatches(carla, 'cno', lookups), 'initials including the hyphenated part');
+  assert.ok(carerMatches(carla, 'evenings', lookups), 'notes, accent-insensitive');
+  assert.ok(carerMatches(carla, '447700900456', lookups), 'phone digits ignore +, the (0) and spaces');
+  assert.ok(carerMatches(carla, '4407700900456', lookups), 'or keep the (0)');
+  assert.ok(carerMatches(carla, '07700900456', lookups), 'a +44 number is also found by its 0… form');
+  assert.ok(carerMatches(carla, '07700', lookups));
+  assert.ok(carerMatches(carla, '07700 900', lookups));
+  assert.ok(carerMatches(carla, 'example.co.uk', lookups));
+  assert.ok(carerMatches(carla, 'CARLA.NUNEZ@EXAMPLE.CO.UK', lookups));
+  assert.ok(carerMatches(carla, 'coordinator night', lookups), 'role and team together');
+  assert.ok(!carerMatches(carla, 'coordinator day', lookups));
+  assert.ok(carerMatches(carla, 'nunez', { teamsById: { team_night: { name: 'Night team' } } }), 'plain-object lookups work too');
+  assert.ok(carerMatches(carla, 'night', { teamsById: { team_night: { name: 'Night team' } } }));
+});

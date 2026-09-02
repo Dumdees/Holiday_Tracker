@@ -64,10 +64,21 @@ function Sidebar() {
 }
 
 function UndoBar() {
-  // Show a small undo prompt after each change, for a few seconds.
+  // Show a small undo prompt after each change, for a few seconds. After an undo there is nothing
+  // to offer an Undo button for (it would undo the change before), so that one is a plain message.
   const change = lastChange.value;
-  if (!change || !canUndo.value) return null;
+  if (!change) return null;
+  if (change.label.startsWith('Undid: ')) return <PlainChangeToast key={change.at} label={change.label} />;
+  if (!canUndo.value) return null;
   return <UndoToast key={change.at} label={change.label} />;
+}
+
+function PlainChangeToast({ label }) {
+  useEffect(() => {
+    const id = toast(label, { kind: 'info' });
+    return () => toast.dismiss(id);
+  }, [label]);
+  return null;
 }
 
 function NoticeToast() {
@@ -78,11 +89,13 @@ function NoticeToast() {
 
 function UndoToast({ label }) {
   useEffect(() => {
-    const id = toast(label, {
-      kind: 'info',
-      action: { label: 'Undo', onClick: () => { undo(); } },
-      duration: 6000,
-    });
+    // Screens usually show their own message for the change ("3 holidays added") a moment before
+    // this runs. Put the Undo button on that message rather than showing a second, near-identical one.
+    const action = { label: 'Undo', onClick: () => { undo(); } };
+    const recent = toast.recentPlain();
+    const id = recent
+      ? toast.update(recent.id, { action, duration: 6000 })
+      : toast(label, { kind: 'info', action, duration: 6000 });
     return () => toast.dismiss(id);
   }, [label]);
   return null;

@@ -4,7 +4,7 @@
 //   </Field>
 // Every control reads its id / described-by / invalid state from the nearest <Field> automatically.
 import { createContext } from 'preact';
-import { useContext, useEffect, useId, useRef, useState } from 'preact/hooks';
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Icon } from './Icon.jsx';
 import { IconButton } from './Button.jsx';
 import { formatShort, isValidISO } from '../../core/dates.js';
@@ -156,10 +156,18 @@ export function NumberField({ value = null, onChange, min, max, step = 1, suffix
   };
   const canDown = !disabled && (min == null || value == null || value > min);
   const canUp = !disabled && (max == null || value == null || value < max);
+  // The suffix ("days", "people") sits inside the box, so the box makes room for however wide it is.
+  const boxRef = useRef(null);
+  const suffixRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!boxRef.current) return;
+    const w = suffixRef.current ? suffixRef.current.offsetWidth : 0;
+    boxRef.current.style.setProperty('--suffix-w', `${Math.ceil(w)}px`);
+  }, [suffix]);
   return (
     <div class={`number-field ${cls}`.trim()}>
       <button type="button" class="number-btn" aria-label="Decrease" onClick={() => nudge(-1)} disabled={!canDown}><Icon name="minus" /></button>
-      <div class={`number-field-input ${suffix ? 'has-suffix' : ''}`.trim()}>
+      <div ref={boxRef} class={`number-field-input ${suffix ? 'has-suffix' : ''}`.trim()}>
         <input
           {...a11y}
           class="input"
@@ -174,7 +182,7 @@ export function NumberField({ value = null, onChange, min, max, step = 1, suffix
             if (e.key === 'ArrowUp') { e.preventDefault(); nudge(1); } else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(-1); }
           }}
         />
-        {suffix ? <span class="number-suffix" aria-hidden="true">{suffix}</span> : null}
+        {suffix ? <span ref={suffixRef} class="number-suffix" aria-hidden="true">{suffix}</span> : null}
       </div>
       <button type="button" class="number-btn" aria-label="Increase" onClick={() => nudge(1)} disabled={!canUp}><Icon name="plus" /></button>
     </div>

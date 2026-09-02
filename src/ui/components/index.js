@@ -17,7 +17,7 @@ export { ProgressBar, ProgressRing, segmentWidths } from './Progress.jsx';
 export { StatTile } from './StatTile.jsx';
 export { Table, sortRows } from './Table.jsx';
 export { Drawer } from './Drawer.jsx';
-export { trapTab, focusFirst } from './focus.js';
+export { trapTab, focusFirst, pushLayer, isTopLayer } from './focus.js';
 export { Collapsible } from './Collapsible.jsx';
 export { Banner } from './Banner.jsx';
 export { HelpTip } from './HelpTip.jsx';

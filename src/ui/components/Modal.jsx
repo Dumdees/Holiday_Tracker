@@ -3,7 +3,7 @@
 import { signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
 import { Icon } from './Icon.jsx';
-import { focusFirst, trapTab } from './focus.js';
+import { focusFirst, trapTab, pushLayer, isTopLayer } from './focus.js';
 
 export const modals = signal([]);
 let seq = 0;
@@ -12,17 +12,18 @@ let seq = 0;
  * Open a dialog. `render` receives `{ close }` and returns the content; the promise resolves with
  * whatever `close(value)` is called with (undefined when dismissed with Escape or the backdrop).
  * @param {(api: { close: (value?: any) => void }) => any} render
- * @param {{ size?: 'sm'|'md'|'lg', title?: string|null, dismissable?: boolean }} [options]
+ * @param {{ size?: 'sm'|'md'|'lg', title?: string|null, dismissable?: boolean, ariaLabel?: string }} [options] –
+ *   `ariaLabel` names the dialog for screen readers when it has no visible `title`
  * @returns {Promise<any>}
  */
-export function openModal(render, { size = 'md', title = null, dismissable = true } = {}) {
+export function openModal(render, { size = 'md', title = null, dismissable = true, ariaLabel = null } = {}) {
   return new Promise((resolve) => {
     const id = ++seq;
     const close = (value) => {
       modals.value = modals.value.filter((m) => m.id !== id);
       resolve(value);
     };
-    modals.value = [...modals.value, { id, render, close, size, title, dismissable }];
+    modals.value = [...modals.value, { id, render, close, size, title, dismissable, ariaLabel }];
   });
 }
 
@@ -47,7 +48,7 @@ export function confirm({ title = 'Are you sure?', message = '', confirmLabel = 
         <button type="button" class={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => close(true)} data-autofocus>{confirmLabel}</button>
       </div>
     </div>
-  ), { size: 'sm' }).then((v) => v === true);
+  ), { size: 'sm', ariaLabel: typeof title === 'string' ? title : null }).then((v) => v === true);
 }
 
 /**
@@ -65,7 +66,7 @@ export function alert({ title = 'Notice', message = '', okLabel = 'OK', icon = '
         <button type="button" class="btn btn-primary" onClick={() => close(true)} data-autofocus>{okLabel}</button>
       </div>
     </div>
-  ), { size: 'sm' }).then(() => undefined);
+  ), { size: 'sm', ariaLabel: typeof title === 'string' ? title : null }).then(() => undefined);
 }
 
 function ModalFrame({ m, isTop }) {
@@ -74,10 +75,12 @@ function ModalFrame({ m, isTop }) {
 
   useEffect(() => {
     const previous = document.activeElement;
+    const release = pushLayer(m);
     focusFirst(ref.current);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
+      release();
       document.body.style.overflow = prevOverflow;
       if (previous && typeof previous.focus === 'function' && document.contains(previous)) previous.focus();
     };
@@ -86,6 +89,8 @@ function ModalFrame({ m, isTop }) {
   useEffect(() => {
     if (!isTop) return undefined;
     const onKey = (e) => {
+      // Another overlay (a drawer or a newer dialog) may have opened on top since.
+      if (!isTopLayer(m)) return;
       if (e.key === 'Escape') { if (m.dismissable) m.close(undefined); return; }
       trapTab(e, ref.current);
     };
@@ -95,7 +100,7 @@ function ModalFrame({ m, isTop }) {
 
   return (
     <div class="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && m.dismissable) m.close(undefined); }}>
-      <div class={`modal modal-${m.size}`} role="dialog" aria-modal="true" ref={ref} aria-labelledby={m.title ? titleId : undefined} aria-label={m.title ? undefined : 'Dialog'}>
+      <div class={`modal modal-${m.size}`} role="dialog" aria-modal="true" ref={ref} aria-labelledby={m.title ? titleId : undefined} aria-label={m.title ? undefined : (m.ariaLabel || 'Dialog')}>
         {m.title ? (
           <div class="modal-head">
             <h2 id={titleId}>{m.title}</h2>

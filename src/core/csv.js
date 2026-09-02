@@ -1,7 +1,7 @@
 // CSV export and import. Plain text in, plain objects out – no DOM.
 // Exports open cleanly in Excel (UTF-8 BOM, CRLF, quoted fields); imports are
 // forgiving about headings, dates and working-day patterns typed by hand.
-import { formatNumeric, parseLooseDate, WEEKDAYS_LONG, WEEKDAYS_SHORT } from './dates.js';
+import { addDays, formatNumeric, isValidISO, makeISO, parseLooseDate, WEEKDAYS_LONG, WEEKDAYS_SHORT } from './dates.js';
 import { HOLIDAY_STATUSES, defaultSettings } from '../store/defaults.js';
 import { normaliseText } from './search.js';
 
@@ -16,7 +16,10 @@ const CRLF = '\r\n';
  * @returns {string}
  */
 export function escapeCsvField(value) {
-  const s = value == null ? '' : String(value);
+  let s = value == null ? '' : String(value);
+  // Never let a spreadsheet run a cell as a formula: a leading =, +, -, @, tab or carriage
+  // return gets a space in front (the field is then quoted, and Excel shows it as plain text).
+  if (/^[=+\-@\t\r]/.test(s)) s = ' ' + s;
   if (/[",\r\n]/.test(s) || s !== s.trim()) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -37,19 +40,49 @@ export function toCsv(rows, columns) {
 }
 
 /**
+ * Work out which character separates fields, from the first line of the file.
+ * Excel in some countries saves CSV with semicolons (and may add a 'sep=;' first line);
+ * 'Save as tab-delimited' uses tabs. Commas win whenever the first line has any.
+ * @param {string} text – already stripped of its BOM
+ * @returns {{ delimiter: string, skip: number }} – skip = characters to jump over (a 'sep=' line)
+ */
+function detectDelimiter(text) {
+  const sep = text.match(/^sep=(.)(?:\r\n|\r|\n|$)/i);
+  if (sep) return { delimiter: sep[1], skip: sep[0].length };
+  const counts = { ',': 0, ';': 0, '\t': 0 };
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && (ch === '\r' || ch === '\n')) break;
+    else if (!inQuotes && ch in counts) counts[ch]++;
+  }
+  if (counts[',']) return { delimiter: ',', skip: 0 };
+  if (counts[';']) return { delimiter: ';', skip: 0 };
+  if (counts['\t']) return { delimiter: '\t', skip: 0 };
+  return { delimiter: ',', skip: 0 };
+}
+
+/**
  * Parse CSV text into rows of raw string fields (no header handling, blank rows kept).
  * Handles a BOM, quoted fields containing commas/line breaks/doubled quotes, CRLF, CR and LF.
+ * The delimiter is worked out from the first line (comma, semicolon or tab, or a leading
+ * 'sep=' line) unless one is given.
  * @param {string} text
+ * @param {string} [delimiter] – ',' ';' or '\t'; detected when omitted
  * @returns {string[][]}
  */
-export function parseCsvRows(text) {
-  const src = String(text ?? '');
+export function parseCsvRows(text, delimiter) {
+  let src = String(text ?? '');
+  if (src.charCodeAt(0) === 0xfeff) src = src.slice(1);
+  const detected = detectDelimiter(src);
+  const sep = delimiter || detected.delimiter;
   const rows = [];
   let row = [];
   let field = '';
   let inQuotes = false;
   let quotedField = false;
-  for (let i = src.charCodeAt(0) === 0xfeff ? 1 : 0; i < src.length; i++) {
+  for (let i = delimiter ? 0 : detected.skip; i < src.length; i++) {
     const ch = src[i];
     if (inQuotes) {
       if (ch !== '"') field += ch;
@@ -57,8 +90,10 @@ export function parseCsvRows(text) {
       else inQuotes = false;
       continue;
     }
-    if (ch === '"' && field === '' && !quotedField) { inQuotes = true; quotedField = true; continue; }
-    if (ch === ',') { row.push(field); field = ''; quotedField = false; continue; }
+    // A quote after nothing but spaces opens a quoted field ('a, "b, c"' typed by hand).
+    if (ch === '"' && !quotedField && field.trim() === '') { inQuotes = true; quotedField = true; field = ''; continue; }
+    if (quotedField && (ch === ' ' || ch === '\t') && ch !== sep) continue; // stray spaces after a closing quote
+    if (ch === sep) { row.push(field); field = ''; quotedField = false; continue; }
     if (ch === '\r' || ch === '\n') {
       if (ch === '\r' && src[i + 1] === '\n') i++;
       row.push(field);
@@ -107,9 +142,9 @@ const SINGLE_LETTER = { m: 1, w: 3, f: 5 }; // 't' and 's' are ambiguous on thei
 export function parseWorkingDays(text) {
   const t = normaliseText(text).replace(/[–—]/g, '-').replace(/\b(to|through|thru|until)\b/g, '-');
   if (!t) return null;
-  if (/^(every ?day|all( days)?|daily|full ?week|7 days|seven days|any ?day)$/.test(t)) return [...DAY_NUMBERS];
-  if (/^(week ?days|working ?days|mon ?- ?fri)$/.test(t)) return [1, 2, 3, 4, 5];
-  if (/^week ?ends?$/.test(t)) return [6, 7];
+  if (/^(every ?day( of the week)?|all( days| week)?|daily|(full|whole) ?week|(7|seven) days?( a week)?|any ?day)$/.test(t)) return [...DAY_NUMBERS];
+  if (/^(week ?days( only)?|working ?days|mon ?- ?fri|full ?time|(5|five) days?( a week)?)$/.test(t)) return [1, 2, 3, 4, 5];
+  if (/^week ?ends?( only)?$/.test(t)) return [6, 7];
   const letterRange = t.match(/^([mtwfs]) ?- ?([mtwfs])$/);
   if (letterRange) return tidyDays(rangeFromLetters(letterRange[1], letterRange[2]));
   return tidyDays(parseNumericDays(t) ?? parseShorthand(t) ?? parseNamedDays(t));
@@ -186,14 +221,20 @@ function parseNamedDays(t) {
   return out;
 }
 
+// Abbreviations that are not a prefix of the full day name.
+const DAY_ALIASES = { weds: 3, wednes: 3, thurs: 4, thur: 4, tues: 2 };
+
 function dayNumber(word) {
   if (word.length === 1) return SINGLE_LETTER[word] ?? null;
   if (word.length < 2) return null;
+  if (DAY_ALIASES[word]) return DAY_ALIASES[word];
   const idx = WEEKDAYS_LONG.findIndex((name) => {
     const long = name.toLowerCase();
     return long.startsWith(word) || word.startsWith(long);
   });
-  return idx === -1 ? null : idx + 1;
+  if (idx !== -1) return idx + 1;
+  // 'Sats', 'Weds' – a plural of an abbreviation
+  return word.endsWith('s') && word.length > 2 ? dayNumber(word.slice(0, -1)) : null;
 }
 
 /** Inclusive run of weekday numbers, wrapping past Sunday ('Fri-Mon' → 5, 6, 7, 1). */
@@ -263,22 +304,23 @@ export function holidaysToCsv(items) {
 
 // Header aliases, compared after lowercasing and removing everything but letters and digits.
 const HEADER_ALIASES = {
-  firstName: ['firstname', 'forename', 'forenames', 'first', 'givenname', 'givennames', 'firstnames'],
-  lastName: ['lastname', 'surname', 'last', 'familyname'],
-  name: ['name', 'fullname', 'carer', 'carername'],
-  team: ['team', 'teamname'],
-  role: ['role', 'jobtitle', 'job', 'position'],
-  startDate: ['startdate', 'start', 'started', 'joined', 'datejoined', 'joindate', 'startedon'],
-  endDate: ['enddate', 'end', 'left', 'leftdate', 'leavingdate', 'dateleft', 'finished', 'ended'],
-  entitlement: ['entitlement', 'entitlementdays', 'days', 'annualleave', 'annualleavedays', 'holidaydays', 'holidayentitlement', 'holidays', 'leavedays'],
-  workingDays: ['workingdays', 'daysworked', 'pattern', 'works', 'workingpattern', 'workdays', 'workingweek'],
-  phone: ['phone', 'mobile', 'telephone', 'phonenumber', 'mobilenumber', 'tel', 'contactnumber'],
-  email: ['email', 'emailaddress'],
-  notes: ['notes', 'note', 'comments', 'comment'],
-  status: ['status', 'active'],
+  firstName: ['firstname', 'forename', 'forenames', 'first', 'givenname', 'givennames', 'firstnames', 'christianname', 'preferredname'],
+  lastName: ['lastname', 'surname', 'last', 'familyname', 'secondname'],
+  name: ['name', 'fullname', 'carer', 'carername', 'employee', 'employeename', 'staff', 'staffname', 'staffmember', 'person', 'personname'],
+  team: ['team', 'teamname', 'teams', 'group'],
+  role: ['role', 'jobtitle', 'job', 'position', 'title', 'jobrole', 'roles'],
+  startDate: ['startdate', 'start', 'started', 'joined', 'datejoined', 'joindate', 'startedon', 'datestarted', 'dateofjoining', 'joiningdate', 'employmentstartdate', 'startofemployment', 'hired', 'hiredate', 'dateofstart', 'commenced', 'commencementdate'],
+  endDate: ['enddate', 'end', 'left', 'leftdate', 'leavingdate', 'dateleft', 'finished', 'ended', 'dateleaving', 'leaving', 'employmentenddate', 'endofemployment', 'finishdate', 'finishedon', 'dateended', 'terminationdate', 'dateofleaving'],
+  entitlement: ['entitlement', 'entitlementdays', 'days', 'annualleave', 'annualleavedays', 'holidaydays', 'holidayentitlement', 'holidays', 'leavedays', 'holiday', 'allowance', 'holidayallowance', 'leaveallowance', 'annualleaveentitlement', 'leaveentitlement', 'entitlementindays', 'daysentitlement', 'annualentitlement', 'holidaysperyear', 'daysperyear', 'leave'],
+  workingDays: ['workingdays', 'daysworked', 'pattern', 'works', 'workingpattern', 'workdays', 'workingweek', 'daysofwork', 'workpattern', 'shiftpattern', 'dayspattern', 'workingdayspattern', 'daysofweek', 'weekdays', 'workingdaysoftheweek'],
+  phone: ['phone', 'mobile', 'telephone', 'phonenumber', 'mobilenumber', 'tel', 'contactnumber', 'telno', 'phoneno', 'mobileno', 'contactno', 'telephonenumber', 'telephoneno', 'contact', 'contactphone', 'cell', 'cellphone'],
+  email: ['email', 'emailaddress', 'mail', 'emails'],
+  notes: ['notes', 'note', 'comments', 'comment', 'remarks', 'other', 'otherinformation', 'additionalinformation'],
+  status: ['status', 'active', 'archived', 'employmentstatus', 'currentlyemployed', 'stillemployed', 'current'],
 };
 
-const headerKey = (h) => normaliseText(h).replace(/[^a-z0-9]/g, '');
+// 'Start date (dd/mm/yyyy)' → 'startdate': a bracketed hint on a heading is ignored.
+const headerKey = (h) => normaliseText(String(h ?? '').replace(/\(.*?\)|\[.*?\]/g, ' ')).replace(/[^a-z0-9]/g, '');
 
 /** Map each recognised field to the actual header it was found under. */
 function matchHeaders(headers) {
@@ -292,17 +334,84 @@ function matchHeaders(headers) {
   return found;
 }
 
-function splitName(name) {
+/** 'Priya Patel' → Priya / Patel; 'Patel, Priya' → Priya / Patel; 'Anne Marie Smith' → Anne Marie / Smith. */
+function splitName(raw) {
+  const name = raw.replace(/\s+/g, ' ').trim();
+  const comma = name.indexOf(',');
+  if (comma !== -1) {
+    const last = name.slice(0, comma).trim();
+    const first = name.slice(comma + 1).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    return first ? { first, last } : { first: last, last: '' };
+  }
   const idx = name.lastIndexOf(' ');
   return idx === -1 ? { first: name, last: '' } : { first: name.slice(0, idx), last: name.slice(idx + 1) };
 }
 
+/**
+ * '28', '25.5', '25,5', '28 days', '28d', '5.6 weeks' → { days } or { weeks }; anything else → null.
+ * Trailing 'per year' / 'a year' / 'p.a.' is ignored.
+ */
 function parseEntitlement(value) {
-  const m = value.match(/^(\d+(?:[.,]\d+)?)\s*(?:days?)?$/i);
-  return m ? Number(m[1].replace(',', '.')) : null;
+  const t = normaliseText(value).replace(/\s*(per|a|each|\/)\s*(year|annum|yr|holiday year)$|\s*p\.?a\.?$/, '').trim();
+  const m = t.match(/^(\d+(?:[.,]\d+)?|[.,]\d+)\.?\s*(d|days?|w|wks?|weeks?)?$/);
+  if (!m) return null;
+  const n = Number(m[1].replace(',', '.'));
+  if (!Number.isFinite(n)) return null;
+  return /^w/.test(m[2] ?? '') ? { weeks: n } : { days: n };
 }
 
-const INACTIVE = /^(archived|inactive|left|leaver|no|false|0)$/;
+const INACTIVE = /^(archived?|inactive|not active|left|leavers?|former|gone|no|n|false|0|deactivated|disabled|ended|finished)$/;
+
+/**
+ * Read a date typed or exported by a person, more forgivingly than parseLooseDate alone:
+ * Excel serial numbers ('43952'), a time of day tacked on ('01/05/2020 00:00'), ordinals
+ * ('1st May 2020'), a weekday name in front, and ISO-looking dates that don't exist
+ * ('2026-02-31' → not a date, rather than 3 March). A US-style date whose month and day
+ * are the wrong way round ('05/13/2020') is read with a warning.
+ * @returns {{ iso: string|null, swapped?: boolean }}
+ */
+function readCsvDate(value) {
+  let t = String(value ?? '').trim();
+  if (!t) return { iso: null };
+  if (/^\d{5}$/.test(t)) {
+    const serial = Number(t);
+    return { iso: serial >= 20000 && serial <= 80000 ? addDays('1899-12-30', serial) : null };
+  }
+  t = t
+    .replace(/^(mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+/i, '')
+    .replace(/(\d)(st|nd|rd|th)\b/gi, '$1')
+    .replace(/[T\s]+\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?\s*([ap]\.?m\.?)?\s*(z|utc|gmt|[+-]\d{2}:?\d{2})?$/i, '')
+    .trim();
+  const iso = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (iso) {
+    const made = makeISO(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    return { iso: isValidISO(made) ? made : null };
+  }
+  // Without a year ('1 May') there is nothing sensible to read – better blank than a guess.
+  if (!/\d{4}/.test(t) && !/^\d{1,2}[/.-]\d{1,2}[/.-]\d{2}$/.test(t)) return { iso: null };
+  const parsed = parseLooseDate(t);
+  if (parsed) return { iso: plausibleYear(parsed) ? parsed : null };
+  const dmy = t.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
+  if (dmy && Number(dmy[2]) > 12 && Number(dmy[1]) <= 12) {
+    const year = dmy[3].length === 2 ? 2000 + Number(dmy[3]) : Number(dmy[3]);
+    const swapped = makeISO(year, Number(dmy[1]), Number(dmy[2]));
+    if (isValidISO(swapped)) return { iso: swapped, swapped: true };
+  }
+  return { iso: null };
+}
+
+/** A start or end date for a carer should be somewhere near the present, not year 1 or 43952. */
+function plausibleYear(iso) {
+  const year = Number(iso.slice(0, 4));
+  return year >= 1900 && year <= 2100;
+}
+
+/** Team lookup keys: the exact name, plus a loose version without the word 'team' or punctuation. */
+function teamKeys(name) {
+  const exact = normaliseText(name);
+  const loose = exact.replace(/\bteams?\b/g, '').replace(/[^a-z0-9]/g, '');
+  return { exact, loose };
+}
 
 /**
  * Read carers from CSV text typed or exported by a person. Headings are matched loosely
@@ -316,6 +425,7 @@ const INACTIVE = /^(archived|inactive|left|leaver|no|false|0)$/;
  *   carers are patches ready for addCarers(); row numbers are 1-based data rows (0 = the file as a whole)
  */
 export function parseCarersCsv(text, db = {}) {
+  db = db ?? {};
   const settings = { ...defaultSettings(), ...(db.settings ?? {}) };
   const rows = parseCsv(text);
   const carers = [];
@@ -328,9 +438,20 @@ export function parseCarersCsv(text, db = {}) {
     return { carers, errors };
   }
 
-  const teamsByName = new Map((db.teams ?? []).map((t) => [normaliseText(t.name), t.id]));
+  const teamsByName = new Map();
+  const teamsByLooseName = new Map();
+  for (const t of db.teams ?? []) {
+    const { exact, loose } = teamKeys(t?.name);
+    if (exact && !teamsByName.has(exact)) teamsByName.set(exact, t.id);
+    if (loose) teamsByLooseName.set(loose, teamsByLooseName.has(loose) ? null : t.id); // null = ambiguous
+  }
+  const findTeam = (text) => {
+    const { exact, loose } = teamKeys(text);
+    return teamsByName.get(exact) ?? (loose && teamsByLooseName.get(loose)) ?? null;
+  };
   const rolesByName = new Map((settings.roles ?? []).map((r) => [normaliseText(r), r]));
   const existingNames = new Set((db.carers ?? []).map((c) => normaliseText(fullName(c))));
+  const seenInFile = new Map();
   const defaultDays = formatWorkingDays(settings.defaultWorkingDays);
 
   rows.forEach((raw, i) => {
@@ -338,8 +459,8 @@ export function parseCarersCsv(text, db = {}) {
     const cell = (field) => (cols[field] ? String(raw[cols[field]] ?? '').trim() : '');
     const warn = (message) => errors.push({ row, message, warning: true });
 
-    let firstName = cell('firstName');
-    let lastName = cell('lastName');
+    let firstName = cell('firstName').replace(/\s+/g, ' ');
+    let lastName = cell('lastName').replace(/\s+/g, ' ');
     if ((!firstName || !lastName) && cell('name')) {
       const split = splitName(cell('name'));
       firstName = firstName || split.first;
@@ -350,35 +471,32 @@ export function parseCarersCsv(text, db = {}) {
       return;
     }
     const name = `${firstName} ${lastName}`.trim();
-    if (existingNames.has(normaliseText(name))) warn(`There is already a carer called ${name} – check for duplicates after importing.`);
+    const nameKey = normaliseText(name);
+    if (existingNames.has(nameKey)) warn(`There is already a carer called ${name} – check for duplicates after importing.`);
+    else if (seenInFile.has(nameKey)) warn(`${name} also appears on row ${seenInFile.get(nameKey)} of this file – check for duplicates after importing.`);
+    else seenInFile.set(nameKey, row);
 
     let teamId = null;
     const teamText = cell('team');
     if (teamText) {
-      teamId = teamsByName.get(normaliseText(teamText)) ?? null;
+      teamId = findTeam(teamText);
       if (!teamId) warn(`We couldn’t find a team called “${teamText}”, so ${name} has been left with no team.`);
     }
 
-    const roleText = cell('role');
+    const roleText = cell('role').replace(/\s+/g, ' ');
     const role = rolesByName.get(normaliseText(roleText)) ?? roleText ?? '';
 
     const readDate = (field, label) => {
       const value = cell(field);
       if (!value) return null;
-      const iso = parseLooseDate(value);
+      const { iso, swapped } = readCsvDate(value);
       if (!iso) warn(`The ${label} “${value}” wasn’t understood, so it has been left blank.`);
+      else if (swapped) warn(`The ${label} “${value}” looked like month/day/year, so it has been read as ${formatNumeric(iso)}.`);
       return iso;
     };
     const startDate = readDate('startDate', 'start date');
     const endDate = readDate('endDate', 'end date');
-
-    let entitlementDays = settings.defaultEntitlementDays;
-    const entitlementText = cell('entitlement');
-    if (entitlementText) {
-      const parsed = parseEntitlement(entitlementText);
-      if (parsed == null) warn(`The entitlement “${entitlementText}” isn’t a number, so ${settings.defaultEntitlementDays} days has been used.`);
-      else entitlementDays = parsed;
-    }
+    if (startDate && endDate && endDate < startDate) warn(`${name}’s end date ${formatNumeric(endDate)} is before the start date ${formatNumeric(startDate)} – check it after importing.`);
 
     let workingDays = [...settings.defaultWorkingDays];
     const daysText = cell('workingDays');
@@ -386,6 +504,16 @@ export function parseCarersCsv(text, db = {}) {
       const parsed = parseWorkingDays(daysText);
       if (parsed) workingDays = parsed;
       else warn(`The working days “${daysText}” weren’t understood, so ${defaultDays} has been used.`);
+    }
+
+    let entitlementDays = settings.defaultEntitlementDays;
+    const entitlementText = cell('entitlement');
+    if (entitlementText) {
+      const parsed = parseEntitlement(entitlementText);
+      const days = parsed?.weeks != null ? Math.round(parsed.weeks * workingDays.length * 100) / 100 : parsed?.days;
+      if (days == null) warn(`The entitlement “${entitlementText}” isn’t a number of days, so ${settings.defaultEntitlementDays} days has been used.`);
+      else if (days > 366) warn(`The entitlement “${entitlementText}” is more than a year of days, so ${settings.defaultEntitlementDays} days has been used.`);
+      else entitlementDays = days;
     }
 
     const statusText = normaliseText(cell('status'));

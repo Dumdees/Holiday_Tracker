@@ -235,3 +235,62 @@ describe('describeWorkingPattern', () => {
     assert.equal(describeWorkingPattern(null), 'Mon to Fri');
   });
 });
+
+describe('leaveDaysBreakdown – edge cases', () => {
+  test('a range across 29 February in a leap year counts the leap day', () => {
+    // Mon 28 Feb 2028 .. Wed 1 Mar 2028
+    const r = leaveDaysBreakdown({ start: '2028-02-28', end: '2028-03-01' }, fullTime, ctx);
+    assert.deepEqual(r.countedDays, ['2028-02-28', '2028-02-29', '2028-03-01']);
+    assert.equal(r.days, 3);
+  });
+  test('a range made entirely of bank holidays counts nothing and says why', () => {
+    const r = leaveDaysBreakdown({ start: '2026-05-04', end: '2026-05-04' }, fullTime, ctx);
+    assert.equal(r.days, 0);
+    assert.deepEqual(r.skipped, [{ date: '2026-05-04', reason: 'bank-holiday' }]);
+  });
+  test('half day values other than am/pm are ignored', () => {
+    assert.equal(leaveDaysBreakdown({ start: '2026-06-15', end: '2026-06-15', halfDay: 'AM' }, fullTime, ctx).days, 1);
+    assert.equal(leaveDaysBreakdown({ start: '2026-06-15', end: '2026-06-15', halfDay: '' }, fullTime, ctx).days, 1);
+    assert.equal(leaveDaysBreakdown({ start: '2026-06-15', end: '2026-06-15', halfDay: true }, fullTime, ctx).days, 1);
+  });
+  test('half days add up without float noise', () => {
+    let total = 0;
+    for (let i = 0; i < 10; i++) total += countLeaveDays({ start: '2026-06-15', end: '2026-06-15', halfDay: 'am' }, fullTime, ctx);
+    assert.equal(total, 5);
+  });
+  test('workingDays given as strings still count', () => {
+    assert.equal(countLeaveDays({ start: '2026-06-15', end: '2026-06-21' }, { workingDays: ['1', '3', '5'] }, ctx), 3);
+  });
+  test('a range ending on the last day of a month and one starting on the first join up', () => {
+    const a = countLeaveDays({ start: '2026-06-22', end: '2026-06-30' }, fullTime, ctx); // Mon 22 .. Tue 30
+    const b = countLeaveDays({ start: '2026-07-01', end: '2026-07-03' }, fullTime, ctx); // Wed 1 .. Fri 3
+    assert.equal(a + b, countLeaveDays({ start: '2026-06-22', end: '2026-07-03' }, fullTime, ctx));
+    assert.equal(a + b, 10);
+  });
+  test('missing ctx never throws', () => {
+    assert.equal(countLeaveDays({ start: '2026-06-15', end: '2026-06-19' }, fullTime, undefined), 5);
+    assert.equal(countLeaveDays({ start: '2026-06-15', end: '2026-06-19' }, fullTime, {}), 5);
+  });
+});
+
+describe('clipToRange – year boundaries', () => {
+  test('a holiday over 31 March / 1 April splits cleanly into two years', () => {
+    const h = { start: '2026-03-30', end: '2026-04-03', halfDay: null };
+    const prev = clipToRange(h, '2025-04-01', '2026-03-31');
+    const next = clipToRange(h, '2026-04-01', '2027-03-31');
+    assert.equal(countLeaveDays(prev, fullTime, ctx) + countLeaveDays(next, fullTime, ctx), countLeaveDays(h, fullTime, ctx));
+  });
+  test('a holiday over 31 December / 1 January splits for a January year', () => {
+    const h = { start: '2026-12-28', end: '2027-01-04', halfDay: null }; // Mon 28 Dec .. Mon 4 Jan
+    const a = clipToRange(h, '2026-01-01', '2026-12-31');
+    const b = clipToRange(h, '2027-01-01', '2027-12-31');
+    assert.deepEqual([a.start, a.end, b.start, b.end], ['2026-12-28', '2026-12-31', '2027-01-01', '2027-01-04']);
+    assert.equal(countLeaveDays(a, fullTime, ctxNoBankHols), 4);
+    assert.equal(countLeaveDays(b, fullTime, ctxNoBankHols), 2);
+  });
+  test('a half day exactly on the year boundary stays a half day', () => {
+    const h = { start: '2026-04-01', end: '2026-04-01', halfDay: 'pm' };
+    assert.equal(countLeaveDays(clipToRange(h, '2026-04-01', '2027-03-31'), fullTime, ctx), 0.5);
+    assert.equal(clipToRange(h, '2025-04-01', '2026-03-31'), null);
+  });
+});

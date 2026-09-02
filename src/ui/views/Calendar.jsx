@@ -15,6 +15,7 @@ import { db, carers, holidays, teams, teamsById, leaveTypes, leaveTypesById, car
 import { countLeaveDays } from '../../core/leaveDays.js';
 import { formatDays } from '../../core/entitlement.js';
 import { monthGrid, weekdayHeaders, parts, makeISO, addMonths, addDays, startOfWeek, formatLong, formatShort, formatRange, monthName, MONTHS, daysInMonth, eachDay, isWeekend, rangesOverlap, formatMonthYear, relativeDay } from '../../core/dates.js';
+import { yearBounds } from '../../core/holidayYear.js';
 import { ctx } from '../shared/context.js';
 import { today } from '../shared/today.js';
 import { teamOptions, leaveTypeOptions } from '../shared/options.js';
@@ -69,6 +70,12 @@ export function Calendar({ params }) {
 
   const go = (patch) => navigate('calendar', { view, month, team: filters.teamId, ...patch, day: undefined });
   const { y, m } = parts(month + '-01');
+  // In the year view the dropdown lists holiday years ("2026/27"), matching what the grid shows.
+  const hys = s.holidayYearStart;
+  const hyStartYear = m >= hys.month ? y : y - 1;
+  const yearSelect = view === 'year'
+    ? { value: hyStartYear, options: Array.from({ length: 7 }, (_, i) => parts(t).y - 3 + i).map((yy) => ({ value: yy, label: yearBounds(String(yy), s).label })), onChange: (v) => go({ month: makeISO(Number(v), hys.month, 1).slice(0, 7) }) }
+    : { value: y, options: Array.from({ length: 7 }, (_, i) => parts(t).y - 3 + i).map((yy) => ({ value: yy, label: String(yy) })), onChange: (v) => go({ month: makeISO(Number(v), m, 1).slice(0, 7) }) };
 
   return (
     <div class="page calendar-page">
@@ -80,7 +87,7 @@ export function Calendar({ params }) {
             <Button variant="soft" onClick={() => go({ month: t.slice(0, 7) })}>Today</Button>
             <IconButton icon="chevron-right" label={view === 'year' ? 'Next year' : 'Next month'} onClick={() => go({ month: view === 'year' ? makeISO(y + 1, m, 1).slice(0, 7) : addMonths(month + '-01', 1).slice(0, 7) })} />
             {view !== 'year' ? <SelectField ariaLabel="Month" options={MONTHS.map((name, i) => ({ value: i + 1, label: name }))} value={m} onChange={(v) => go({ month: makeISO(y, Number(v), 1).slice(0, 7) })} /> : null}
-            <SelectField ariaLabel="Year" options={Array.from({ length: 7 }, (_, i) => parts(t).y - 3 + i).map((yy) => ({ value: yy, label: String(yy) }))} value={y} onChange={(v) => go({ month: makeISO(Number(v), m, 1).slice(0, 7) })} />
+            <SelectField ariaLabel={view === 'year' ? 'Holiday year' : 'Year'} options={yearSelect.options} value={yearSelect.value} onChange={yearSelect.onChange} />
           </div>
           <Tabs tabs={VIEWS} value={view} onChange={(v) => go({ view: v })} variant="segmented" ariaLabel="Calendar view" />
           <div class="row calendar-filters">

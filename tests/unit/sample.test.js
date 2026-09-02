@@ -2,37 +2,37 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleDb, sampleCarerCsv, SAMPLE_CARERS, SAMPLE_TEAMS } from '../../src/store/sample.js';
 import { PALETTE, defaultLeaveTypes } from '../../src/store/defaults.js';
-import { addDays, addMonths, addYears, eachDay, isValidISO, isoWeekday, parseLooseDate, rangesOverlap } from '../../src/core/dates.js';
-import { yearBoundsFor, employedFractionOfYear } from '../../src/core/holidayYear.js';
+import { addDays, addMonths, addYears, diffDays, eachDay, isValidISO, isoWeekday, parseLooseDate, rangesOverlap } from '../../src/core/dates.js';
+import { yearBounds, yearBoundsFor } from '../../src/core/holidayYear.js';
+import { buildContext } from '../../src/core/context.js';
+import { countLeaveDays } from '../../src/core/leaveDays.js';
+import { usageForAll } from '../../src/core/entitlement.js';
+import { existingProblems, findClashes } from '../../src/core/clashes.js';
+import { currentlyOff, upcoming, pendingApprovals, overdrawnAlerts } from '../../src/core/stats.js';
 
 const TODAY = '2026-06-17'; // a Wednesday
-// A spread of "todays": mid-year, the first days of a holiday year, its last day,
-// Christmas Day, a Saturday, a Sunday, a bank holiday Monday and a late-March day.
-const TODAYS = ['2026-06-17', '2026-04-01', '2026-04-02', '2027-03-31', '2026-12-25', '2026-08-15', '2026-08-16', '2026-05-04', '2026-03-10'];
+
+// One "today" in every month of a year, then the awkward ones: the first two days of a
+// holiday year, its last day, Christmas Day, a Sunday, and days whose deliberate clash
+// would land on a bank holiday if the generator didn't know about them (Early May, 2 Jan).
+const MONTHLY = ['2026-01-15', '2026-02-10', '2026-03-10', '2026-04-01', '2026-05-04', '2026-06-17', '2026-07-20', '2026-08-15', '2026-09-02', '2026-10-30', '2026-11-11', '2026-12-25'];
+const AWKWARD = ['2026-04-02', '2027-03-31', '2026-08-16', '2026-04-06', '2026-04-07', '2026-12-07'];
+const TODAYS = [...MONTHLY, ...AWKWARD];
 const LEAVE_TYPE_IDS = new Set(defaultLeaveTypes().map((t) => t.id));
 
 const byId = (db) => new Map(db.carers.map((c) => [c.id, c]));
-const isWorking = (iso, carer) => carer.workingDays.includes(isoWeekday(iso));
-const workingDays = (h, carer) => eachDay(h.start, h.end).filter((d) => isWorking(d, carer)).length;
 const covers = (h, iso) => h.start <= iso && h.end >= iso;
-const approvedAnnual = (h) => h.typeId === 'lt_annual' && h.status === 'approved';
+const distinctCarers = (entries) => new Set(entries.map((e) => e.carer.id)).size;
 
-/** Approximate annual-leave usage for the current holiday year as a fraction of the allowance. */
-function usageRatio(db, carer, today) {
-  const year = yearBoundsFor(today, db.settings);
-  const fraction = employedFractionOfYear(year, carer.startDate, carer.endDate);
-  const adjustments = carer.adjustments.filter((a) => a.yearKey === year.key).reduce((n, a) => n + a.days, 0);
-  const total = Math.round(carer.entitlementDays * fraction * 2) / 2 + adjustments;
-  if (total <= 0) return null;
-  let used = 0;
-  for (const h of db.holidays) {
-    if (h.carerId !== carer.id || h.typeId !== 'lt_annual' || h.status === 'declined') continue;
-    for (const d of eachDay(h.start, h.end)) {
-      if (d >= year.start && d <= year.end && isWorking(d, carer)) used += h.halfDay ? 0.5 : 1;
-    }
-  }
-  return used / total;
+/** The sample with everything the app would compute from it for `today`. */
+function open(today, settings) {
+  const db = sampleDb({ today, settings });
+  const ctx = buildContext(db, { today });
+  return { db, ctx, carers: byId(db), year: yearBoundsFor(today, db.settings), H: db.holidays };
 }
+
+/** Problems the Home screen would show: the next two months from today. */
+const homeProblems = (db, ctx, today) => existingProblems(db, ctx, { start: today, end: addDays(today, 60) });
 
 describe('sampleDb – determinism and shape', () => {
   test('is identical for the same today', () => {
@@ -41,6 +41,16 @@ describe('sampleDb – determinism and shape', () => {
 
   test('changes with today (dates are relative)', () => {
     assert.notEqual(JSON.stringify(sampleDb({ today: TODAY })), JSON.stringify(sampleDb({ today: '2026-06-18' })));
+  });
+
+  test('never throws and stays deterministic for the first of every month across a year', () => {
+    for (let m = 1; m <= 12; m++) {
+      const today = `2026-${String(m).padStart(2, '0')}-01`;
+      const a = sampleDb({ today });
+      assert.equal(a.carers.length, 18, `${today}: 18 carers`);
+      assert.ok(a.holidays.length >= 120, `${today}: plenty of holidays`);
+      assert.equal(JSON.stringify(a), JSON.stringify(sampleDb({ today })), `${today}: same document twice`);
+    }
   });
 
   test('defaults today to the real date when nothing is passed', () => {
@@ -190,13 +200,10 @@ describe('sampleDb – carers', () => {
   });
 });
 
-describe('sampleDb – holidays (for several values of today)', () => {
+describe('sampleDb – holidays, checked the way the app checks them, for many values of today', () => {
   for (const today of TODAYS) {
     describe(`today = ${today}`, () => {
-      const db = sampleDb({ today });
-      const carers = byId(db);
-      const year = yearBoundsFor(today, db.settings);
-      const H = db.holidays;
+      const { db, ctx, carers, year, H } = open(today);
 
       test('120–200 holidays with sequential ids and valid records', () => {
         assert.ok(H.length >= 120 && H.length <= 200, `${H.length} holidays`);
@@ -220,8 +227,12 @@ describe('sampleDb – holidays (for several values of today)', () => {
         for (let i = 1; i < H.length; i++) assert.ok(H[i - 1].start <= H[i].start);
       });
 
-      test('every holiday has at least one of the carer’s working days', () => {
-        for (const h of H) assert.ok(workingDays(h, carers.get(h.carerId)) >= 1, `${h.id} ${h.start}..${h.end}`);
+      test('every holiday uses at least half a day once weekends and bank holidays are taken out', () => {
+        for (const h of H) {
+          const days = countLeaveDays(h, carers.get(h.carerId), ctx);
+          assert.ok(days >= 0.5, `${h.id} ${h.carerId} ${h.start}..${h.end} counts ${days} days`);
+          if (h.halfDay) assert.equal(days, 0.5, `${h.id} is a half day`);
+        }
       });
 
       test('no carer has overlapping holidays', () => {
@@ -244,13 +255,27 @@ describe('sampleDb – holidays (for several values of today)', () => {
         }
       });
 
-      test('mostly approved annual leave, some pending in the future, a few declined', () => {
+      test('editing any holiday would raise no warning beyond the deliberate clashes (and the archived carer)', () => {
+        const archived = db.carers.find((c) => !c.active);
+        for (const h of H) {
+          for (const clash of findClashes(h, db, ctx, { ignoreHolidayIds: [h.id], today })) {
+            assert.ok(['staffing', 'pairing', 'inactive'].includes(clash.kind), `${h.id} ${h.carerId} ${h.start}..${h.end}: ${clash.message}`);
+            if (clash.kind === 'inactive') assert.equal(h.carerId, archived.id, `${h.id}: ${clash.message}`);
+          }
+        }
+      });
+
+      test('mostly approved annual leave, about ten requests awaiting approval, a few declined', () => {
         const annual = H.filter((h) => h.typeId === 'lt_annual');
         assert.ok(annual.length >= H.length * 0.6, 'annual leave is the majority');
         assert.ok(annual.filter((h) => h.status === 'approved').length >= annual.length * 0.7);
-        const pending = H.filter((h) => h.status === 'pending');
-        assert.ok(pending.length >= 5 && pending.length <= 12, `${pending.length} pending`);
-        for (const h of pending) assert.ok(h.start > today, `${h.id} pending is in the future`);
+        const pending = pendingApprovals(db, ctx);
+        assert.ok(pending.length >= 8 && pending.length <= 12, `${pending.length} pending`);
+        for (const p of pending) {
+          assert.ok(p.holiday.start > addDays(today, 14), `${p.holiday.id} pending is beyond the next fortnight`);
+          assert.ok(p.carer.active, `${p.holiday.id} pending is for someone still here`);
+          assert.ok(p.days >= 0.5, `${p.holiday.id} pending uses real days`);
+        }
         assert.ok(H.some((h) => h.status === 'declined'));
       });
 
@@ -273,11 +298,14 @@ describe('sampleDb – holidays (for several values of today)', () => {
         assert.ok(halves.some((h) => h.start < today) && halves.some((h) => h.start > today));
       });
 
-      test('at least two active carers are off today, one on a holiday spanning today', () => {
-        const off = H.filter((h) => h.status === 'approved' && covers(h, today) && carers.get(h.carerId).active);
-        assert.ok(new Set(off.map((h) => h.carerId)).size >= 2, 'two carers off today');
-        assert.ok(off.some((h) => h.start < today && h.end > today), 'a holiday spans today');
-        assert.ok(off.some((h) => isWorking(today, carers.get(h.carerId))), 'someone who works today is off');
+      test('two or three carers are off today, one on a holiday spanning today', () => {
+        const off = currentlyOff(db, today, ctx);
+        const active = off.filter((a) => a.carer.active);
+        assert.ok(distinctCarers(active) >= 2 && distinctCarers(active) <= 3, `${distinctCarers(active)} carers off today`);
+        assert.ok(off.some((a) => a.holiday.start < today && a.holiday.end > today), 'a holiday spans today');
+        if (!ctx.bankHolidayMap.has(today)) {
+          assert.ok(off.some((a) => countLeaveDays({ start: today, end: today }, a.carer, ctx) === 1), 'someone who would have worked today is off');
+        }
       });
 
       test('one holiday spans the start of the current holiday year', () => {
@@ -288,45 +316,51 @@ describe('sampleDb – holidays (for several values of today)', () => {
         assert.ok(spanning.some((h) => h.carerId === 'carer_s01' && h.typeId === 'lt_annual' && h.status === 'approved'));
       });
 
-      test('3–4 holidays start in the next 14 days', () => {
-        const upcoming = H.filter((h) => h.start > today && h.start <= addDays(today, 14));
-        assert.ok(upcoming.length >= 3 && upcoming.length <= 4, `${upcoming.length} upcoming`);
+      test('three or four holidays start in the next 14 days', () => {
+        const next = upcoming(db, today, 14, ctx);
+        assert.ok(next.length >= 3 && next.length <= 4, `${next.length} upcoming`);
+        for (const a of next) assert.ok(a.days >= 0.5, `${a.holiday.id} upcoming uses real days`);
       });
 
-      test('one deliberate staffing clash in the Day team 3–5 weeks ahead', () => {
-        const clashDays = [];
-        for (const day of eachDay(addDays(today, 21), addDays(today, 35))) {
-          const off = new Set(H.filter((h) => approvedAnnual(h) && covers(h, day) && carers.get(h.carerId).teamId === 'team_day').map((h) => h.carerId));
-          if (off.size >= 3) clashDays.push(day);
+      test('the Home screen sees exactly one staffing clash and one pairing clash, 2–6 weeks ahead', () => {
+        const problems = homeProblems(db, ctx, today);
+        assert.deepEqual(problems.map((p) => p.kind).sort(), ['pairing', 'staffing'], problems.map((p) => p.message).join(' | '));
+        for (const p of problems) {
+          const ahead = diffDays(today, p.dates[0]);
+          assert.ok(ahead >= 14 && ahead <= 42, `${p.kind} clash is ${ahead} days ahead`);
+          for (const d of p.dates) assert.ok(isoWeekday(d) <= 5 && !ctx.bankHolidayMap.has(d), `${p.kind} clash on ${d} is a real working day`);
         }
-        assert.ok(clashDays.length >= 1, 'a day with three Day-team carers off');
-        assert.ok(clashDays.length <= 3, 'the clash is a single day or two, not a week');
-        assert.ok(clashDays.every((d) => isoWeekday(d) <= 5), 'on a working day');
+        const staffing = problems.find((p) => p.kind === 'staffing');
+        assert.ok(staffing.dates.length <= 2, 'the staffing clash is a day or two, not a week');
+        assert.equal(staffing.carerIds.length, 3);
+        for (const id of staffing.carerIds) assert.equal(carers.get(id).teamId, 'team_day');
+        const pairing = problems.find((p) => p.kind === 'pairing');
+        assert.deepEqual([...pairing.carerIds].sort(), ['carer_s03', 'carer_s05']);
       });
 
-      test('no other day exceeds a team’s max off per day', () => {
-        const capOf = (teamId) => db.teams.find((t) => t.id === teamId).maxOffPerDay ?? db.settings.defaultMaxOffPerDay;
-        const overs = [];
-        for (const day of eachDay(addYears(today, -2), addYears(today, 2))) {
-          for (const team of db.teams) {
-            const off = new Set(H.filter((h) => h.status !== 'declined' && covers(h, day) && carers.get(h.carerId).teamId === team.id).map((h) => h.carerId));
-            if (off.size > capOf(team.id)) overs.push(day);
+      test('no other clash anywhere in the four years the sample covers', () => {
+        const all = existingProblems(db, ctx, { start: addYears(today, -2), end: addYears(today, 2) });
+        assert.deepEqual(all.map((p) => `${p.kind} ${p.dates[0]}`), homeProblems(db, ctx, today).map((p) => `${p.kind} ${p.dates[0]}`));
+      });
+
+      test('nobody is over their entitlement in the previous, current or next holiday year', () => {
+        for (const offset of [-1, 0, 1]) {
+          const yb = yearBounds(Number(year.key) + offset, db.settings);
+          for (const [id, u] of usageForAll(db.carers, yb, H, ctx, today)) {
+            assert.ok(u.remaining >= 0, `${id} in ${yb.label}: ${u.remaining} left of ${u.entitlement.total}`);
+            assert.ok(u.remaining <= u.entitlement.total, `${id} in ${yb.label}: ${u.remaining} left of ${u.entitlement.total}`);
+            assert.ok(u.remainingAfterPending >= 0, `${id} in ${yb.label}: ${u.remainingAfterPending} left after pending`);
           }
         }
-        assert.ok(overs.length >= 1 && overs.length <= 3, `only the deliberate clash breaks a limit (${overs.join(', ')})`);
-        assert.ok(overs.every((d) => d >= addDays(today, 21) && d <= addDays(today, 35)));
+        assert.deepEqual(overdrawnAlerts(db, year, ctx, today), []);
       });
 
-      test('one pairing clash between Callum and Ewan 2–4 weeks ahead', () => {
-        const days = eachDay(addDays(today, 14), addDays(today, 28)).filter((day) =>
-          H.some((h) => h.carerId === 'carer_s03' && approvedAnnual(h) && covers(h, day)) &&
-          H.some((h) => h.carerId === 'carer_s05' && approvedAnnual(h) && covers(h, day)));
-        assert.ok(days.length >= 1, 'both off on the same day');
-        const others = eachDay(addYears(today, -2), addYears(today, 2)).filter((day) =>
-          !days.includes(day) &&
-          H.some((h) => h.carerId === 'carer_s03' && h.status !== 'declined' && covers(h, day)) &&
-          H.some((h) => h.carerId === 'carer_s05' && h.status !== 'declined' && covers(h, day)));
-        assert.deepEqual(others, [], 'no accidental pairing clashes');
+      test('annual leave used or requested this year is 20–95% of each active carer’s allowance', () => {
+        for (const [id, u] of usageForAll(db.carers.filter((c) => c.active), year, H, ctx, today)) {
+          if (u.entitlement.total <= 0) continue;
+          const ratio = (u.taken + u.booked + u.pending) / u.entitlement.total;
+          assert.ok(ratio >= 0.2 && ratio <= 0.95, `${id} uses ${(ratio * 100).toFixed(0)}%`);
+        }
       });
 
       test('the archived carer only has past holidays', () => {
@@ -342,15 +376,6 @@ describe('sampleDb – holidays (for several values of today)', () => {
         assert.ok(H.some((h) => h.carerId === leaver.id));
       });
 
-      test('annual leave used this year is 20–95% of each active carer’s allowance', () => {
-        for (const c of db.carers) {
-          if (!c.active) continue;
-          const ratio = usageRatio(db, c, today);
-          if (ratio === null) continue;
-          assert.ok(ratio >= 0.2 && ratio <= 0.95, `${c.id} uses ${(ratio * 100).toFixed(0)}%`);
-        }
-      });
-
       test('holidays fall in the previous, current and next holiday years', () => {
         const keys = new Set();
         for (const h of H) { keys.add(h.start < year.start ? 'prev' : h.start > year.end ? 'next' : 'cur'); }
@@ -364,6 +389,17 @@ describe('sampleDb – holidays (for several values of today)', () => {
       });
     });
   }
+});
+
+describe('sampleDb – when bank holidays are ordinary working days', () => {
+  const { db, ctx, carers, H } = open(TODAY, { bankHolidaysAreDaysOff: false });
+
+  test('the setting is kept and the sample still checks out', () => {
+    assert.equal(db.settings.bankHolidaysAreDaysOff, false);
+    for (const h of H) assert.ok(countLeaveDays(h, carers.get(h.carerId), ctx) >= 0.5, `${h.id} uses real days`);
+    assert.deepEqual(homeProblems(db, ctx, TODAY).map((p) => p.kind).sort(), ['pairing', 'staffing']);
+    assert.ok(distinctCarers(currentlyOff(db, TODAY, ctx)) >= 2);
+  });
 });
 
 /** Minimal RFC 4180 line parser for checking the example CSV. */

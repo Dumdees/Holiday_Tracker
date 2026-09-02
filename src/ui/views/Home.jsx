@@ -63,13 +63,15 @@ export function Home() {
   const unused = unusedLeaveAlerts(doc, yb, c, t);
   const low = lowRemainingAlerts(doc, yb, c, t);
   const overdrawn = overdrawnAlerts(doc, yb, c, t);
-  const totals = summarise(usageMap(yb.key).values());
+  // Only count current carers, so the numbers here match the Carers and Reports screens.
+  const usages = usageMap(yb.key);
+  const totals = summarise(people.map((p) => usages.get(p.id)).filter(Boolean));
   const used = totals.taken + totals.booked;
   const daysLeftInYear = diffDays(t, yb.end);
 
   const attention = [];
   if (problems.length) attention.push({ tone: 'warning', icon: 'alert', title: problems.length === 1 ? 'A clash in the next two months' : `${problems.length} clashes in the next two months`, body: problems.slice(0, 3).map((p) => p.message).join(' · ') + (problems.length > 3 ? ' · and more' : ''), action: { label: 'See calendar', onClick: () => navigate('calendar', { month: (problems[0].dates?.[0] || t).slice(0, 7), day: problems[0].dates?.[0] }) } });
-  if (pending.length) attention.push({ tone: 'info', icon: 'clock', title: pending.length === 1 ? 'One holiday request is waiting for a decision' : `${pending.length} holiday requests are waiting for a decision`, body: pending.slice(0, 3).map((p) => `${p.carer.firstName} · ${formatRange(p.holiday.start, p.holiday.end)}`).join(' · '), action: { label: 'Review requests', onClick: () => navigate('holidays', { tab: 'all', status: 'pending' }) } });
+  if (pending.length) attention.push({ tone: 'info', icon: 'clock', title: pending.length === 1 ? 'One holiday request is waiting for a decision' : `${pending.length} holiday requests are waiting for a decision`, body: pending.slice(0, 3).map((p) => `${p.carer.firstName} · ${formatRange(p.holiday.start, p.holiday.end)}`).join(' · '), action: { label: 'Review requests', onClick: () => navigate('holidays', { tab: 'all', status: 'pending', year: 'all' }) } });
   if (overdrawn.length) attention.push({ tone: 'danger', icon: 'alert-circle', title: overdrawn.length === 1 ? `${carerName(overdrawn[0].carer)} has gone over their entitlement` : `${overdrawn.length} carers have gone over their entitlement`, body: overdrawn.slice(0, 4).map((o) => `${o.carer.firstName} (${formatDays(o.remaining)})`).join(' · '), action: { label: 'See carers', onClick: () => navigate('carers') } });
   if (unused.length) attention.push({ tone: 'warning', icon: 'sun', title: `${unused.length === 1 ? 'One carer still has' : `${unused.length} carers still have`} a lot of holiday to use before ${formatShort(yb.end)}`, body: unused.slice(0, 4).map((u) => `${u.carer.firstName} (${formatDays(u.remaining)} left)`).join(' · '), action: { label: 'See reports', onClick: () => navigate('reports') } });
   if (low.length) attention.push({ tone: 'info', icon: 'info', title: `${low.length === 1 ? 'One carer is' : `${low.length} carers are`} nearly out of holiday for ${yb.label}`, body: low.slice(0, 4).map((l) => `${l.carer.firstName} (${formatDays(l.remaining)} left)`).join(' · '), action: { label: 'See carers', onClick: () => navigate('carers') } });
@@ -89,7 +91,7 @@ export function Home() {
       <div class="grid grid-4 mb">
         <StatTile label="Off today" value={offToday.length} hint={offToday.length ? offToday.slice(0, 3).map((a) => a.carer.firstName).join(', ') + (offToday.length > 3 ? '…' : '') : 'Everyone’s in'} icon="sun" tone="peach" onClick={() => navigate('calendar', { day: t })} />
         <StatTile label="Off this week" value={offThisWeek.length} hint={formatRange(weekStart, weekEnd)} icon="calendar" tone="sky" onClick={() => navigate('calendar', { view: 'week', day: t })} />
-        <StatTile label="Awaiting approval" value={pending.length} hint={pending.length ? 'requests to decide on' : 'nothing waiting'} icon="clock" tone={pending.length ? 'amber' : 'default'} onClick={() => navigate('holidays', { tab: 'all', status: 'pending' })} />
+        <StatTile label="Awaiting approval" value={pending.length} hint={pending.length ? 'requests to decide on' : 'nothing waiting'} icon="clock" tone={pending.length ? 'amber' : 'default'} onClick={() => navigate('holidays', { tab: 'all', status: 'pending', year: 'all' })} />
         <StatTile label="Carers" value={people.length} hint={`${formatDays(totals.remaining)} days left between them`} icon="users" tone="sage" onClick={() => navigate('carers')} />
       </div>
 
@@ -147,7 +149,7 @@ export function Home() {
           </Card>
 
           {pending.length ? (
-            <Card title="Waiting for a decision" icon="clock" padded={false} actions={<Button size="sm" variant="ghost" onClick={() => navigate('holidays', { tab: 'all', status: 'pending' })}>See all</Button>}>
+            <Card title="Waiting for a decision" icon="clock" padded={false} actions={<Button size="sm" variant="ghost" onClick={() => navigate('holidays', { tab: 'all', status: 'pending', year: 'all' })}>See all</Button>}>
               <ul class="home-list">
                 {pending.slice(0, 5).map((p) => (
                   <li key={p.holiday.id} class="home-item">
@@ -157,7 +159,7 @@ export function Home() {
                     </div>
                     <span class="home-item-actions">
                       <Button size="sm" variant="soft" icon="check" onClick={() => { setHolidayStatus(p.holiday.id, 'approved'); toast(`Approved for ${carerName(p.carer)}`); }}>Approve</Button>
-                      <Button size="sm" variant="ghost" icon="eye" onClick={() => openHolidayDialog({ holidayId: p.holiday.id })}>Look</Button>
+                      <Button size="sm" variant="ghost" icon="eye" onClick={() => openHolidayDialog({ holidayId: p.holiday.id })}>Open</Button>
                     </span>
                   </li>
                 ))}

@@ -111,7 +111,8 @@ try {
     }
 
     const file = path.join(outDir, `charts-${name}.png`);
-    await page.screenshot({ path: file, fullPage: true });
+    // Animations off: a full-page capture otherwise catches entry animations half way.
+    await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
     console.log(`Saved ${path.relative(root, file)}`);
 
     // Hover states, desktop only: a bar tooltip, a doughnut segment, a heat-map day and the

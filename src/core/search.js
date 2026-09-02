@@ -11,23 +11,22 @@ import { HOLIDAY_STATUSES } from '../store/defaults.js';
  */
 export function normaliseText(text) {
   if (text == null) return '';
-  return String(text)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u2018\u2019`]/g, "'")
-    .toLowerCase()
+  return foldText(String(text))
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
- * Split a query into normalised, non-empty tokens.
+ * Split a query into normalised, non-empty tokens. Punctuation wrapped around a token
+ * is dropped ('Patel,' → 'patel', '"priya"' → 'priya') so a pasted "Surname, First"
+ * still finds people; punctuation inside a token ("o'brien", 'priya.patel') is kept.
  * @param {string} query
  * @returns {string[]}
  */
 export function tokenise(query) {
   const q = normaliseText(query);
-  return q ? q.split(' ') : [];
+  if (!q) return [];
+  return q.split(' ').map((t) => t.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '') || t);
 }
 
 /**
@@ -46,9 +45,14 @@ export function initialsOf(carer) {
  * @returns {number}
  */
 export function compareCarerNames(a, b) {
-  return compareStrings(normaliseText(a?.lastName), normaliseText(b?.lastName))
+  return compareStrings(surnameKey(a), surnameKey(b))
     || compareStrings(normaliseText(a?.firstName), normaliseText(b?.firstName))
     || compareStrings(a?.id ?? '', b?.id ?? '');
+}
+
+/** Sort key for a surname; someone known by one name ('Madonna') sorts by that name. */
+function surnameKey(carer) {
+  return normaliseText(carer?.lastName) || normaliseText(carer?.firstName);
 }
 
 /**
@@ -63,9 +67,10 @@ export function compareCarerNames(a, b) {
  * @returns {boolean}
  */
 export function carerMatches(carer, query, lookups = {}) {
+  if (!carer) return false;
   const tokens = tokenise(query);
   if (!tokens.length) return true;
-  return tokensMatch(tokens, carerWords(carer, lookups)) || nameMatches(carer, tokens);
+  return tokensMatch(tokens, carerWords(carer, lookups ?? {})) || nameMatches(carer, tokens);
 }
 
 /**
@@ -82,14 +87,16 @@ export function carerMatches(carer, query, lookups = {}) {
  * @returns {object[]} a new array, filtered and sorted
  */
 export function searchCarers(carers, query, options = {}, lookups = {}) {
-  const { teamId = null, role = null, active = 'active', sort = 'name', usages = null } = options;
+  const { teamId = null, role = null, active = 'active', sort = 'name', usages = null } = options ?? {};
+  const maps = lookups ?? {};
   const wantedRole = role ? normaliseText(role) : null;
   const kept = (carers ?? []).filter((c) =>
-    matchesActive(c, active)
+    c
+    && matchesActive(c, active)
     && matchesTeam(c, teamId)
     && (!wantedRole || normaliseText(c.role) === wantedRole)
-    && carerMatches(c, query, lookups));
-  return kept.sort(carerComparator(sort, usages, lookups));
+    && carerMatches(c, query, maps));
+  return kept.sort(carerComparator(sort, usages, maps));
 }
 
 /**
@@ -103,7 +110,9 @@ export function searchCarers(carers, query, options = {}, lookups = {}) {
  * @returns {boolean}
  */
 export function holidayMatches(holiday, query, lookups = {}) {
-  return holidayMatchesTokens(holiday, tokenise(query), lookups, lookup(lookups.carersById, holiday.carerId));
+  if (!holiday) return false;
+  const maps = lookups ?? {};
+  return holidayMatchesTokens(holiday, tokenise(query), maps, lookup(maps.carersById, holiday.carerId));
 }
 
 /**
@@ -122,22 +131,27 @@ export function holidayMatches(holiday, query, lookups = {}) {
  * @returns {object[]} a new array, filtered and sorted
  */
 export function searchHolidays(holidays, query, filters = {}, lookups = {}) {
-  const { carerIds, typeIds, statuses, start, end, teamId = null } = filters;
+  const { carerIds, typeIds, statuses, start, end, teamId = null } = filters ?? {};
+  const maps = lookups ?? {};
   const carerSet = toSet(carerIds);
   const typeSet = toSet(typeIds);
   const statusSet = toSet(statuses);
   const tokens = tokenise(query);
-  const carerOf = (h) => lookup(lookups.carersById, h.carerId);
+  const carerOf = (h) => lookup(maps.carersById, h.carerId);
 
   const kept = (holidays ?? []).filter((h) => {
+    if (!h) return false;
     if (carerSet && !carerSet.has(h.carerId)) return false;
     if (typeSet && !typeSet.has(h.typeId)) return false;
     if (statusSet && !statusSet.has(h.status)) return false;
-    if (start && h.end < start) return false;
-    if (end && h.start > end) return false;
+    const hStart = h.start ?? '';
+    const hEnd = h.end || hStart; // a one-day holiday may have no end recorded
+    if ((start || end) && !hStart) return false; // no dates → can't overlap a range
+    if (start && hEnd < start) return false;
+    if (end && hStart > end) return false;
     const carer = carerOf(h);
     if (teamId != null && !matchesTeam(carer ?? {}, teamId)) return false;
-    return holidayMatchesTokens(h, tokens, lookups, carer);
+    return holidayMatchesTokens(h, tokens, maps, carer);
   });
 
   return kept.sort((a, b) =>
@@ -207,10 +221,15 @@ function wordsOf(value) {
   return words;
 }
 
+/** Phone words: the text, its digits, and for '+44 (0)7700…' the plain '07700…' form too. */
 function phoneWords(phone) {
   const words = wordsOf(phone);
-  const digits = String(phone ?? '').replace(/\D/g, '');
+  const raw = String(phone ?? '');
+  const digits = raw.replace(/\D/g, '');
   if (digits) words.push(digits);
+  const national = raw.replace(/\(0\)/g, '').replace(/\D/g, '');
+  if (national && national !== digits) words.push(national);
+  if (national.startsWith('44') && national.length > 10) words.push('0' + national.slice(2));
   return words;
 }
 
@@ -239,14 +258,19 @@ function carerWords(carer, lookups) {
   ];
 }
 
+const HALF_DAY_WORDS = { am: ['half day', 'half', 'day', 'morning'], pm: ['half day', 'half', 'day', 'afternoon'] };
+
 function holidayWords(holiday, lookups, carer) {
   const type = lookup(lookups.leaveTypesById, holiday.typeId);
+  const team = lookup(lookups.teamsById, carer?.teamId);
   return [
     ...wordsOf(carer?.firstName),
     ...wordsOf(carer?.lastName),
     ...wordsOf(type?.name),
+    ...wordsOf(team?.name),
     ...wordsOf(holiday.notes),
     ...statusWords(holiday.status),
+    ...(HALF_DAY_WORDS[holiday.halfDay] ?? []),
   ];
 }
 
@@ -268,8 +292,10 @@ function nameMatches(carer, tokens) {
   const q = tokens.join(' ');
   const name = nameOf(carer);
   if (name.includes(q) || name.replace(/[^a-z0-9 ]+/g, '').includes(q)) return true;
-  if (tokens.length !== 1 || !/^[a-z]{2,4}$/.test(q)) return false;
-  return initialsFrom(name, /\s+/) === q || initialsFrom(name, /[\s-]+/) === q;
+  if (tokens.length !== 1) return false;
+  const letters = q.replace(/\./g, ''); // 'p.p.' asks for the same initials as 'pp'
+  if (!/^[a-z]{2,4}$/.test(letters)) return false;
+  return initialsFrom(name, /\s+/) === letters || initialsFrom(name, /[\s-]+/) === letters;
 }
 
 function nameOf(carer) {
@@ -323,7 +349,7 @@ function carerComparator(sort, usages, lookups) {
   const remaining = (c) => lookup(usages, c.id)?.remaining ?? null;
   switch (sort) {
     case 'first':
-      return (a, b) => compareStrings(normaliseText(a.firstName), normaliseText(b.firstName)) || compareCarerNames(a, b);
+      return (a, b) => compareValues(normaliseText(a.firstName) || null, normaliseText(b.firstName) || null) || compareCarerNames(a, b);
     case 'team':
       return (a, b) => compareValues(teamName(a), teamName(b)) || compareCarerNames(a, b);
     case 'role':
@@ -335,6 +361,23 @@ function carerComparator(sort, usages, lookups) {
     default:
       return compareCarerNames;
   }
+}
+
+// ---------- Folding helpers ----------
+
+// Letters NFD cannot split into a base letter and an accent, folded by hand so
+// 'soren' finds Søren, 'lukasz' finds Łukasz and 'strasse' finds Straße.
+const FOLD_LETTERS = { ø: 'o', æ: 'ae', œ: 'oe', ß: 'ss', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i', ĸ: 'k', ŧ: 't', ħ: 'h' };
+const FOLD_RE = /[øæœßłđðþıĸŧħ]/g;
+
+/** Fold one string: accents stripped, curly apostrophes straightened, lowercased, special letters mapped. */
+function foldText(str) {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019`]/g, "'")
+    .toLowerCase()
+    .replace(FOLD_RE, (ch) => FOLD_LETTERS[ch]);
 }
 
 // ---------- Highlight helpers ----------
@@ -349,7 +392,7 @@ function foldWithPositions(str) {
   const ends = [];
   let pos = 0;
   for (const ch of str) {
-    const f = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u2018\u2019`]/g, "'").toLowerCase();
+    const f = foldText(ch);
     if (!f && ends.length) ends[ends.length - 1] = pos + ch.length; // a lone combining mark stays with its base letter
     for (let i = 0; i < f.length; i++) {
       folded += f[i];

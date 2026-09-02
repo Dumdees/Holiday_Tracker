@@ -4,14 +4,18 @@
 import {
   formatRange, formatShort, eachDay, rangesOverlap, addDays, maxISO, minISO, compareISO, isValidISO, todayISO,
 } from './dates.js';
-import { leaveDaysBreakdown, describeWorkingPattern } from './leaveDays.js';
+import { leaveDaysBreakdown, describeWorkingPattern, isWorkingDay } from './leaveDays.js';
 import { usageForYear, formatDays } from './entitlement.js';
 import { splitRangeByYear, yearBounds } from './holidayYear.js';
 
 /** How far ahead existingProblems looks when no end date is given. */
 const DEFAULT_LOOKAHEAD_DAYS = 60;
 const SEVERITY_RANK = { block: 0, warn: 1 };
+/** Order of problems that start on the same day: the most serious first. */
+const KIND_RANK = { overlap: 0, staffing: 1, pairing: 2 };
 const UNKNOWN_CARER_MESSAGE = 'That carer no longer exists';
+const HALF_DAY_VALUES = new Set(['am', 'pm']);
+const HALF_DAY_WORDS = { am: 'morning', pm: 'afternoon' };
 
 // ---------- Small helpers ----------
 
@@ -69,12 +73,24 @@ function andMore(count) {
   return ` (and ${count} more ${count === 1 ? 'day' : 'days'})`;
 }
 
-/** Group sorted ISO dates into runs of consecutive days: [['d1','d2'], ['d5']]. */
-function contiguousRuns(dates) {
+/** Can `next` join a run ending on `prev`? Yes when every day in between can be skipped over. */
+function joins(prev, next, canBridge) {
+  for (let iso = addDays(prev, 1); iso < next; iso = addDays(iso, 1)) if (!canBridge(iso)) return false;
+  return true;
+}
+
+/**
+ * Group sorted ISO dates into runs: [['d1','d2'], ['d5']]. Days are consecutive, or
+ * separated only by days `canBridge` says don't matter (a weekend nobody works, say),
+ * so one long problem reads as one problem rather than one per working day.
+ * @param {string[]} dates – ascending
+ * @param {(iso: string) => boolean} [canBridge] – default: never bridge
+ */
+function contiguousRuns(dates, canBridge = () => false) {
   const runs = [];
   for (const date of dates) {
     const last = runs[runs.length - 1];
-    if (last && addDays(last[last.length - 1], 1) === date) last.push(date);
+    if (last && joins(last[last.length - 1], date, canBridge)) last.push(date);
     else runs.push([date]);
   }
   return runs;
@@ -108,6 +124,49 @@ function isLive(holiday, includePending, ignore) {
 
 function covers(holiday, iso) {
   return iso >= holiday.start && iso <= holiday.end;
+}
+
+/** A single day marked morning or afternoon? */
+function isHalfDay(holidayLike) {
+  return !!holidayLike && holidayLike.start === holidayLike.end && HALF_DAY_VALUES.has(holidayLike.halfDay);
+}
+
+/**
+ * Two holidays on the same dates that don't actually collide: the morning of a day
+ * and the afternoon of that same day.
+ */
+function complementaryHalves(a, b) {
+  return isHalfDay(a) && isHalfDay(b) && a.start === b.start && a.halfDay !== b.halfDay;
+}
+
+/** Do these two holidays share any time? Overlapping dates, unless one is the morning and the other the afternoon of one day. */
+function holidaysCollide(a, b) {
+  return rangesOverlap(a.start, a.end, b.start, b.end) && !complementaryHalves(a, b);
+}
+
+/** 'Mon 7 – Fri 11 Sep 2026', or 'Mon 7 Sep 2026 (morning)' for a half day. */
+function describeWhen(holiday) {
+  const range = formatRange(holiday.start, holiday.end);
+  return isHalfDay(holiday) ? `${range} (${HALF_DAY_WORDS[holiday.halfDay]})` : range;
+}
+
+/** Was the carer on the books that day? Archived carers, and days outside their start/end dates, don't count. */
+function employedOn(carer, iso) {
+  if (!carer || carer.active === false) return false;
+  if (carer.startDate && iso < carer.startDate) return false;
+  if (carer.endDate && iso > carer.endDate) return false;
+  return true;
+}
+
+/**
+ * Would this carer normally be at work on a day? Only when they were employed then and
+ * it is one of their working days (and not a bank holiday that counts as a day off).
+ * A holiday only takes someone away on days they would have worked, so staffing and
+ * pairing checks use this – weekends, bank holidays and leavers don't make a team look
+ * short-staffed.
+ */
+function wouldWork(carer, iso, ctx) {
+  return employedOn(carer, iso) && isWorkingDay(iso, carer, ctx);
 }
 
 // ---------- Who is off ----------
@@ -146,8 +205,8 @@ function overlapClashes(proposal, carer, db, ignore) {
   const out = [];
   for (const holiday of db.holidays || []) {
     if (holiday.carerId !== carer.id || !isLive(holiday, true, ignore)) continue;
-    if (!rangesOverlap(holiday.start, holiday.end, proposal.start, proposal.end)) continue;
-    out.push(makeClash('overlap', 'block', `${firstName(carer)} is already off ${formatRange(holiday.start, holiday.end)}`, {
+    if (!holidaysCollide(holiday, proposal)) continue;
+    out.push(makeClash('overlap', 'block', `${firstName(carer)} is already off ${describeWhen(holiday)}`, {
       dates: eachDay(maxISO(holiday.start, proposal.start), minISO(holiday.end, proposal.end)),
       relatedCarerIds: [carer.id],
       relatedHolidayIds: [holiday.id],
@@ -163,7 +222,8 @@ function staffingClashes(carer, countedDays, db, ctx, ignoreHolidayIds) {
   if (!team || !limit) return [];
   const over = [];
   for (const date of countedDays) {
-    const entries = offOnDay(date, db, ctx, { teamId: team.id, includePending: true, ignoreHolidayIds, excludeCarerId: carer.id });
+    const entries = offOnDay(date, db, ctx, { teamId: team.id, includePending: true, ignoreHolidayIds, excludeCarerId: carer.id })
+      .filter((entry) => wouldWork(entry.carer, date, ctx));
     const others = uniqueCarers(entries);
     const count = others.length + 1;
     if (count > limit) over.push({ date, count, others, holidayIds: entries.map((e) => e.holiday.id) });
@@ -188,13 +248,14 @@ function partnersOf(carer, db) {
 }
 
 /** A "must not be off with" partner is off on one of the proposal's working days. */
-function pairingClashes(carer, countedDays, db, ignore) {
+function pairingClashes(carer, countedDays, db, ctx, ignore) {
   const out = [];
   for (const partner of partnersOf(carer, db)) {
     const partnerHolidays = (db.holidays || []).filter((h) => h.carerId === partner.id && isLive(h, true, ignore));
     const dates = [];
     const holidayIds = [];
     for (const date of countedDays) {
+      if (!wouldWork(partner, date, ctx)) continue;
       const hits = partnerHolidays.filter((h) => covers(h, date));
       if (!hits.length) continue;
       dates.push(date);
@@ -235,9 +296,15 @@ function entitlementClashes(proposal, carer, db, ctx, ignore, today) {
   return out;
 }
 
-function noWorkingDaysClash(carer) {
+function noWorkingDaysClash(carer, breakdown) {
   const name = firstName(carer);
-  return makeClash('no-working-days', 'warn', `None of these dates are working days for ${name} (${name} works ${describeWorkingPattern(carer)})`, {
+  const bankHolidays = (breakdown?.skipped || []).filter((s) => s.reason === 'bank-holiday').map((s) => s.date);
+  const pattern = `${name} works ${describeWorkingPattern(carer)}`;
+  const why = bankHolidays.length === 0 ? pattern
+    : bankHolidays.length === 1 ? `${pattern}, and ${formatShort(bankHolidays[0])} is a bank holiday`
+    : `${pattern}, and ${bankHolidays.length} of them are bank holidays`;
+  return makeClash('no-working-days', 'warn', `None of these dates are working days for ${name} (${why})`, {
+    dates: bankHolidays,
     relatedCarerIds: [carer.id],
   });
 }
@@ -266,9 +333,11 @@ function inactiveClash(carer) {
 /**
  * Check a proposed holiday against everything already recorded (see docs/SPEC.md §3).
  * Blocking clashes come first, then warnings. Kinds:
- * - `overlap` (block): the same carer already has a non-declined holiday on these dates.
+ * - `overlap` (block): the same carer already has a non-declined holiday on these dates
+ *   (the morning and the afternoon of one day are allowed to sit side by side).
  * - `staffing` (warn): too many of the carer's team would be off on one of the working days
- *   (the message names the busiest day; `details` lists who else is off that day).
+ *   (the message names the busiest day; `details` lists who else is off that day). Only
+ *   people who would otherwise have worked that day – and are still on the books – count.
  * - `pairing` (warn): someone they must not be off with is off on one of the working days.
  * - `entitlement` (warn): a deducting leave type would take them below zero in a holiday year.
  * - `no-working-days` (warn): none of the dates are working days for them.
@@ -292,14 +361,15 @@ export function findClashes(proposed, db, ctx, { ignoreHolidayIds = [], today = 
   if (!proposal) return [];
 
   const ignore = new Set(ignoreHolidayIds);
-  const { days, countedDays } = leaveDaysBreakdown(proposal, carer, ctx);
+  const breakdown = leaveDaysBreakdown(proposal, carer, ctx);
+  const { days, countedDays } = breakdown;
   const out = overlapClashes(proposal, carer, db, ignore);
   if (proposal.status !== 'declined') {
     out.push(...staffingClashes(carer, countedDays, db, ctx, ignoreHolidayIds));
-    out.push(...pairingClashes(carer, countedDays, db, ignore));
+    out.push(...pairingClashes(carer, countedDays, db, ctx, ignore));
     out.push(...entitlementClashes(proposal, carer, db, ctx, ignore, today));
   }
-  if (days === 0) out.push(noWorkingDaysClash(carer));
+  if (days === 0) out.push(noWorkingDaysClash(carer, breakdown));
   out.push(...employmentClashes(proposal, carer));
   if (carer.active === false) out.push(inactiveClash(carer));
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
@@ -345,11 +415,15 @@ function liveEntries(db, ctx, from, to, includePending) {
   return out;
 }
 
-/** Map<iso, [{ carer, holiday }]> for every day in the window that has someone off. */
-function entriesByDay(entries, from, to) {
+/**
+ * Map<iso, [{ carer, holiday }]> for every day in the window on which someone is really
+ * away from work (see wouldWork) – the basis for staffing and pairing problems.
+ */
+function entriesByDay(entries, from, to, ctx) {
   const map = new Map();
   for (const entry of entries) {
     for (const date of eachDay(maxISO(entry.holiday.start, from), minISO(entry.holiday.end, to))) {
+      if (!wouldWork(entry.carer, date, ctx)) continue;
       if (!map.has(date)) map.set(date, []);
       map.get(date).push(entry);
     }
@@ -370,11 +444,11 @@ function overlapProblems(entries, from, to) {
     for (let i = 0; i < sorted.length; i++) {
       for (let j = i + 1; j < sorted.length; j++) {
         const a = sorted[i], b = sorted[j];
-        if (!rangesOverlap(a.start, a.end, b.start, b.end)) continue;
-        const shared = eachDay(maxISO(a.start, b.start, from), minISO(a.end, b.end, to));
+        if (!holidaysCollide(a, b)) continue;
+        const shared = eachDay(maxISO(maxISO(a.start, b.start), from), minISO(minISO(a.end, b.end), to));
         out.push({
           kind: 'overlap',
-          message: `${firstName(carer)} has two holidays that overlap: ${formatRange(a.start, a.end)} and ${formatRange(b.start, b.end)}`,
+          message: `${firstName(carer)} has two holidays that overlap: ${describeWhen(a)} and ${describeWhen(b)}`,
           dates: shared.length ? shared : [maxISO(a.start, b.start)],
           carerIds: [carer.id],
           holidayIds: [a.id, b.id],
@@ -397,7 +471,9 @@ function staffingProblems(db, ctx, days, perDay) {
       const carers = uniqueCarers(entries);
       if (carers.length > limit) info.set(date, { carers, holidayIds: entries.map((e) => e.holiday.id) });
     }
-    for (const run of contiguousRuns([...info.keys()])) {
+    const members = (db.carers || []).filter((c) => c.teamId === team.id);
+    const nobodyWorks = (date) => !members.some((c) => wouldWork(c, date, ctx));
+    for (const run of contiguousRuns([...info.keys()], nobodyWorks)) {
       const worst = busiestDay(run, (date) => info.get(date).carers.length);
       out.push({
         kind: 'staffing',
@@ -435,7 +511,8 @@ function pairingProblems(db, ctx, days, perDay) {
       const mine = entries.filter((e) => e.carer.id === a.id || e.carer.id === b.id);
       if (mine.some((e) => e.carer.id === a.id) && mine.some((e) => e.carer.id === b.id)) info.set(date, mine.map((e) => e.holiday.id));
     }
-    for (const run of contiguousRuns([...info.keys()])) {
+    const notBothWorking = (date) => !(wouldWork(a, date, ctx) && wouldWork(b, date, ctx));
+    for (const run of contiguousRuns([...info.keys()], notBothWorking)) {
       const when = run.length > 1 ? formatRange(run[0], run[run.length - 1]) : `on ${formatShort(run[0])}`;
       out.push({
         kind: 'pairing',
@@ -452,8 +529,10 @@ function pairingProblems(db, ctx, days, perDay) {
 /**
  * Problems already present in the data within a date range – for the Home screen.
  * Overlaps are reported once per pair of holidays, staffing once per team per run of
- * consecutive days over the limit, pairing once per pair of carers per run of days both
- * are off. Sorted by first date. The window defaults to the next 60 days from ctx.today.
+ * days over the limit, pairing once per pair of carers per run of days both are off. A
+ * run carries on over days that couldn't count anyway (a weekend nobody in the team
+ * works), so a fortnight's problem is one problem. Sorted by first date, then overlap,
+ * staffing, pairing. The window defaults to the next 60 days from ctx.today.
  * @param {{ carers: object[], holidays: object[], teams: object[] }} db
  * @param {{ settings: object, today?: string, carersById?: Map, teamsById?: Map }} ctx
  * @param {{ start?: string, end?: string, includePending?: boolean }} [options]
@@ -465,10 +544,10 @@ export function existingProblems(db, ctx, { start, end, includePending = true } 
   if (!isValidISO(from) || !isValidISO(to) || to < from) return [];
   const entries = liveEntries(db, ctx, from, to, includePending);
   const days = eachDay(from, to);
-  const perDay = entriesByDay(entries, from, to);
+  const perDay = entriesByDay(entries, from, to, ctx);
   return [
     ...overlapProblems(entries, from, to),
     ...staffingProblems(db, ctx, days, perDay),
     ...pairingProblems(db, ctx, days, perDay),
-  ].sort((a, b) => compareISO(a.dates[0] || '', b.dates[0] || ''));
+  ].sort((a, b) => compareISO(a.dates[0] || '', b.dates[0] || '') || KIND_RANK[a.kind] - KIND_RANK[b.kind]);
 }

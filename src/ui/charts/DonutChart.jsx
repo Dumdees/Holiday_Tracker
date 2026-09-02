@@ -32,8 +32,6 @@ export function DonutChart({ segments = [], size = 200, thickness = 26, centreLa
   const c = size / 2;
   const r = Math.max(10, (size - thickness) / 2 - 3); // 3px of air so the hovered segment can grow
   const circ = 2 * Math.PI * r;
-  const gap = items.filter((s) => s.value > 0).length > 1 ? GAP : 0;
-
   let acc = 0;
   const arcs = items.map((s, i) => {
     const len = total > 0 ? (s.value / total) * circ : 0;
@@ -41,6 +39,8 @@ export function DonutChart({ segments = [], size = 200, thickness = 26, centreLa
     acc += len;
     return arc;
   });
+  // Only segments big enough to be drawn get a gap between them; a lone segment stays a full ring.
+  const gap = arcs.filter((a) => a.len > GAP).length > 1 ? GAP : 0;
 
   const inner = 2 * r - thickness; // diameter of the hole
   const mainText = centreLabel != null ? String(centreLabel) : valueFormat(total);

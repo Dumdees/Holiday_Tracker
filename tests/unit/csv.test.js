@@ -235,3 +235,169 @@ test('parseCarersCsv round-trips our own export', () => {
   assert.deepEqual(errors, []);
   assert.deepEqual(carers, original);
 });
+
+test('parseCsvRows works out semicolon and tab delimiters from the first line', () => {
+  assert.deepEqual(parseCsvRows('First name;Last name\r\nPriya;Patel\r\n'), [['First name', 'Last name'], ['Priya', 'Patel']]);
+  assert.deepEqual(parseCsvRows('First name\tLast name\nPriya\tPatel'), [['First name', 'Last name'], ['Priya', 'Patel']]);
+  assert.deepEqual(parseCsvRows('"Name, in full";Team\n"Patel, Priya";Day'), [['Name, in full', 'Team'], ['Patel, Priya', 'Day']], 'commas inside quotes do not count');
+  assert.deepEqual(parseCsvRows('a,b;c\n1,2;3'), [['a', 'b;c'], ['1', '2;3']], 'commas win when the first line has any');
+  assert.deepEqual(parseCsvRows('a;b\n"x, y";z'), [['a', 'b'], ['x, y', 'z']]);
+  assert.deepEqual(parseCsvRows('sep=;\nFirst name;Last name\nPriya;Patel'), [['First name', 'Last name'], ['Priya', 'Patel']], "Excel's 'sep=' line");
+  assert.deepEqual(parseCsvRows(`${BOM}sep=,\r\na,b\r\n1,2\r\n`), [['a', 'b'], ['1', '2']]);
+  assert.deepEqual(parseCsvRows('a;b,c', ';'), [['a', 'b,c']], 'an explicit delimiter is respected');
+  assert.deepEqual(parseCsvRows('a;b,c', ','), [['a;b', 'c']]);
+  assert.deepEqual(parseCsvRows('Name\nPriya Patel'), [['Name'], ['Priya Patel']], 'a single column defaults to commas');
+  assert.deepEqual(parseCsv('First name;Last name;Notes\nPriya;Patel;"Likes ""tea""; biscuits"'), [{ 'First name': 'Priya', 'Last name': 'Patel', Notes: 'Likes "tea"; biscuits' }]);
+});
+
+test('parseCsvRows forgives spaces around quoted fields and keeps CRLF inside them', () => {
+  assert.deepEqual(parseCsvRows('a, "b,c" ,d'), [['a', 'b,c', 'd']]);
+  assert.deepEqual(parseCsvRows('"a"b,c'), [['ab', 'c']]);
+  assert.deepEqual(parseCsvRows('"x\r\ny",z\r\n'), [['x\r\ny', 'z']]);
+  assert.deepEqual(parseCsvRows('a,b\r\n1,2\r\n\r\n\r\n'), [['a', 'b'], ['1', '2'], [''], ['']], 'trailing blank lines are rows for parseCsvRows…');
+  assert.deepEqual(parseCsv('a,b\r\n1,2\r\n\r\n\r\n'), [{ a: '1', b: '2' }], '…and skipped by parseCsv');
+  assert.deepEqual(parseCsv(`${BOM}"a","b"\r\n"1","2"\r\n`), [{ a: '1', b: '2' }], 'BOM before a quoted header');
+  assert.deepEqual(parseCsvRows(undefined), []);
+});
+
+test('parseWorkingDays: more of the ways people write patterns', () => {
+  assert.deepEqual(parseWorkingDays('Mon, Tues, Weds, Thurs, Fri'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Weds'), [3]);
+  assert.deepEqual(parseWorkingDays('Sats & Suns'), [6, 7]);
+  assert.deepEqual(parseWorkingDays('Mon/Wed/Fri'), [1, 3, 5]);
+  assert.deepEqual(parseWorkingDays('Mon;Wed;Fri'), [1, 3, 5]);
+  assert.deepEqual(parseWorkingDays('Monday-Friday'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Mon - Fri'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Mon through Fri'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Full time'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('5 days a week'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Weekdays only'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Weekends only'), [6, 7]);
+  assert.deepEqual(parseWorkingDays('All week'), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(parseWorkingDays('7 days a week'), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(parseWorkingDays('M T W T F'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseWorkingDays('Mon Tue Wed Thu Fri Sat Sun'), [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(parseWorkingDays('Part time'), null, 'no way to know which days');
+  assert.equal(parseWorkingDays('3 days'), null);
+  assert.equal(parseWorkingDays(undefined), null);
+  assert.equal(parseWorkingDays(42), null);
+});
+
+test('parseCarersCsv reads a semicolon-delimited file from Excel', () => {
+  const db = createEmptyDb();
+  const text = `${BOM}First name;Last name;Team;Entitlement;Working days\r\nPriya;Patel;Day team;"25,5";Mon-Fri\r\nSam;Ahmed;Night team;28;"Mon, Wed"\r\n`;
+  const { carers, errors } = parseCarersCsv(text, db);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(carers.map((c) => [c.firstName, c.lastName, c.teamId, c.entitlementDays, c.workingDays]), [
+    ['Priya', 'Patel', 'team_day', 25.5, [1, 2, 3, 4, 5]],
+    ['Sam', 'Ahmed', 'team_night', 28, [1, 3]],
+  ]);
+  const tabbed = parseCarersCsv('Name\tTeam\nPriya Patel\tDay team', db);
+  assert.deepEqual(tabbed.carers.map((c) => [c.firstName, c.lastName, c.teamId]), [['Priya', 'Patel', 'team_day']]);
+});
+
+test('parseCarersCsv understands Excel-style dates and rejects ones that do not exist', () => {
+  const db = createEmptyDb();
+  const read = (value) => {
+    const { carers, errors } = parseCarersCsv(`Name,Start\nA B,${value}`, db);
+    return [carers[0].startDate, errors.map((e) => e.message)];
+  };
+  assert.deepEqual(read('01/05/2020'), ['2020-05-01', []], 'day first');
+  assert.deepEqual(read('1/5/20'), ['2020-05-01', []]);
+  assert.deepEqual(read('01.05.2020'), ['2020-05-01', []]);
+  assert.deepEqual(read('01-05-2020'), ['2020-05-01', []]);
+  assert.deepEqual(read('01/05/2020 00:00'), ['2020-05-01', []], 'a time of day from Excel is ignored, not read as US');
+  assert.deepEqual(read('01/05/2020 00:00:00'), ['2020-05-01', []]);
+  assert.deepEqual(read('"1 May 2020, 9:30am"'), ['2020-05-01', []]);
+  assert.deepEqual(read('2020-05-01T00:00:00.000Z'), ['2020-05-01', []]);
+  assert.deepEqual(read('2020-5-1'), ['2020-05-01', []]);
+  assert.deepEqual(read('2020/05/01'), ['2020-05-01', []]);
+  assert.deepEqual(read('1st May 2020'), ['2020-05-01', []]);
+  assert.deepEqual(read('22nd Aug 2019'), ['2019-08-22', []]);
+  assert.deepEqual(read('Monday 4 May 2020'), ['2020-05-04', []]);
+  assert.deepEqual(read('"Fri, 1 May 2020"'), ['2020-05-01', []]);
+  assert.deepEqual(read('"May 1, 2020"'), ['2020-05-01', []]);
+  assert.deepEqual(read('43952'), ['2020-05-01', []], 'an Excel serial number');
+  assert.deepEqual(read('36526'), ['2000-01-01', []]);
+  assert.equal(read('2026-02-31')[0], null, 'not 3 March');
+  assert.match(read('2026-02-31')[1][0], /2026-02-31/);
+  assert.equal(read('31/02/2026')[0], null);
+  assert.equal(read('1 May')[0], null, 'no year, no guess');
+  assert.equal(read('yesterday')[0], null);
+  assert.equal(read('99999')[0], null);
+  assert.equal(read('01/05/1850')[0], null);
+  const us = read('05/13/2020');
+  assert.equal(us[0], '2020-05-13', 'month/day/year is read when it is the only way it makes sense');
+  assert.equal(us[1].length, 1);
+  assert.match(us[1][0], /13\/05\/2020/);
+  assert.doesNotMatch(us[1][0], /US|ISO|undefined/i);
+});
+
+test('parseCarersCsv: entitlement in days or weeks, Name column variants, loose team names, statuses', () => {
+  const db = createEmptyDb();
+  const first = (text) => parseCarersCsv(text, db);
+  const ent = (value, extra = '') => first(`Name,Entitlement,Working days\nA B,${value},${extra}`);
+  assert.equal(ent('25.5').carers[0].entitlementDays, 25.5);
+  assert.equal(ent('"25,5"').carers[0].entitlementDays, 25.5);
+  assert.equal(ent('25 days').carers[0].entitlementDays, 25);
+  assert.equal(ent('28 Days').carers[0].entitlementDays, 28);
+  assert.equal(ent('28d').carers[0].entitlementDays, 28);
+  assert.equal(ent('28.').carers[0].entitlementDays, 28);
+  assert.equal(ent('28 days per year').carers[0].entitlementDays, 28);
+  assert.equal(ent('28 p.a.').carers[0].entitlementDays, 28);
+  assert.equal(ent('0').carers[0].entitlementDays, 0);
+  assert.equal(ent('5.6 weeks').carers[0].entitlementDays, 28, 'weeks × working days (Mon–Fri by default)');
+  assert.equal(ent('5.6 weeks', 'MWF').carers[0].entitlementDays, 16.8);
+  assert.equal(ent('4 wks', 'Sat & Sun').carers[0].entitlementDays, 8);
+  const tooMany = ent('500');
+  assert.equal(tooMany.carers[0].entitlementDays, db.settings.defaultEntitlementDays);
+  assert.equal(tooMany.errors.length, 1);
+  assert.ok(tooMany.errors[0].warning);
+  const words = ent('twenty');
+  assert.equal(words.carers[0].entitlementDays, db.settings.defaultEntitlementDays);
+  assert.match(words.errors[0].message, /twenty/);
+
+  const names = first('Name\n"Patel, Priya"\nPriya  Patel\n  Anne   Marie   Smith \nMadonna\n"Smith, "');
+  assert.deepEqual(names.carers.map((c) => [c.firstName, c.lastName]), [['Priya', 'Patel'], ['Priya', 'Patel'], ['Anne Marie', 'Smith'], ['Madonna', ''], ['Smith', '']]);
+  assert.equal(names.errors.length, 1, 'the second Priya Patel is flagged as a duplicate within the file');
+  assert.ok(names.errors[0].warning);
+  assert.equal(names.errors[0].row, 2);
+  assert.match(names.errors[0].message, /row 1/);
+  assert.match(names.errors[0].message, /Priya Patel/);
+
+  const teams = first('Name,Team\nA B,Day\nC D,NIGHT TEAM\nE F,day-team\nG H,Weekend');
+  assert.deepEqual(teams.carers.map((c) => c.teamId), ['team_day', 'team_night', 'team_day', null]);
+  assert.deepEqual(teams.errors.map((e) => [e.row, e.warning]), [[4, true]]);
+  assert.match(teams.errors[0].message, /Weekend/);
+
+  const status = (v) => first(`Name,Active\nA B,${v}`).carers[0].active;
+  assert.deepEqual(['N', 'no', 'No', 'left', 'Leaver', 'former', 'Not active', 'FALSE', '0'].map(status), [false, false, false, false, false, false, false, false, false]);
+  assert.deepEqual(['Y', 'yes', 'x', 'TRUE', '1', 'Active', 'current', ''].map(status), [true, true, true, true, true, true, true, true]);
+});
+
+test('parseCarersCsv: bracketed hints on headings, more heading names and a null db', () => {
+  const text = 'Full name,Start date (dd/mm/yyyy),Date left [optional],Tel no,Holiday allowance,Job title,Email address,Comments,Days worked\nPriya Patel,01/05/2020,,07700 900123,30,Senior Carer,priya@example.com,Hi,Mon-Wed';
+  const { carers, errors } = parseCarersCsv(text, null);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(carers[0], {
+    firstName: 'Priya', lastName: 'Patel', role: 'Senior carer', teamId: null, startDate: '2020-05-01', endDate: null,
+    workingDays: [1, 2, 3], entitlementDays: 30, phone: '07700 900123', email: 'priya@example.com', notes: 'Hi', active: true,
+  });
+  assert.deepEqual(parseCarersCsv(null), { carers: [], errors: [] });
+  assert.deepEqual(parseCarersCsv(undefined, undefined), { carers: [], errors: [] });
+  const swapped = parseCarersCsv('Name,Start,End\nA B,01/05/2020,01/01/2020');
+  assert.equal(swapped.carers[0].endDate, '2020-01-01', 'kept, but flagged');
+  assert.equal(swapped.errors.length, 1);
+  assert.ok(swapped.errors[0].warning);
+  assert.match(swapped.errors[0].message, /before the start date/);
+  for (const e of [...errors, ...swapped.errors]) assert.doesNotMatch(e.message, /undefined|null|NaN|\bid\b|database|schema/i);
+});
+
+test('exported cells never start with a character a spreadsheet would run as a formula', () => {
+  const csv = toCsv([{ notes: '=1+1' }, { notes: '+44 7700 900123' }, { notes: '-agreed with Jo' }, { notes: '@jo' }, { notes: 'plain' }], [{ key: 'notes', label: 'Notes' }]);
+  const cells = csv.split('\r\n').slice(1).filter(Boolean).map((l) => l.replace(/^"/, ''));
+  for (const c of cells) assert.ok(!/^[=+\-@]/.test(c), `cell must not start with a formula character: ${c}`);
+  const back = parseCsv(csv);
+  assert.equal(back[0].Notes.trim(), '=1+1', 'the original text survives a round trip once trimmed');
+  assert.equal(back[4].Notes, 'plain', 'ordinary text is untouched');
+});

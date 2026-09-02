@@ -1,7 +1,7 @@
 // A side panel that slides in from the right, e.g. "who's off on this day".
 import { useEffect, useId, useRef } from 'preact/hooks';
 import { IconButton } from './Button.jsx';
-import { focusFirst, trapTab } from './focus.js';
+import { focusFirst, trapTab, pushLayer, isTopLayer } from './focus.js';
 
 function DrawerFrame({ title, onClose, width, footer, children, class: cls }) {
   const ref = useRef(null);
@@ -10,17 +10,22 @@ function DrawerFrame({ title, onClose, width, footer, children, class: cls }) {
   onCloseRef.current = onClose;
 
   useEffect(() => {
+    const el = ref.current;
     const previous = document.activeElement;
-    focusFirst(ref.current);
+    const release = pushLayer(el);
+    focusFirst(el);
     const onKey = (e) => {
+      // A dialog opened from inside the drawer owns the keyboard until it closes.
+      if (!isTopLayer(el)) return;
       if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current?.(); return; }
-      trapTab(e, ref.current);
+      trapTab(e, el);
     };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
+      release();
       document.body.style.overflow = prevOverflow;
       if (previous && typeof previous.focus === 'function' && document.contains(previous)) previous.focus();
     };
@@ -42,7 +47,8 @@ function DrawerFrame({ title, onClose, width, footer, children, class: cls }) {
 
 /**
  * Drawer – slides in from the right with a backdrop. Escape and the backdrop close it, focus moves
- * inside (and back when it closes) and the page behind stops scrolling.
+ * inside (and back when it closes) and the page behind stops scrolling. A dialog opened from
+ * inside the drawer takes over Escape and Tab until it closes.
  * @param {object} props
  * @param {boolean} props.open
  * @param {any} [props.title]

@@ -416,3 +416,103 @@ describe('formatDays', () => {
     assert.equal(formatDays('3.5'), '3.5');
   });
 });
+
+describe('entitlementForYear – year shapes', () => {
+  test('a leap year is 366 days long, so a 1 October starter gets exactly half', () => {
+    // 2027/28 runs 1 Apr 2027 .. 31 Mar 2028 and contains 29 Feb 2028.
+    const yb2027 = yearBounds(2027, settings);
+    assert.equal(yb2027.end, '2028-03-31');
+    const e = entitlementForYear(carer({ startDate: '2027-10-01' }), yb2027, settings);
+    assert.equal(e.proRataFraction, 0.5); // 183 / 366
+    assert.equal(e.proRated, 14);
+  });
+  test('a January-start year is labelled with one year and pro-rates over 365 days', () => {
+    const jan = { ...settings, holidayYearStart: { month: 1, day: 1 } };
+    const yb = yearBounds(2026, jan);
+    assert.deepEqual([yb.label, yb.start, yb.end], ['2026', '2026-01-01', '2026-12-31']);
+    const e = entitlementForYear(carer({ startDate: '2026-07-01' }), yb, jan);
+    assert.ok(Math.abs(e.proRataFraction - 184 / 365) < 1e-9);
+    assert.equal(e.proRated, 14); // 28 × 0.504 = 14.1 → 14
+  });
+  test('a leaver on the last day of the year keeps the full amount', () => {
+    assert.equal(entitlementForYear(carer({ endDate: '2027-03-31' }), yb2026, settings).proRataFraction, 1);
+  });
+  test('a starter on the last day of the year gets one day’s worth, rounded', () => {
+    const e = entitlementForYear(carer({ startDate: '2027-03-31' }), yb2026, settings);
+    assert.ok(Math.abs(e.proRataFraction - 1 / 365) < 1e-9);
+    assert.equal(e.proRated, 0);
+  });
+  test('adjustments with float noise still add up cleanly', () => {
+    const c = carer({ adjustments: [{ id: 'a', yearKey: '2026', days: 0.1 }, { id: 'b', yearKey: '2026', days: 0.2 }] });
+    const e = entitlementForYear(c, yb2026, settings);
+    assert.equal(e.adjustmentTotal, 0.3);
+    assert.equal(e.total, 28.3);
+  });
+  test('adjustments with unusable days or no year key are ignored', () => {
+    const c = carer({ adjustments: [{ id: 'a', yearKey: '2026', days: 'lots' }, { id: 'b', days: 4 }, { id: 'c', yearKey: '2026', days: '1.5' }] });
+    const e = entitlementForYear(c, yb2026, settings);
+    assert.equal(e.adjustmentTotal, 1.5);
+    assert.equal(e.total, 29.5);
+  });
+  test('a null carer or empty entitlement does not throw', () => {
+    assert.equal(entitlementForYear(null, yb2026, settings).total, 0);
+    assert.equal(entitlementForYear(carer({ entitlementDays: '' }), yb2026, settings).total, 0);
+    assert.equal(entitlementForYear(carer({ entitlementDays: '25' }), yb2026, settings).total, 25);
+  });
+});
+
+describe('usageForYear – edge cases', () => {
+  test('a holiday entirely outside the year is not listed', () => {
+    const list = [holiday({ start: '2027-04-05', end: '2027-04-09' }), holiday({ start: '2026-03-23', end: '2026-03-27' })];
+    const u = usageForYear(carer(), yb2026, list, ctx, TODAY);
+    assert.equal(u.items.length, 0);
+    assert.equal(u.remaining, 28);
+  });
+  test('viewed from before the year starts, everything approved is booked; from after, all taken', () => {
+    const list = [holiday({ start: '2026-08-03', end: '2026-08-07' })];
+    assert.deepEqual([usageForYear(carer(), yb2026, list, ctx, '2026-03-01').taken, usageForYear(carer(), yb2026, list, ctx, '2026-03-01').booked], [0, 5]);
+    assert.deepEqual([usageForYear(carer(), yb2026, list, ctx, '2027-06-01').taken, usageForYear(carer(), yb2026, list, ctx, '2027-06-01').booked], [5, 0]);
+  });
+  test('a holiday spanning today is split even when today is inside a bank holiday week', () => {
+    const list = [holiday({ start: '2026-05-04', end: '2026-05-08' })]; // Mon 4 May is a bank holiday
+    const u = usageForYear(carer(), yb2026, list, ctx, '2026-05-06'); // Wednesday
+    assert.equal(u.taken, 2); // Tue, Wed
+    assert.equal(u.booked, 2); // Thu, Fri
+  });
+  test('a holiday over the year boundary that spans today is split by year and by today', () => {
+    const list = [holiday({ start: '2026-03-30', end: '2026-04-03' })];
+    const prev = usageForYear(carer(), yb2025, list, ctx, '2026-04-01');
+    const next = usageForYear(carer(), yb2026, list, ctx, '2026-04-01');
+    assert.deepEqual([prev.taken, prev.booked, next.taken, next.booked], [2, 0, 1, 2]);
+  });
+  test('remaining is always total minus taken minus booked, to two decimals', () => {
+    const c = carer({ startDate: '2026-08-01', adjustments: [{ id: 'a', yearKey: '2026', days: 0.7 }] });
+    const list = [
+      holiday({ start: '2026-08-03', end: '2026-08-03', halfDay: 'am' }),
+      holiday({ start: '2026-09-07', end: '2026-09-08' }),
+      holiday({ start: '2026-10-05', end: '2026-10-05', halfDay: 'pm', status: 'pending' }),
+    ];
+    const u = usageForYear(c, yb2026, list, ctx, TODAY);
+    assert.equal(u.entitlement.total, 19.2);
+    assert.equal(u.remaining, Math.round((u.entitlement.total - u.taken - u.booked) * 100) / 100);
+    assert.equal(u.remainingAfterPending, 16.2);
+  });
+  test('holidays with no carer id never attach to a carer without one', () => {
+    const list = [{ id: 'h', start: '2026-05-11', end: '2026-05-15', typeId: 'lt_annual', status: 'approved' }];
+    const u = usageForYear({ entitlementDays: 10, workingDays: [1, 2, 3, 4, 5] }, yb2026, list, ctx, TODAY);
+    assert.equal(u.items.length, 0);
+    assert.equal(u.remaining, 10);
+  });
+  test('an unknown status counts towards byType but never towards entitlement', () => {
+    const list = [holiday({ start: '2026-05-11', end: '2026-05-15', status: 'cancelled' })];
+    const u = usageForYear(carer(), yb2026, list, ctx, TODAY);
+    assert.deepEqual([u.taken, u.booked, u.pending, u.remaining], [0, 0, 0, 28]);
+    assert.equal(u.byTypeStatus.get('lt_annual:cancelled'), 5);
+  });
+  test('a long multi-year holiday is only counted within the year, never past the cap', () => {
+    const list = [holiday({ start: '2026-01-05', end: '2027-12-31' })];
+    const u = usageForYear(carer(), yb2026, list, ctxFor({ bankHolidaysAreDaysOff: false }), '2026-04-01');
+    assert.equal(u.taken + u.booked, 261); // Mon–Fri days in 1 Apr 2026 .. 31 Mar 2027
+    assert.equal(u.taken, 1);
+  });
+});

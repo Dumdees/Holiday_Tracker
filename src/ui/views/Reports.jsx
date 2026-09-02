@@ -134,7 +134,7 @@ export function Reports({ params }) {
             </Card>
           </div>
 
-          <Card title="When people are off" icon="grid" subtitle="Darker days have more people off. Click a day to open it on the calendar." class="mb">
+          <Card title="When people are off" icon="grid" subtitle={<>Darker days have more people off.<span class="no-print"> Click a day to open it on the calendar.</span></>} class="mb">
             <Heatmap start={yb.start} end={yb.end} values={capacity} weekStartsOn={s.weekStartsOn || 1} dimDays={dimDays} onDayClick={(iso) => navigate('calendar', { month: iso.slice(0, 7), day: iso, team: teamId })} tooltip={(iso, v) => `${formatShort(iso)}: ${v ? `${v} off` : 'nobody off'}`} />
           </Card>
 
@@ -158,7 +158,7 @@ export function Reports({ params }) {
             </Card>
           ) : null}
 
-          <Card title="Everyone in detail" icon="list" subtitle="Sorted by days left – click a name to open their profile." padded={false}>
+          <Card title="Everyone in detail" icon="list" subtitle={<>Sorted by days left<span class="no-print"> – click a name to open their profile</span>.</>} padded={false}>
             <Table columns={leagueColumns} rows={league} rowKey={(r) => r.carer.id} sort={{ key: 'remaining', dir: 'desc' }} onRowClick={(r) => navigate('carers', { id: r.carer.id })} ariaLabel="Usage by carer" />
           </Card>
         </>

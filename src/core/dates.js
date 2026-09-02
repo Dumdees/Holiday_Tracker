@@ -196,14 +196,15 @@ export function formatMonthYear(isoOrKey) {
   return `${MONTHS[m - 1]} ${y}`;
 }
 
-/** 'Mon 3 – Fri 7 Mar 2026', '28 Mar – 2 Apr 2026', '30 Dec 2025 – 2 Jan 2026', or a single day. */
+/** 'Mon 3 – Fri 7 Mar 2026', 'Sat 28 Mar – Thu 2 Apr 2026', 'Tue 30 Dec 2025 – Fri 2 Jan 2026', or a single day. */
 export function formatRange(start, end) {
   if (!start) return '';
   if (!end || end === start) return formatShort(start);
   const a = parts(start), b = parts(end);
-  if (a.y !== b.y) return `${formatDay(start, { year: true })} – ${formatDay(end, { year: true })}`;
-  if (a.m !== b.m) return `${formatDay(start)} – ${formatDay(end)} ${a.y}`;
-  return `${WEEKDAYS_SHORT[isoWeekday(start) - 1]} ${a.d} – ${WEEKDAYS_SHORT[isoWeekday(end) - 1]} ${b.d} ${MONTHS_SHORT[a.m - 1]} ${a.y}`;
+  const wa = WEEKDAYS_SHORT[isoWeekday(start) - 1], wb = WEEKDAYS_SHORT[isoWeekday(end) - 1];
+  if (a.y !== b.y) return `${wa} ${formatDay(start, { year: true })} – ${wb} ${formatDay(end, { year: true })}`;
+  if (a.m !== b.m) return `${wa} ${formatDay(start)} – ${wb} ${formatDay(end)} ${a.y}`;
+  return `${wa} ${a.d} – ${wb} ${b.d} ${MONTHS_SHORT[a.m - 1]} ${a.y}`;
 }
 
 /** 'Today', 'Tomorrow', 'in 3 days', '2 weeks ago' … relative to `today`. */

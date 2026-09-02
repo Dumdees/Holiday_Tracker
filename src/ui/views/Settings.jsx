@@ -178,7 +178,7 @@ function TeamForm({ team, close }) {
         <ColourPicker value={colour} onChange={setColour} />
       </Field>
       <Field label="How many can be off at once?" hint="Leave empty to use the general rule from Staffing rules. Enter 0 for no limit.">
-        <NumberField value={limit} onChange={setLimit} min={0} max={99} placeholder="General rule" suffix="people" />
+        <NumberField value={limit} onChange={setLimit} min={0} max={99} placeholder="General rule" />
       </Field>
       <div class="modal-actions">
         <Button variant="ghost" onClick={() => close(false)}>Cancel</Button>
@@ -354,7 +354,7 @@ function RulesTab() {
     <div class="stack">
       <Card title="Cover" icon="shield" subtitle="We warn you before too many people from the same team are off together.">
         <Field label="How many people from one team can be off on the same day?" hint="Enter 0 for no limit. You can set a different number for each team under Teams.">
-          <NumberField value={s.defaultMaxOffPerDay} onChange={(v) => save({ defaultMaxOffPerDay: Math.max(0, Number(v) || 0) })} min={0} max={99} suffix="people" />
+          <NumberField value={s.defaultMaxOffPerDay} onChange={(v) => save({ defaultMaxOffPerDay: Math.max(0, Number(v) || 0) })} min={0} max={99} />
         </Field>
       </Card>
       <Card title="Entitlement" icon="sun">
@@ -376,8 +376,8 @@ function RulesTab() {
           <Field label="Warn about unused holiday when a carer still has at least">
             <NumberField value={s.unusedLeaveWarningDays} onChange={(v) => save({ unusedLeaveWarningDays: Math.max(0, Number(v) || 0) })} min={0} max={100} step={0.5} suffix="days" />
           </Field>
-          <Field label="…in the last">
-            <NumberField value={s.unusedLeaveWarningWeeks} onChange={(v) => save({ unusedLeaveWarningWeeks: Math.max(1, Number(v) || 1) })} min={1} max={52} suffix="weeks of the year" />
+          <Field label="…with this many weeks of the holiday year left">
+            <NumberField value={s.unusedLeaveWarningWeeks} onChange={(v) => save({ unusedLeaveWarningWeeks: Math.max(1, Number(v) || 1) })} min={1} max={52} />
           </Field>
         </div>
       </Card>

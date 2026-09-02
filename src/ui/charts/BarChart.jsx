@@ -206,11 +206,11 @@ function horizontalLayout({ data, series, totals, width, rowHeight, barGap, stac
  * @param {(n: number) => string} [props.valueFormat=fmtDays]
  * @param {boolean} [props.showValues=false] – print each bar's total at its tip
  * @param {boolean} [props.showLegend=true] – the legend appears when there are two or more series
- * @param {number} [props.maxValue] – force the top of the value axis
+ * @param {number} [props.maxValue] – top of the value axis (raised further if the data goes beyond it)
  * @param {(item: object, index: number) => void} [props.onBarClick] – makes bars clickable and keyboard focusable
  * @param {string} [props.emptyText='Nothing to show yet']
  * @param {string} [props.ariaLabel] – summary for screen readers (generated from the data if omitted)
- * @param {{ value: number, label?: string }} [props.referenceLine] – a dashed marker line, e.g. the entitlement
+ * @param {{ value: number, label?: string }} [props.referenceLine] – a dashed marker line, e.g. the entitlement (ignored when negative)
  * @param {number|null} [props.highlightIndex] – draw attention to one bar and soften the rest
  * @param {string} [props.class]
  */
@@ -221,13 +221,15 @@ export function BarChart({ series = [], data = [], stacked = true, horizontal = 
 
   const keys = series.map((s) => s.key);
   const totals = data.map((d) => (stacked ? sum(keys.map((k) => val(d, k))) : Math.max(0, ...keys.map((k) => val(d, k)))));
-  const refVal = referenceLine && Number.isFinite(Number(referenceLine.value)) ? Number(referenceLine.value) : null;
+  // A reference line only makes sense at or above zero; anything else would be drawn off the chart.
+  const refVal = referenceLine && Number.isFinite(Number(referenceLine.value)) && Number(referenceLine.value) >= 0 ? Number(referenceLine.value) : null;
   const empty = !series.length || !data.length || (refVal == null && !totals.some((t) => t > 0));
   if (empty) {
     return <div class={`chart chart-bar ${cls}`.trim()}><ChartEmpty text={emptyText} minHeight={Math.min(height, 200)} /></div>;
   }
 
-  const rawMax = Number(maxValue) > 0 ? Number(maxValue) : Math.max(...totals, refVal ?? 0);
+  // maxValue lifts the top of the axis but never lowers it below the data, so bars cannot run off the edge.
+  const rawMax = Math.max(Number(maxValue) > 0 ? Number(maxValue) : 0, ...totals, refVal ?? 0);
   const args = { data, series, totals, width, height, rowHeight, barGap, stacked, valueFormat, showValues, rawMax, referenceLine, refVal };
   const L = horizontal ? horizontalLayout(args) : verticalLayout(args);
 
@@ -253,12 +255,6 @@ export function BarChart({ series = [], data = [], stacked = true, horizontal = 
           <text key={`t${j}`} class="chart-axis-text" x={px(t.label.x)} y={px(t.label.y)} text-anchor={t.label.anchor}>{t.text}</text>
         ))}
         <line class="chart-axis" x1={px(L.axis.x1)} y1={px(L.axis.y1)} x2={px(L.axis.x2)} y2={px(L.axis.y2)} />
-        {L.cats.map((c, j) => (
-          <text key={`c${j}`} class="chart-cat-text" x={px(c.x)} y={px(c.y)} text-anchor={c.anchor} transform={c.rotate ? `rotate(${c.rotate} ${px(c.x)} ${px(c.y)})` : undefined}>
-            {c.full !== c.text ? <title>{c.full}</title> : null}
-            {c.text}
-          </text>
-        ))}
         {L.bars.map((b) => {
           const item = data[b.i];
           const muted = highlightIndex != null && highlightIndex !== b.i;
@@ -284,6 +280,13 @@ export function BarChart({ series = [], data = [], stacked = true, horizontal = 
             </g>
           );
         })}
+        {/* Category labels sit above the bars' hover highlight so a row never hides its own name. */}
+        {L.cats.map((c, j) => (
+          <text key={`c${j}`} class="chart-cat-text" x={px(c.x)} y={px(c.y)} text-anchor={c.anchor} transform={c.rotate ? `rotate(${c.rotate} ${px(c.x)} ${px(c.y)})` : undefined}>
+            {c.full !== c.text ? <title>{c.full}</title> : null}
+            {c.text}
+          </text>
+        ))}
         {L.ref ? (
           <g class="chart-ref-group" aria-hidden="true">
             <line class="chart-ref" x1={px(L.ref.line.x1)} y1={px(L.ref.line.y1)} x2={px(L.ref.line.x2)} y2={px(L.ref.line.y2)} />

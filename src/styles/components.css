@@ -46,6 +46,10 @@
 .btn-link:hover:not(:disabled) { text-decoration: underline; background: var(--peach-50); }
 .btn-link:focus-visible { border-radius: 8px; }
 
+/* Small and link buttons keep their compact look but still catch a 44px-tall tap. */
+.btn-sm::before, .btn-link::before, .icon-btn-sm::before, .chip-remove::before, .toast-action::before, .toast-close::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: var(--tap); transform: translateY(-50%); }
+/* The chip's × only grows to its chip's own edges: chips sit side by side, so a taller hit area would steal taps. */
+.chip-remove::before { left: -2px; right: -2px; top: -4px; bottom: -4px; height: auto; transform: none; }
 .btn-sm { min-height: 36px; padding: 0 12px; font-size: 14px; border-radius: 10px; gap: 6px; }
 .btn-sm svg { width: 18px; height: 18px; }
 .btn-sm:focus-visible { border-radius: 10px; }
@@ -67,7 +71,7 @@
 @keyframes btn-spin { to { transform: rotate(360deg); } }
 
 .icon-btn {
-  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; position: relative;
   width: var(--tap); height: var(--tap); padding: 0;
   border: 1.5px solid transparent; border-radius: 12px;
   background: transparent; color: var(--ink-soft);
@@ -128,6 +132,10 @@
 .card-plum { background: var(--plum-soft); border-color: rgba(149, 118, 184, .35); }
 .card-plum .card-icon { background: rgba(255, 255, 255, .7); color: var(--plum-ink); }
 .card-sage .card-foot, .card-sky .card-foot, .card-amber .card-foot, .card-rose .card-foot, .card-plum .card-foot { background: rgba(255, 255, 255, .5); }
+/* Grey text loses contrast on a tinted background, so it steps up a shade there. */
+.card-peach .card-subtitle, .card-sage .card-subtitle, .card-sky .card-subtitle, .card-amber .card-subtitle, .card-rose .card-subtitle, .card-plum .card-subtitle,
+.card-peach .muted, .card-sage .muted, .card-sky .muted, .card-amber .muted, .card-rose .muted, .card-plum .muted,
+.card-foot .muted, .drawer-foot .muted { color: var(--ink-soft); }
 .card-section { padding: 16px 22px; border-top: 1px solid var(--line); }
 .card-section-title { font-size: 12.5px; font-weight: 700; color: var(--ink-muted); letter-spacing: .05em; text-transform: uppercase; margin: 0 0 10px; }
 
@@ -136,12 +144,13 @@
    ============================================================ */
 .page-head-text { min-width: 0; flex: 1 1 320px; }
 .page-back {
-  display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 10px 0 6px;
-  margin: 0 0 6px -8px; border: 0; border-radius: 10px; background: transparent;
+  display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap); padding: 0 10px 0 6px;
+  margin: -6px 0 2px -8px; border: 0; border-radius: 10px; background: transparent;
   color: var(--ink-soft); font-weight: 600; font-size: 14px;
 }
 .page-back svg { width: 18px; height: 18px; }
 .page-back:hover { background: var(--peach-100); color: var(--ink); }
+.page-back:focus-visible { border-radius: 10px; }
 
 /* ============================================================
    4. Forms – fields, inputs and pickers
@@ -150,7 +159,7 @@
 .field-label { font-weight: 600; font-size: 14.5px; color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
 .field-required { color: var(--peach-600); font-weight: 700; }
 .field-control { min-width: 0; }
-.field-hint { margin: 0; font-size: 13px; color: var(--ink-muted); line-height: 1.4; }
+.field-hint { margin: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.4; }
 .field-error { margin: 0; font-size: 13px; color: var(--rose-ink); font-weight: 600; line-height: 1.4; display: flex; align-items: flex-start; gap: 6px; }
 .field-error svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 2px; }
 .field-inline { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); column-gap: 14px; row-gap: 4px; align-items: center; }
@@ -182,10 +191,12 @@ textarea.input { height: auto; min-height: 96px; padding: 10px 14px; line-height
 
 /* Number field: [-] [ 28 days ] [+] */
 .number-field { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
-.number-field-input { position: relative; width: 132px; }
+/* --suffix-w is measured by NumberField so a long suffix ("days a year") never sits over the number */
+.number-field-input { position: relative; width: 132px; --suffix-w: 38px; }
 .number-field-input .input { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
-.number-field-input.has-suffix .input { padding-right: 52px; text-align: right; }
-.number-suffix { position: absolute; right: 14px; top: 0; height: 100%; display: flex; align-items: center; color: var(--ink-muted); font-size: 13.5px; pointer-events: none; }
+.number-field-input.has-suffix { width: max(132px, calc(var(--suffix-w) + 96px)); }
+.number-field-input.has-suffix .input { padding-right: calc(var(--suffix-w) + 22px); text-align: right; }
+.number-suffix { position: absolute; right: 14px; top: 0; height: 100%; display: flex; align-items: center; color: var(--ink-muted); font-size: 13.5px; pointer-events: none; white-space: nowrap; }
 .number-btn {
   width: var(--tap); height: var(--tap); border-radius: 50%; flex: 0 0 auto;
   border: 1.5px solid var(--line-strong); background: var(--paper); color: var(--ink);
@@ -230,7 +241,7 @@ textarea.input { height: auto; min-height: 96px; padding: 10px 14px; line-height
 .toggle.is-disabled { cursor: not-allowed; }
 .toggle-text { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; min-width: 0; }
 .toggle-label { font-weight: 600; font-size: 15px; line-height: 1.3; }
-.toggle-desc { font-size: 13.5px; color: var(--ink-muted); line-height: 1.4; }
+.toggle-desc { font-size: 13.5px; color: var(--ink-soft); line-height: 1.4; }
 
 /* Checkbox */
 .checkbox { display: inline-flex; align-items: center; gap: 10px; min-height: var(--tap); cursor: pointer; position: relative; padding: 4px 0; }
@@ -272,7 +283,7 @@ textarea.input { height: auto; min-height: 96px; padding: 10px 14px; line-height
 .radio-card-icon svg { width: 20px; height: 20px; }
 .radio-card-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .radio-card-label { font-weight: 600; font-size: 15px; line-height: 1.3; }
-.radio-card-desc { font-size: 13px; color: var(--ink-muted); line-height: 1.35; }
+.radio-card-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.35; }
 .radio-card-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: 0 0 auto; display: grid; place-items: center; color: #fff; }
 .radio-card-check svg { width: 14px; height: 14px; opacity: 0; }
 .radio-card.is-selected .radio-card-check { background: var(--peach-500); border-color: var(--peach-500); }
@@ -344,13 +355,13 @@ textarea.input { height: auto; min-height: 96px; padding: 10px 14px; line-height
 .ms-tools .btn-link { min-height: 32px; font-size: 13.5px; }
 .ms-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px 6px 8px; }
 .ms-group-head {
-  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 10px;
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 4px 10px;
   border-radius: 10px; background: var(--paper); cursor: pointer; font-weight: 700; font-size: 13px; color: var(--ink-soft);
 }
 .ms-group-head:hover { background: var(--peach-50); }
 .ms-group-count { color: var(--ink-muted); font-weight: 500; }
 .ms-row {
-  position: relative; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 10px;
+  position: relative; display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 4px 10px;
   border-radius: 10px; cursor: pointer; transition: background .12s;
 }
 .ms-row:hover { background: var(--peach-50); }
@@ -370,6 +381,7 @@ textarea.input { height: auto; min-height: 96px; padding: 10px 14px; line-height
 .ms-label { font-size: 14.5px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms-sub { font-size: 12.5px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms-row.is-selected .ms-label { font-weight: 600; color: var(--peach-800); }
+.ms-row.is-selected .ms-sub { color: var(--ink-soft); }
 .ms-empty { padding: 22px 16px; text-align: center; color: var(--ink-muted); font-size: 14px; }
 
 /* ============================================================
@@ -410,7 +422,7 @@ textarea.input { height: auto; min-height: 96px; padding: 10px 14px; line-height
 .chip-clickable:hover { background: var(--peach-200); }
 .chip:focus-visible { box-shadow: var(--focus); border-radius: 999px; }
 .chip-remove {
-  width: 24px; height: 24px; margin: 0 -6px 0 -2px; padding: 0; border: 0; border-radius: 50%; flex: 0 0 auto;
+  width: 24px; height: 24px; margin: 0 -6px 0 -2px; padding: 0; border: 0; border-radius: 50%; flex: 0 0 auto; position: relative;
   background: transparent; color: var(--ink-soft); display: inline-flex; align-items: center; justify-content: center;
 }
 .chip-remove svg { width: 14px; height: 14px; }
@@ -539,6 +551,10 @@ th[aria-sort="ascending"] .th-sort svg, th[aria-sort="descending"] .th-sort svg 
 .table .table-empty { padding: 0; }
 .table-empty::before { content: none !important; }
 .table-cell-actions { display: inline-flex; gap: 4px; align-items: center; }
+/* On phones the header row is hidden, so select-all and sorting live in this bar instead */
+.table-mobile-bar { display: none; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 8px 14px 10px; }
+.table-mobile-bar .table-sort { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; margin-left: auto; font-size: 13.5px; color: var(--ink-soft); font-weight: 600; }
+.table-mobile-bar .table-sort .select-wrap { flex: 1 1 160px; min-width: 0; }
 
 /* ============================================================
    12. Drawer (slides in from the right)
@@ -616,7 +632,7 @@ th[aria-sort="ascending"] .th-sort svg, th[aria-sort="descending"] .th-sort svg 
   position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(calc(-50% + var(--shift, 0px)));
   width: max-content; max-width: min(280px, calc(100vw - 32px)); padding: 10px 12px; z-index: 40;
   background: var(--ink); color: #fff; font-size: 13.5px; font-weight: 500; line-height: 1.45; text-align: left; white-space: normal;
-  border-radius: 10px; box-shadow: var(--shadow-lg); animation: pop-in .12s ease-out;
+  border-radius: 10px; box-shadow: var(--shadow-lg); animation: fade-in .12s ease-out; /* opacity only: a transform animation would override the centring */
 }
 .helptip-pop::after {
   content: ""; position: absolute; top: 100%; left: calc(50% - var(--shift, 0px)); margin-left: -6px;
@@ -650,10 +666,10 @@ th[aria-sort="ascending"] .th-sort svg, th[aria-sort="descending"] .th-sort svg 
 .toast-info > svg { color: #A9CCEC; }
 .toast-warning > svg { color: #F5C776; }
 .toast-msg { flex: 1 1 auto; min-width: 0; font-size: 14.5px; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; }
-.toast-action { flex: 0 0 auto; min-height: 34px; padding: 0 12px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .14); color: #fff; font-weight: 650; font-size: 14px; }
+.toast-action { flex: 0 0 auto; position: relative; min-height: 34px; padding: 0 12px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .14); color: #fff; font-weight: 650; font-size: 14px; }
 .toast-action:hover { background: rgba(255, 255, 255, .24); }
 .toast-action:focus-visible { box-shadow: 0 0 0 3px rgba(255, 255, 255, .5); border-radius: 9px; }
-.toast-close { flex: 0 0 auto; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: rgba(255, 255, 255, .7); display: inline-flex; align-items: center; justify-content: center; }
+.toast-close { flex: 0 0 auto; position: relative; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: rgba(255, 255, 255, .7); display: inline-flex; align-items: center; justify-content: center; }
 .toast-close:hover { background: rgba(255, 255, 255, .14); color: #fff; }
 .toast-close:focus-visible { box-shadow: 0 0 0 3px rgba(255, 255, 255, .5); border-radius: 9px; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -709,6 +725,7 @@ th[aria-sort="ascending"] .th-sort svg, th[aria-sort="descending"] .th-sort svg 
   .radio-cards { grid-template-columns: 1fr; }
   .date-field .input { max-width: none; }
   .number-field-input { width: 120px; }
+  .number-field-input.has-suffix { width: max(120px, calc(var(--suffix-w) + 84px)); }
 
   /* Tables turn into stacked cards, labelled from data-label */
   .table thead { display: none; }
@@ -726,6 +743,7 @@ th[aria-sort="ascending"] .th-sort svg, th[aria-sort="descending"] .th-sort svg 
   .table td.td-select { position: absolute; top: 6px; right: 8px; width: auto; border: 0; padding: 0; }
   .table td.td-select::before { content: none; }
   .table td.col-mobile-hide, .table th.col-mobile-hide { display: none; }
+  .table-mobile-bar { display: flex; }
   .table td.al-right, .table td.al-center { text-align: right; }
   .table-empty { border: 0; }
   .table-sticky thead th { position: static; }

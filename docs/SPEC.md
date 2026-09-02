@@ -92,33 +92,56 @@ leaveType = { id, name, colour, deductsEntitlement, builtIn, archived }
 ```
 
 ## 5. Core module APIs (pure, unit-tested, in `src/core/`)
-Already written: `dates.js`, `holidayYear.js`. To implement:
+All implemented. Optional trailing arguments are shown in `{ }` with their defaults; every signature
+below is stable – add optional parameters rather than changing or removing any of these.
 
 - `bankHolidays.js`
   - `bankHolidaysForYear(year, region)` → `[{ date, name }]` sorted. Rule-based UK bank holidays with
     substitute days (regions: `'england-and-wales' | 'scotland' | 'northern-ireland' | 'none'`).
-  - `bankHolidayMap({ region, overrides, fromYear, toYear })` → `Map<iso, name>` applying
-    `overrides.added` / `overrides.removed`.
-  - `bankHolidaysBetween(start, end, map)` → `[{ date, name }]`.
+  - `bankHolidayMap({ region, overrides, fromYear, toYear, today })` → `Map<iso, name>` applying
+    `overrides.added` / `overrides.removed` (`fromYear`/`toYear` default to a few years around `today`).
+  - `bankHolidaysBetween(start, end, map)` → `[{ date, name }]`; `isBankHoliday(iso, map)`, `bankHolidayName(iso, map)`.
 - `leaveDays.js`
   - `isWorkingDay(iso, carer, ctx)`; `countLeaveDays(holidayLike, carer, ctx)` → number;
     `leaveDaysBreakdown(holidayLike, carer, ctx)` → `{ days, countedDays: [iso], skipped: [{ date, reason }] }`.
-  - `ctx = { settings, bankHolidayMap, leaveTypesById }` built by `buildContext(db)` in `context.js`.
+  - `ctx = { settings, bankHolidayMap, leaveTypesById, today, … }` built by `buildContext(db, { today })` in
+    `context.js`. The bank-holiday map covers every recorded holiday (capped at ±50 years around today).
 - `entitlement.js`
   - `entitlementForYear(carer, yearBounds, settings)` → `{ base, proRataFraction, proRated, adjustments, adjustmentTotal, total }`
-  - `usageForYear(carer, yearBounds, holidays, ctx, today)` → `{ entitlement, taken, booked, pending, remaining, remainingAfterPending, byType: Map<typeId, days>, items: [{ holiday, days, start, end }] }`
-  - `usageForAll(carers, yearBounds, holidays, ctx, today)` → `Map<carerId, usage>`
+  - `usageForYear(carer, yearBounds, holidays, ctx, today = ctx.today)` → `{ entitlement, taken, booked, pending, remaining, remainingAfterPending, byType: Map<typeId, days>, items: [{ holiday, days, start, end }] }`
+  - `usageForAll(carers, yearBounds, holidays, ctx, today = ctx.today)` → `Map<carerId, usage>`
 - `clashes.js`
-  - `findClashes(proposed, db, ctx, { ignoreHolidayIds, today })` → `[{ kind, severity: 'block'|'warn', message, dates, relatedCarerIds, relatedHolidayIds }]`
-  - `offOnDay(iso, db, ctx, { teamId, includePending })` → `[{ carer, holiday }]`
-  - `existingProblems(db, ctx, { start, end })` → clashes already in the data (for Home).
-- `stats.js` – `whoIsOff(db, iso, ctx)`, `absencesBetween(db, start, end, ctx)`, `upcoming(db, today, days, ctx)`,
-  `capacityByDay(db, start, end, ctx, { teamId })` → `Map<iso, count>`, `monthlyLeave(db, yearBounds, ctx, { teamId })`,
-  `leaveByType(...)`, `dayOfWeekPattern(...)`, `teamSummary(db, yearBounds, ctx, today)`, `unusedLeaveAlerts(db, yearBounds, ctx, today)`,
-  `lowRemainingAlerts(...)`, `pendingApprovals(db)`, `sicknessByCarer(...)`.
-- `search.js` – `searchCarers(carers, query, { teamId, role, active, sort }, lookups)`; `searchHolidays(holidays, query, filters, lookups)`.
-- `csv.js` – `toCsv(rows, columns)`, `parseCsv(text)`, `carersToCsv`, `holidaysToCsv`, `parseCarersCsv(text, db)` → `{ carers, errors }`.
-- `src/store/sample.js` – `sampleDb({ today })` deterministic fictional data (≈18 carers, 3 teams, ≈150 holidays over 2 years incl. some pending, sick, a couple of staffing clashes and adjustments).
+  - `findClashes(proposed, db, ctx, { ignoreHolidayIds, today = ctx.today })` → `[{ kind, severity: 'block'|'warn', message, dates, relatedCarerIds, relatedHolidayIds }]`
+  - `checkBatch(proposals, db, ctx, options)` → the same for several proposals at once (used by bulk add).
+  - `offOnDay(iso, db, ctx, { teamId, includePending, ignoreHolidayIds, excludeCarerId })` → `[{ carer, holiday }]` –
+    everyone whose holiday covers the day, whether or not they would have been working.
+  - `existingProblems(db, ctx, { start, end, includePending })` → staffing/pairing/overlap problems already in the
+    data, clipped to the window (for Home). A run of days over the limit is reported as one problem.
+  - Staffing and pairing checks only count a carer on days they would actually be at work and on the books:
+    archived carers, days before their start or after their end date, their non-working weekdays and
+    bank holidays (when those are days off) are ignored. A morning half day and an afternoon half day on the
+    same day do not overlap.
+- `stats.js` – `whoIsOff(db, iso, ctx, { teamId, includePending })`, `absencesBetween(db, start, end, ctx, { teamId, typeIds, statuses, carerIds })`,
+  `upcoming(db, today, days, ctx, opts)`, `currentlyOff(db, today, ctx, opts)`,
+  `capacityByDay(db, start, end, ctx, { teamId, includePending })` → `Map<iso, count>`,
+  `monthlyLeave(db, yearBounds, ctx, { teamId })` → 12 months (13 when the holiday year starts part-way through
+  a month, so the short final month is not lost), `leaveByType(...)`, `dayOfWeekPattern(...)`,
+  `teamSummary(db, yearBounds, ctx, today)`, `unusedLeaveAlerts(db, yearBounds, ctx, today)`,
+  `lowRemainingAlerts(db, yearBounds, ctx, today, threshold = 2)`, `overdrawnAlerts(...)`, `pendingApprovals(db, ctx)`,
+  `sicknessByCarer(db, yearBounds, ctx)`, `usageLeagueTable(db, yearBounds, ctx, today, { teamId })`,
+  `backupStatus(settings, today)` → `{ lastBackupAt, daysSince, due }` (`daysSince` is null, never NaN, when there is no readable backup date).
+- `search.js` – `searchCarers(carers, query, { teamId, role, active, sort }, lookups)`; `searchHolidays(holidays, query, filters, lookups)`;
+  also `carerMatches`, `holidayMatches`, `highlight(text, query)`, `normaliseText`, `tokenise`, `groupBy`. Accents and
+  letters like ø/ł/ß are folded, punctuation around a search word is ignored, and phone numbers match with or without
+  the +44 prefix. Null options, lookups or list items never throw.
+- `csv.js` – `toCsv(rows, columns)`, `parseCsv(text)`, `parseCsvRows(text, delimiter?)` (delimiter is detected from the
+  header row – comma, semicolon or tab, plus Excel's `sep=;` line – when not given), `carersToCsv(carers, lookups)`,
+  `holidaysToCsv(items)`, `parseCarersCsv(text, db)` → `{ carers, errors }`. Dates are read as UK day/month/year
+  (also ISO, Excel serials and "1st May 2020"); an unambiguous month/day/year value is accepted with a warning.
+- `src/store/sample.js` – `sampleDb({ today, settings })` deterministic fictional data (≈18 carers, 3 teams, ≈150 holidays
+  over 2 years incl. some pending, sick, adjustments, exactly one staffing clash and one pairing clash 2–6 weeks
+  ahead of `today`, 2–3 people off today). Working days respect the real bank-holiday map; `sampleCarerCsv()` gives a
+  matching CSV for trying the import.
 
 ## 6. Design language ("peach, soft, calm")
 - Tokens in `src/styles/tokens.css`. Background peach-50, cards white with 16px radius and soft shadow,

@@ -35,12 +35,13 @@ export function LeaveTypeTag({ typeId, small = false }) {
 
 /** "3 days", "0.5 day", "1 day". */
 export function DaysText({ days, class: cls = '' }) {
-  const n = Number(days) || 0;
-  return <span class={cls}>{formatDays(n)} {n === 1 ? 'day' : 'days'}</span>;
+  return <span class={cls}>{daysLabel(days)}</span>;
 }
 
+/** "3 days", "1 day", "half a day", "2.5 days". */
 export function daysLabel(days) {
   const n = Number(days) || 0;
+  if (n === 0.5) return 'half a day';
   return `${formatDays(n)} ${n === 1 ? 'day' : 'days'}`;
 }
 

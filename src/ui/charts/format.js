@@ -72,8 +72,8 @@ function round6(v) {
 export function truncateLabel(text, max = 18) {
   const s = text == null ? '' : String(text);
   const limit = Math.floor(Number(max));
-  if (!Number.isFinite(limit) || limit <= 0) return '';
-  if (s.length <= limit) return s;
+  if (Number.isNaN(limit) || limit <= 0) return '';
+  if (s.length <= limit) return s; // also covers an unlimited (Infinity) width
   if (limit === 1) return '…';
   return s.slice(0, limit - 1).replace(/\s+$/, '') + '…';
 }

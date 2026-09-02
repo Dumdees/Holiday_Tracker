@@ -115,8 +115,8 @@ function CarerForm({ carerId, defaults, close }) {
       </Field>
 
       <div class="grid grid-2">
-        <Field label={<>Holiday entitlement <HelpTip text="The number of days' holiday they get in a full holiday year. Half days are fine (for example 22.5)." /></>} required error={errors.entitlementDays}>
-          <NumberField value={form.entitlementDays} onChange={set('entitlementDays')} min={0} max={365} step={0.5} suffix="days a year" />
+        <Field label={<>Holiday entitlement <HelpTip text="The number of days' holiday they get in a full holiday year. Half days are fine (for example 22.5)." /></>} required error={errors.entitlementDays} hint="Days per full holiday year.">
+          <NumberField value={form.entitlementDays} onChange={set('entitlementDays')} min={0} max={365} step={0.5} suffix="days" />
         </Field>
         <Field label="Colour" hint="Used for their chips on the calendar.">
           <ColourPicker value={form.colour || undefined} onChange={set('colour')} />

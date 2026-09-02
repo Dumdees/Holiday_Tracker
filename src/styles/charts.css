@@ -5,7 +5,7 @@
 .chart-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--font); }
 .chart-svg text { font-size: 12px; fill: var(--ink-muted); font-variant-numeric: tabular-nums; user-select: none; }
 .chart-axis-text { fill: var(--ink-muted); }
-.chart-cat-text { fill: var(--ink-soft); }
+.chart-cat-text { fill: var(--ink-soft); pointer-events: none; } /* hovering a name still hovers the bar beneath */
 .chart-value { fill: var(--ink-soft); font-weight: 600; }
 .chart-grid { stroke: var(--line); stroke-width: 1; shape-rendering: crispEdges; }
 .chart-axis { stroke: var(--line-strong); stroke-width: 1; shape-rendering: crispEdges; }
@@ -117,6 +117,13 @@
 }
 .chart-empty p { margin: 0; font-size: 14px; color: var(--ink-soft); }
 .chart-empty-icon { color: var(--peach-400); }
+
+/* Phones: two mini months side by side rather than one giant month per row */
+@media (max-width: 700px) {
+  .chart-hm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+  .chart-hm-svg { max-width: none; }
+  .chart-donut { gap: 20px; }
+}
 
 @media print {
   .chart-tip { display: none; }

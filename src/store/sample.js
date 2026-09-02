@@ -2,18 +2,21 @@
 // carers. Everything is deterministic: the same `today` always produces the
 // same document, because dates come from a seeded random generator, not the clock.
 //
-// Dependencies are kept to defaults.js, dates.js and holidayYear.js on purpose –
-// the day counting here is a close approximation (working days only, no bank
-// holidays), which is all a demo needs.
+// Days are counted the way the app counts them – a carer's working days, less any
+// bank holiday that counts as a day off – so no sample holiday ever lands only on
+// days nobody works, and the deliberate clashes fall on days people would really
+// have been in. Entitlement is only approximated (pro rata isn't rounded), which
+// is why random annual leave stops well short of each allowance.
 import { createEmptyDb, defaultSettings, newCarerRecord, newHolidayRecord, PALETTE } from './defaults.js';
-import { addDays, addMonths, addYears, diffDays, eachDay, isoWeekday, maxISO, minISO, rangesOverlap, todayISO } from '../core/dates.js';
+import { addDays, addMonths, addYears, diffDays, eachDay, isoWeekday, maxISO, minISO, parts, rangesOverlap, todayISO } from '../core/dates.js';
 import { yearBounds, yearBoundsFor, yearKeyFor, employedFractionOfYear } from '../core/holidayYear.js';
+import { bankHolidayMap } from '../core/bankHolidays.js';
 
 const SEED = 20260401;
 const MON_FRI = [1, 2, 3, 4, 5];
 const ANNUAL = 'lt_annual';
 const EARLIEST_START = '2014-01-01';
-/** Holidays starting within this many days of today are scripted, not random, so Home stays tidy. */
+/** Random holidays keep clear of today and this many days after it, so what Home shows is scripted and tidy. */
 const UPCOMING_DAYS = 14;
 /** Random annual leave never takes a year above this share of the allowance. */
 const USAGE_CEILING = 0.9;
@@ -90,48 +93,55 @@ function randomDate(rng, lo, hi) {
   return addDays(lo, rng.int(0, Math.max(0, diffDays(lo, hi))));
 }
 
-// ---------- Working-day helpers (approximate, no bank holidays) ----------
+// ---------- Working-day helpers ----------
 
-const isWorking = (iso, workingDays) => workingDays.includes(isoWeekday(iso));
 const stamp = (iso) => `${iso}T09:00:00.000Z`;
+/** How far onOrAfter / onOrBefore look for a working day. A fortnight clears Christmas and New Year. */
+const LOOKAROUND_DAYS = 14;
 
-/** First working day on or after `iso` (looks a week ahead), or null. */
-function onOrAfter(iso, workingDays) {
-  for (let i = 0; i < 7; i++) {
+/**
+ * A predicate saying whether a date is a working day for someone with these working
+ * days, given the bank holidays (a Map or Set of ISO dates) that count as days off.
+ */
+const worksOn = (workingDays, bank) => (iso) => workingDays.includes(isoWeekday(iso)) && !bank.has(iso);
+
+/** First working day on or after `iso` (looks a fortnight ahead), or null. */
+function onOrAfter(iso, isWorkingDay) {
+  for (let i = 0; i < LOOKAROUND_DAYS; i++) {
     const d = addDays(iso, i);
-    if (isWorking(d, workingDays)) return d;
+    if (isWorkingDay(d)) return d;
   }
   return null;
 }
 
-/** Last working day on or before `iso` (looks a week back), or null. */
-function onOrBefore(iso, workingDays) {
-  for (let i = 0; i < 7; i++) {
+/** Last working day on or before `iso` (looks a fortnight back), or null. */
+function onOrBefore(iso, isWorkingDay) {
+  for (let i = 0; i < LOOKAROUND_DAYS; i++) {
     const d = addDays(iso, -i);
-    if (isWorking(d, workingDays)) return d;
+    if (isWorkingDay(d)) return d;
   }
   return null;
 }
 
 /** Trim a range so it starts and ends on working days. Null if it has none. */
-function alignRange(start, end, workingDays) {
-  if (!start || !end || end < start || !workingDays.length) return null;
-  const s = onOrAfter(start, workingDays);
-  const e = onOrBefore(end, workingDays);
+function alignRange(start, end, isWorkingDay) {
+  if (!start || !end || end < start) return null;
+  const s = onOrAfter(start, isWorkingDay);
+  const e = onOrBefore(end, isWorkingDay);
   return s && e && s <= e ? { start: s, end: e } : null;
 }
 
 /** A range of about `calendarDays` beginning on the first working day on or after `from`. */
-function spanFrom(from, calendarDays, workingDays) {
-  const start = onOrAfter(from, workingDays);
+function spanFrom(from, calendarDays, isWorkingDay) {
+  const start = onOrAfter(from, isWorkingDay);
   if (!start) return null;
-  return { start, end: onOrBefore(addDays(start, calendarDays - 1), workingDays) || start };
+  return { start, end: onOrBefore(addDays(start, calendarDays - 1), isWorkingDay) || start };
 }
 
 /** A range guaranteed to cover `iso`, reaching at least `before`/`after` days either side. */
-function spanAround(iso, before, after, workingDays) {
-  const start = onOrBefore(addDays(iso, -before), workingDays);
-  const end = onOrAfter(addDays(iso, after), workingDays);
+function spanAround(iso, before, after, isWorkingDay) {
+  const start = onOrBefore(addDays(iso, -before), isWorkingDay);
+  const end = onOrAfter(addDays(iso, after), isWorkingDay);
   return start && end ? { start, end } : null;
 }
 
@@ -185,8 +195,9 @@ function buildCarers(rng, today, settings) {
 
 /**
  * Everything the generator needs to place holidays without breaking the rules:
- * ranges per carer (no overlaps), who is off per team per day (staffing limits)
- * and approximate annual-leave usage per carer per holiday year.
+ * ranges per carer (no overlaps), who is off per team per day (staffing limits),
+ * approximate annual-leave usage per carer per holiday year, and which bank
+ * holidays count as days off (none, if the settings say they don't).
  */
 function createWorld(rng, today, db) {
   const { settings, teams, carers } = db;
@@ -196,12 +207,17 @@ function createWorld(rng, today, db) {
     cur,
     next: yearBounds(Number(cur.key) + 1, settings),
   };
+  const lo = maxISO(years.prev.start, addDays(addYears(today, -2), 7));
+  const hi = minISO(years.next.end, addDays(addYears(today, 2), -7));
+  const bank = settings.bankHolidaysAreDaysOff
+    ? bankHolidayMap({ region: settings.bankHolidayRegion, overrides: db.bankHolidayOverrides, fromYear: parts(lo).y, toYear: parts(hi).y })
+    : new Map();
   const capOf = (t) => (t.maxOffPerDay === 0 ? Infinity : (t.maxOffPerDay ?? settings.defaultMaxOffPerDay));
   return {
-    rng, today, settings, carers, years,
-    lo: maxISO(years.prev.start, addDays(addYears(today, -2), 7)),
-    hi: minISO(years.next.end, addDays(addYears(today, 2), -7)),
+    rng, today, settings, carers, years, lo, hi, bank,
     carer: (id) => carers.find((c) => c.id === id),
+    /** Is a date a working day for this carer? */
+    days: (carer) => worksOn(carer.workingDays, bank),
     capByTeam: new Map(teams.map((t) => [t.id, capOf(t)])),
     holidays: [],
     rangesByCarer: new Map(carers.map((c) => [c.id, []])),
@@ -223,8 +239,9 @@ function allowanceFor(world, carer, yb) {
 /** Working days in a range, split by holiday year. Half days count 0.5. */
 function usageByYear(world, carer, range, halfDay) {
   const out = new Map();
+  const isWorkingDay = world.days(carer);
   for (const day of eachDay(range.start, range.end)) {
-    if (!isWorking(day, carer.workingDays)) continue;
+    if (!isWorkingDay(day)) continue;
     const key = yearKeyFor(day, world.settings);
     out.set(key, (out.get(key) || 0) + (halfDay ? 0.5 : 1));
   }
@@ -276,7 +293,7 @@ function noteOff(world, day, teamId) {
  */
 function place(world, carer, spec, opts = {}) {
   const { typeId = ANNUAL, status = 'approved', halfDay = null, notes = '' } = spec;
-  const range = alignRange(spec.start, spec.end, carer.workingDays);
+  const range = alignRange(spec.start, spec.end, world.days(carer));
   if (!range) return null;
   if (halfDay && range.start !== range.end) return null;
   if (!withinEmployment(world, carer, range) || overlapsOwn(world, carer, range)) return null;
@@ -301,13 +318,11 @@ function employmentWindow(world, carer, lo, hi) {
   return to < from ? null : { lo: from, hi: to };
 }
 
-const inUpcomingWindow = (world, iso) => iso > world.today && iso <= addDays(world.today, UPCOMING_DAYS);
-
-/** A random start inside the window, avoiding the scripted "next two weeks". */
-function randomStart(world, win) {
-  const start = randomDate(world.rng, win.lo, win.hi);
-  return inUpcomingWindow(world, start) ? null : start;
-}
+/**
+ * Does a range touch today or the scripted fortnight after it? Random holidays keep
+ * clear of both, so the Home screen shows exactly what was planned for it.
+ */
+const touchesScriptedWindow = (world, start, end) => rangesOverlap(start, end, world.today, addDays(world.today, UPCOMING_DAYS));
 
 /** Keep a range inside the holiday year it starts in (only one holiday spans a boundary). */
 function clampToYear(world, start, end) {
@@ -323,9 +338,9 @@ function placeRandom(world, { typeId, count, lengths, lo, hi, carers, status = '
     const carer = world.rng.pick(carers);
     const win = employmentWindow(world, carer, lo, hi);
     if (!win) continue;
-    const start = randomStart(world, win);
-    if (!start) continue;
+    const start = randomDate(world.rng, win.lo, win.hi);
     const end = clampToYear(world, start, minISO(addDays(start, world.rng.pick(lengths) - 1), win.hi));
+    if (touchesScriptedWindow(world, start, end)) continue;
     if (place(world, carer, { start, end, typeId, status, notes: notes(world.rng) }, { respectAllowance })) placed++;
   }
   return placed;
@@ -339,22 +354,36 @@ function addYearBoundaryHoliday(world) {
   place(world, world.carer('carer_s01'), { start: addDays(start, -4), end: addDays(start, 3), notes: 'Spring break' });
 }
 
-/** Three carers off today – between them they cover every day of the week. */
+/** How many people the Home screen should list as off today. */
+const OFF_TODAY = 3;
+
+/** How many carers already have a holiday (not declined) covering today. */
+function offTodayCount(world) {
+  return new Set(world.holidays.filter((h) => h.status !== 'declined' && h.start <= world.today && h.end >= world.today).map((h) => h.carerId)).size;
+}
+
+/**
+ * Three carers off today, each on a holiday that began before today and runs on
+ * after it. Between them they cover every day of the week; whoever works today
+ * goes first so the Home screen always shows someone who would really have been
+ * in. In the first days of a holiday year the year-boundary holiday already
+ * covers today, so one fewer is added.
+ */
 function addOffToday(world) {
-  const off = (id, before, after, notes = '') => {
+  const plan = [['carer_s04', 2, 2, 'Family visit'], ['carer_s10', 1, 3, ''], ['carer_s18', 1, 1, '']];
+  const worksToday = ([id]) => world.days(world.carer(id))(world.today);
+  for (const [id, before, after, notes] of [...plan.filter(worksToday), ...plan.filter((p) => !worksToday(p))]) {
+    if (offTodayCount(world) >= OFF_TODAY) return;
     const carer = world.carer(id);
-    place(world, carer, { ...spanAround(world.today, before, after, carer.workingDays), notes });
-  };
-  off('carer_s04', 2, 2, 'Family visit');
-  off('carer_s10', 1, 3);
-  off('carer_s18', 1, 1);
+    place(world, carer, { ...spanAround(world.today, before, after, world.days(carer)), notes });
+  }
 }
 
 /** Three holidays starting within the next fortnight, for the Home page. */
 function addUpcoming(world) {
   const soon = (id, offset, calendarDays, notes = '') => {
     const carer = world.carer(id);
-    place(world, carer, { ...spanFrom(addDays(world.today, offset), calendarDays, carer.workingDays), notes });
+    place(world, carer, { ...spanFrom(addDays(world.today, offset), calendarDays, world.days(carer)), notes });
   };
   soon('carer_s16', 3, 3);
   soon('carer_s09', 8, 5, 'Trip to Skye');
@@ -365,25 +394,28 @@ function addUpcoming(world) {
 function addPairingClash(world) {
   const a = world.carer('carer_s03');
   const b = world.carer('carer_s05');
-  const day = onOrAfter(addDays(world.today, 18), a.workingDays);
-  if (!place(world, a, { ...spanFrom(day, 2, a.workingDays), notes: 'Concert in Glasgow' })) return;
+  const bothWork = (iso) => world.days(a)(iso) && world.days(b)(iso);
+  const day = onOrAfter(addDays(world.today, 18), bothWork);
+  if (!day || !place(world, a, { ...spanFrom(day, 2, world.days(a)), notes: 'Concert in Glasgow' })) return;
   place(world, b, { start: day, end: day }, { allowPairingClash: true });
 }
 
 /** Three Day-team carers approved off on the same working day about four weeks from today. */
 function addStaffingClash(world) {
-  const day = onOrAfter(addDays(world.today, 27), MON_FRI);
+  const day = onOrAfter(addDays(world.today, 27), worksOn(MON_FRI, world.bank));
+  if (!day) return;
   const candidates = ['carer_s01', 'carer_s02', 'carer_s07', 'carer_s04', 'carer_s03'].map(world.carer);
   const specs = [
-    (wd) => ({ ...spanFrom(day, 3, wd), notes: 'Wedding' }),
-    (wd) => ({ start: onOrBefore(addDays(day, -1), wd), end: day }),
+    (isWorkingDay) => ({ ...spanFrom(day, 3, isWorkingDay), notes: 'Wedding' }),
+    (isWorkingDay) => ({ start: onOrBefore(addDays(day, -1), isWorkingDay), end: day }),
     () => ({ start: day, end: day }),
   ];
   let placed = 0;
   for (const carer of candidates) {
     if (placed === specs.length) break;
-    if (!isWorking(day, carer.workingDays)) continue;
-    if (place(world, carer, specs[placed](carer.workingDays), { allowStaffingClash: true })) placed++;
+    const isWorkingDay = world.days(carer);
+    if (!isWorkingDay(day)) continue;
+    if (place(world, carer, specs[placed](isWorkingDay), { allowStaffingClash: true })) placed++;
   }
 }
 
@@ -398,8 +430,8 @@ function addHalfDays(world) {
   for (const [id, offset, halfDay, notes] of items) {
     const carer = world.carer(id);
     for (const shift of [0, 7, -7, 14]) {
-      const day = onOrAfter(addDays(world.today, offset + shift), carer.workingDays);
-      if (place(world, carer, { start: day, end: day, halfDay, notes })) break;
+      const day = onOrAfter(addDays(world.today, offset + shift), world.days(carer));
+      if (day && place(world, carer, { start: day, end: day, halfDay, notes })) break;
     }
   }
 }
@@ -437,9 +469,9 @@ function fillYear(world, carer, yb, share) {
   if (total < 1 || !win) return;
   const target = total * share;
   for (let attempt = 0; attempt < 200 && usageOf(world, carer, yb.key) < target; attempt++) {
-    const start = randomStart(world, win);
-    if (!start) continue;
+    const start = randomDate(world.rng, win.lo, win.hi);
     const end = minISO(addDays(start, world.rng.pick(LENGTHS) - 1), win.hi);
+    if (touchesScriptedWindow(world, start, end)) continue;
     place(world, carer, { start, end, notes: randomNote(world.rng) }, { respectAllowance: true });
   }
 }

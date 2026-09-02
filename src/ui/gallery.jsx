@@ -35,6 +35,7 @@ const CARERS = NAMES.map((name, i) => ({
   pending: i % 3 === 0 ? 2 : 0,
 }));
 const CARER_OPTIONS = CARERS.map((c) => ({ value: c.id, label: c.name, group: c.team.name, colour: c.colour, sub: c.role }));
+CARER_OPTIONS.push({ value: 'c99', label: 'Dominika Nowak-Wiśniewska-Kowalczyk', group: 'Weekend team', colour: '#4FB3A9', sub: 'Care coordinator (maternity cover, Tuesdays and Thursdays only)' });
 const HOLIDAYS = Array.from({ length: 30 }, (_, i) => {
   const carer = CARERS[i % CARERS.length];
   const day = 1 + ((i * 7) % 26);
@@ -132,6 +133,7 @@ function BadgesSection() {
         <Chip label="Day team" colour="#F58F5B" onClick={noop} />
         <Chip label="Bank holiday" icon="calendar" small />
         <Chip label="Small removable" small colour="#6FA8DC" onRemove={noop} />
+        <Chip label="A very long team name that should be cut short rather than push the row wider" colour="#9B7BBF" onRemove={noop} class="g-narrow" />
         {chips.length < 4 ? <Button variant="link" size="sm" onClick={() => setChips(CARERS.slice(0, 4))}>Put them back</Button> : null}
       </div>
       <div class="g-label">Avatars</div>
@@ -291,7 +293,7 @@ function FormsSection() {
 
 function MultiSelectSection() {
   const [openValue, setOpenValue] = useState(['c1', 'c2', 'c4', 'c7']);
-  const [closedValue, setClosedValue] = useState(['c3', 'c5']);
+  const [closedValue, setClosedValue] = useState(['c3', 'c5', 'c99']);
   const [plain, setPlain] = useState([]);
   // The drawer and dialog take focus when they appear, which would close an already-open panel
   // (it closes when focus leaves it), so this example opens a moment after the page loads.

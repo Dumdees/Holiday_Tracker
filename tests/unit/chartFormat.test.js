@@ -97,3 +97,19 @@ test('sum ignores anything that is not a number', () => {
   assert.equal(sum([]), 0);
   assert.equal(sum(null), 0);
 });
+
+test('fitLabel and truncateLabel cope with odd widths and spacing', () => {
+  assert.equal(fitLabel('Priya Sharma', -10), '');
+  assert.equal(fitLabel('Priya Sharma', NaN), '');
+  assert.equal(fitLabel('Priya Sharma', Infinity), 'Priya Sharma');
+  assert.equal(truncateLabel('Priya   Sharma', 8), 'Priya…'); // trailing spaces before the ellipsis go
+  assert.equal(truncateLabel('Priya Sharma', 2.9), 'P…'); // fractional limits round down
+  assert.equal(truncateLabel(undefined), '');
+});
+
+test('niceTicks handles fractions and very large counts sensibly', () => {
+  assert.deepEqual(niceTicks(0.05), [0, 0.02, 0.04, 0.06]);
+  assert.deepEqual(niceTicks(3, 100).slice(0, 3), [0, 0.05, 0.1]); // asks for many: still nice, still evenly spaced
+  assert.equal(niceTicks(3, 100).at(-1), 3);
+  assert.deepEqual(niceTicks('28'), [0, 10, 20, 30]);
+});
