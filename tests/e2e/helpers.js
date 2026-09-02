@@ -36,8 +36,10 @@ export async function openApp({ viewport = { width: 1280, height: 860 }, onboard
   if (today) await page.clock.setFixedTime(new Date(today + 'T09:00:00'));
   if (seed || onboarded) {
     await page.addInitScript(({ seed, onboarded }) => {
-      // Seed data before the app boots by writing to localStorage; the app reads it as a fallback
-      // when IndexedDB is empty on a brand-new profile.
+      // Seed data ONCE per browser session (init scripts run on every navigation) by writing to
+      // localStorage; the app reads it as the newest copy on a brand-new profile.
+      if (sessionStorage.getItem('mhm:seeded')) return;
+      sessionStorage.setItem('mhm:seeded', '1');
       if (seed) localStorage.setItem('mhm:db', JSON.stringify(seed));
       else if (onboarded && !localStorage.getItem('mhm:db')) {
         localStorage.setItem('mhm:db', JSON.stringify({ schemaVersion: 1, settings: { onboardingComplete: true }, carers: [], holidays: [] }));
@@ -51,6 +53,8 @@ export async function openApp({ viewport = { width: 1280, height: 860 }, onboard
     context,
     page,
     errors,
+    /** Wait until the app reports every change is written. */
+    async saved() { await page.waitForFunction(() => document.querySelector('.save-indicator')?.classList.contains('saved'), null, { timeout: 5000 }); },
     async reload() { await page.reload(); await page.waitForFunction(() => !document.querySelector('.loading-screen')); },
     async close() { await context.close(); await rm(userDataDir, { recursive: true, force: true }); },
   };

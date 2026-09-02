@@ -349,3 +349,181 @@ describe('isBankHoliday and bankHolidayName', () => {
     assert.equal(bankHolidayName('2026-12-25', null), null);
   });
 });
+
+// ---------- Extra edge cases added in review ----------
+
+describe('bankHolidaysForYear – awkward years', () => {
+  test('null, empty, boolean, zero and out-of-range years give an empty list (never "0-01-01")', () => {
+    for (const bad of [null, '', 0, false, true, 50, 999, 10000, NaN, Infinity, -2026, '  ']) {
+      assert.deepEqual(bankHolidaysForYear(bad, EW), [], String(bad));
+    }
+  });
+
+  test('a fractional year is treated as its whole year', () => {
+    assert.deepEqual(bankHolidaysForYear(2026.7, EW), bankHolidaysForYear(2026, EW));
+    assert.deepEqual(bankHolidaysForYear(' 2026 ', SCOT), bankHolidaysForYear(2026, SCOT));
+  });
+
+  test('leap years: 29 February never appears and Easter rules still hold', () => {
+    for (const y of [2024, 2028, 2032, 2036, 2040, 2000]) {
+      for (const region of [EW, SCOT, NI]) {
+        const list = bankHolidaysForYear(y, region);
+        assert.ok(!list.some((x) => x.date.endsWith('-02-29')));
+        assert.ok(list.some((x) => x.name === 'Good Friday'));
+      }
+    }
+  });
+
+  test('substitute days never spill into another calendar year (checked over 200 years)', () => {
+    for (const region of [EW, SCOT, NI]) {
+      for (let y = 1990; y <= 2190; y++) {
+        for (const { date } of bankHolidaysForYear(y, region)) {
+          assert.ok(date.startsWith(`${y}-`), `${region} ${y}: ${date}`);
+        }
+      }
+    }
+  });
+
+  test('Christmas on a Saturday: Mon 27 and Tue 28 (2021)', () => {
+    const list = bankHolidaysForYear(2021, EW);
+    assert.equal(nameOf(list, '2021-12-27'), 'Christmas Day (substitute day)');
+    assert.equal(nameOf(list, '2021-12-28'), 'Boxing Day (substitute day)');
+    assert.equal(nameOf(list, '2021-12-24'), undefined);
+  });
+
+  test('Christmas on a Sunday: Boxing Day Mon 26 stays, Christmas moves to Tue 27 (2033)', () => {
+    const list = bankHolidaysForYear(2033, EW);
+    assert.equal(nameOf(list, '2033-12-26'), 'Boxing Day');
+    assert.equal(nameOf(list, '2033-12-27'), 'Christmas Day (substitute day)');
+  });
+
+  test('Scotland 2021: 2 January on a Saturday moves to Monday 4', () => {
+    const list = bankHolidaysForYear(2021, SCOT);
+    assert.equal(nameOf(list, '2021-01-01'), "New Year's Day");
+    assert.equal(nameOf(list, '2021-01-04'), '2 January (substitute day)');
+    assert.equal(nameOf(list, '2021-01-02'), undefined);
+  });
+
+  test('Scotland 2025: St Andrew\'s Day on a Sunday moves to Monday 1 December', () => {
+    assert.equal(nameOf(bankHolidaysForYear(2025, SCOT), '2025-12-01'), "St Andrew's Day (substitute day)");
+  });
+
+  test('Northern Ireland 2020: Battle of the Boyne on a Sunday moves to Monday 13 July', () => {
+    assert.equal(nameOf(bankHolidaysForYear(2020, NI), '2020-07-13'), 'Battle of the Boyne (substitute day)');
+  });
+
+  test('Scotland summer bank holiday is the first Monday of August', () => {
+    assert.equal(nameOf(bankHolidaysForYear(2026, SCOT), '2026-08-03'), 'Summer bank holiday');
+    assert.equal(nameOf(bankHolidaysForYear(2026, SCOT), '2026-08-31'), undefined);
+  });
+
+  test('older one-off days: Millennium, Golden Jubilee, Royal wedding, Diamond Jubilee', () => {
+    for (const region of [EW, SCOT, NI]) {
+      assert.equal(nameOf(bankHolidaysForYear(1999, region), '1999-12-31'), 'Millennium bank holiday', region);
+      const y2002 = bankHolidaysForYear(2002, region);
+      assert.equal(nameOf(y2002, '2002-06-03'), 'Golden Jubilee bank holiday', region);
+      assert.equal(nameOf(y2002, '2002-06-04'), 'Spring bank holiday', region);
+      assert.equal(nameOf(y2002, '2002-05-27'), undefined, region);
+      assert.equal(nameOf(bankHolidaysForYear(2011, region), '2011-04-29'), 'Royal wedding bank holiday', region);
+      const y2012 = bankHolidaysForYear(2012, region);
+      assert.equal(nameOf(y2012, '2012-06-04'), 'Spring bank holiday', region);
+      assert.equal(nameOf(y2012, '2012-06-05'), 'Diamond Jubilee bank holiday', region);
+      assert.equal(nameOf(y2012, '2012-05-28'), undefined, region);
+    }
+  });
+
+  test('2020 VE Day move applies to every region and keeps the weekday count sane', () => {
+    for (const region of [EW, SCOT, NI]) {
+      const list = bankHolidaysForYear(2020, region);
+      assert.equal(nameOf(list, '2020-05-08'), 'Early May bank holiday (VE Day)', region);
+      assert.equal(nameOf(list, '2020-05-04'), undefined, region);
+    }
+  });
+
+  test('names are plain British English with no ids or jargon', () => {
+    for (const region of [EW, SCOT, NI]) {
+      for (let y = 1999; y <= 2040; y++) {
+        for (const { name } of bankHolidaysForYear(y, region)) {
+          assert.ok(!/[_{}\[\]]|\bid\b|schema|database|sync|cache/i.test(name), name);
+        }
+      }
+    }
+  });
+});
+
+describe('bankHolidayMap – awkward inputs', () => {
+  test('only fromYear given: covers just that year', () => {
+    const map = bankHolidayMap({ region: EW, fromYear: 2030, today: '2026-09-02' });
+    assert.equal(map.size, bankHolidaysForYear(2030, EW).length);
+    assert.ok([...map.keys()].every((d) => d.startsWith('2030-')));
+  });
+
+  test('only toYear given: covers just that year', () => {
+    const map = bankHolidayMap({ region: EW, toYear: 2019, today: '2026-09-02' });
+    assert.ok(map.size > 0);
+    assert.ok([...map.keys()].every((d) => d.startsWith('2019-')));
+  });
+
+  test('accepts years as strings or fractions', () => {
+    assert.equal(bankHolidayMap({ region: EW, fromYear: '2026', toYear: '2026' }).size, 8);
+    assert.equal(bankHolidayMap({ region: EW, fromYear: 2026.5, toYear: 2026.9 }).size, 8);
+  });
+
+  test('nonsense years fall back to today', () => {
+    const map = bankHolidayMap({ region: EW, fromYear: 'soon', toYear: null, today: '2026-09-02' });
+    const years = new Set([...map.keys()].map((d) => d.slice(0, 4)));
+    assert.deepEqual([...years], ['2024', '2025', '2026', '2027', '2028']);
+  });
+
+  test('today at a year boundary picks years around that year', () => {
+    const map = bankHolidayMap({ region: EW, today: '2027-01-01' });
+    const years = new Set([...map.keys()].map((d) => d.slice(0, 4)));
+    assert.deepEqual([...years], ['2025', '2026', '2027', '2028', '2029']);
+  });
+
+  test('no arguments at all still returns a Map', () => {
+    const map = bankHolidayMap();
+    assert.ok(map instanceof Map);
+    assert.equal(map.size, 0);
+  });
+
+  test('override lists that are not arrays are ignored rather than crashing', () => {
+    const map = bankHolidayMap({ region: EW, fromYear: 2026, toYear: 2026, overrides: { added: {}, removed: 'no' } });
+    assert.equal(map.size, 8);
+    assert.equal(bankHolidayMap({ region: EW, fromYear: 2026, toYear: 2026, overrides: 'oops' }).size, 8);
+  });
+
+  test('odd entries in removed are harmless', () => {
+    const map = bankHolidayMap({ region: EW, fromYear: 2026, toYear: 2026, overrides: { removed: [null, 5, { date: '2026-01-01' }, ''] } });
+    assert.equal(map.size, 8);
+  });
+
+  test('a very long range is complete and still sorted', () => {
+    const map = bankHolidayMap({ region: SCOT, fromYear: 1990, toYear: 2100 });
+    assert.equal(map.size, [...Array(111).keys()].reduce((n, i) => n + bankHolidaysForYear(1990 + i, SCOT).length, 0));
+    const keys = [...map.keys()];
+    for (let i = 1; i < keys.length; i++) assert.ok(keys[i] > keys[i - 1]);
+  });
+
+  test('the same input always gives the same map (no hidden "today")', () => {
+    const a = bankHolidayMap({ region: NI, fromYear: 2025, toYear: 2027, overrides: { added: [{ date: '2026-03-02' }] } });
+    const b = bankHolidayMap({ region: NI, fromYear: 2025, toYear: 2027, overrides: { added: [{ date: '2026-03-02' }] } });
+    assert.deepEqual([...a], [...b]);
+  });
+});
+
+describe('lookups with something that is not a Map', () => {
+  test('isBankHoliday, bankHolidayName and bankHolidaysBetween never throw', () => {
+    for (const notAMap of [{}, [], 'map', 42, undefined]) {
+      assert.equal(isBankHoliday('2026-12-25', notAMap), false);
+      assert.equal(bankHolidayName('2026-12-25', notAMap), null);
+      assert.deepEqual(bankHolidaysBetween('2026-01-01', '2026-12-31', notAMap), []);
+    }
+  });
+
+  test('bankHolidaysBetween over a very long range returns every holiday', () => {
+    const map = bankHolidayMap({ region: EW, fromYear: 2000, toYear: 2040 });
+    assert.equal(bankHolidaysBetween('1990-01-01', '2050-12-31', map).length, map.size);
+    assert.equal(bankHolidaysBetween('2041-01-01', '2050-12-31', map).length, 0);
+  });
+});

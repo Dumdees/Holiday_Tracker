@@ -37,7 +37,7 @@ export async function initStore() {
 function scheduleSave() {
   saveState.value = 'saving';
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushSave, 250);
+  saveTimer = setTimeout(flushSave, 120);
 }
 
 function flushSave() {
@@ -63,6 +63,7 @@ export function commit(label, mutator, { undoable = true } = {}) {
   const prev = db.value;
   const draft = structuredClone(prev);
   const result = mutator(draft);
+  draft.savedAt = new Date().toISOString();
   batch(() => {
     db.value = draft;
     if (undoable) {
@@ -84,8 +85,9 @@ export function undo() {
   const stack = undoStack.value;
   if (!stack.length) return false;
   const { label, snapshot } = stack[stack.length - 1];
+  const restored = { ...snapshot, savedAt: new Date().toISOString() };
   batch(() => {
-    db.value = snapshot;
+    db.value = restored;
     undoStack.value = stack.slice(0, -1);
     lastChange.value = { label: `Undid: ${label}`, at: Date.now() };
   });

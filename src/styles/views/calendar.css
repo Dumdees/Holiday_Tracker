@@ -9,11 +9,11 @@
 .bank-sample { width: 12px; height: 12px; border-radius: 3px; background: var(--amber-soft); border: 1px solid var(--amber); }
 
 .month-view { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
-.month-head { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--peach-50); border-bottom: 1px solid var(--line); }
+.month-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--peach-50); border-bottom: 1px solid var(--line); }
 .month-dow { padding: 10px 8px; font-size: 13px; font-weight: 650; color: var(--ink-soft); text-align: center; }
-.month-row { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); }
+.month-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
 .month-row:last-child { border-bottom: 0; }
-.month-cell { min-height: 118px; padding: 6px 6px 8px; border-right: 1px solid var(--line); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background .12s; }
+.month-cell { min-height: 118px; min-width: 0; overflow: hidden; padding: 6px 6px 8px; border-right: 1px solid var(--line); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background .12s; }
 .month-cell:last-child { border-right: 0; }
 .month-cell:hover { background: var(--peach-50); }
 .month-cell:focus-visible { outline: none; box-shadow: inset var(--focus); }
@@ -75,6 +75,8 @@
   .calendar-filters { margin-left: 0; }
 }
 @media (max-width: 600px) {
+  .calendar-nav { flex-wrap: wrap; }
+  .calendar-nav .select-field, .calendar-nav .select-wrap { flex: 1 1 130px; }
   .month-cell { min-height: 64px; }
   .chips .abs-chip:nth-child(n+3) { display: none; }
 }

@@ -58,45 +58,46 @@ function lsSet(doc) {
   } catch { return false; }
 }
 
+function newer(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return String(b.savedAt || '') > String(a.savedAt || '') ? b : a;
+}
+
 /** Load the saved document, or null if this is a brand-new install. */
 export async function load() {
+  let fromIdb = null;
   try {
     const db = await openDb();
-    const doc = await idbGet(db, KEY);
+    fromIdb = await idbGet(db, KEY);
     db.close();
     engine = 'IndexedDB';
-    if (doc) return doc;
-    // Nothing in IndexedDB – maybe an older copy lives in localStorage.
-    const fallback = lsGet();
-    if (fallback) return fallback;
-    return null;
   } catch (err) {
     console.warn('IndexedDB not usable, falling back to localStorage', err);
     try {
       localStorage.setItem('mhm:probe', '1');
       localStorage.removeItem('mhm:probe');
       engine = 'localStorage';
-      return lsGet();
     } catch {
       engine = 'memory';
       return memoryDoc;
     }
   }
+  // The localStorage copy is written synchronously on every change, so it can be
+  // newer than IndexedDB if the window was closed a moment after a change.
+  return newer(fromIdb, lsGet());
 }
 
-/** Save the whole document. Resolves when it is safely written. */
+/** Save the whole document. The quick copy is written immediately; the durable one shortly after. */
 export async function save(doc) {
-  if (engine === 'IndexedDB') {
-    const db = await openDb();
-    try { await idbPut(db, KEY, doc); } finally { db.close(); }
-    lsSet(doc); // best-effort mirror
-    return;
-  }
+  if (engine === 'memory') { memoryDoc = doc; return; }
+  const mirrored = lsSet(doc);
   if (engine === 'localStorage') {
-    if (!lsSet(doc)) throw new Error('Could not save – browser storage is full');
+    if (!mirrored) throw new Error('Could not save – browser storage is full');
     return;
   }
-  memoryDoc = doc;
+  const db = await openDb();
+  try { await idbPut(db, KEY, doc); } finally { db.close(); }
 }
 
 /** Wipe everything this app has stored in the browser. */

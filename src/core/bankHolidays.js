@@ -16,6 +16,26 @@ const NI = ['northern-ireland'];
 const SUBSTITUTE_SUFFIX = ' (substitute day)';
 const DEFAULT_NAME = 'Bank holiday';
 
+// Years the app can sensibly work with: four digits, so every date is a valid 'YYYY-MM-DD'
+// (JavaScript's Date treats years below 100 as the 1900s, which would give nonsense).
+const MIN_YEAR = 1000;
+const MAX_YEAR = 9999;
+
+/**
+ * A year as a whole number, or null when it isn't a usable four-digit year.
+ * @param {number|string} year
+ * @returns {number | null}
+ */
+function toYearNumber(year) {
+  if (year === null || year === undefined || year === '' || typeof year === 'boolean') return null;
+  const y = Math.floor(Number(year));
+  if (!Number.isFinite(y) || y < MIN_YEAR || y > MAX_YEAR) return null;
+  return y;
+}
+
+/** True when `map` is something we can look dates up in. */
+const isMap = (map) => map instanceof Map;
+
 // ---------- Working out dates ----------
 
 /**
@@ -81,6 +101,20 @@ const RULES = [
 // One-off changes announced by the government, applied to every region.
 // `moved` replaces a rule's date (by rule id) for that year; `added` are extra days.
 const EXTRA = {
+  1999: {
+    added: [{ date: '1999-12-31', name: 'Millennium bank holiday' }],
+  },
+  2002: {
+    moved: { spring: { date: '2002-06-04' } },
+    added: [{ date: '2002-06-03', name: 'Golden Jubilee bank holiday' }],
+  },
+  2011: {
+    added: [{ date: '2011-04-29', name: 'Royal wedding bank holiday' }],
+  },
+  2012: {
+    moved: { spring: { date: '2012-06-04' } },
+    added: [{ date: '2012-06-05', name: 'Diamond Jubilee bank holiday' }],
+  },
   2020: {
     moved: { 'early-may': { date: '2020-05-08', name: 'Early May bank holiday (VE Day)' } },
   },
@@ -160,8 +194,8 @@ function dedupeByDate(list) {
  * @returns {{ date: string, name: string }[]}
  */
 export function bankHolidaysForYear(year, region) {
-  const y = Number(year);
-  if (!Number.isInteger(y) || region === 'none' || !REGIONS.includes(region)) return [];
+  const y = toYearNumber(year);
+  if (y === null || region === 'none' || !REGIONS.includes(region)) return [];
   return dedupeByDate(resolveSubstitutes(nominalHolidays(y, region)));
 }
 
@@ -169,7 +203,8 @@ export function bankHolidaysForYear(year, region) {
  * Map<iso, name> of every bank holiday from `fromYear` to `toYear` inclusive, with the
  * user's overrides applied: `overrides.added` ([{ date, name }]) are set (name defaults
  * to 'Bank holiday'), then `overrides.removed` ([iso]) are deleted. Iterates in ascending
- * date order. When the years are omitted, covers two years either side of `today`.
+ * date order. When both years are omitted, covers two years either side of `today`; when
+ * only one is given, the other defaults to the same year.
  * @param {object} opts
  * @param {string} [opts.region='none'] one of REGIONS
  * @param {{ added?: { date: string, name?: string }[], removed?: string[] }} [opts.overrides]
@@ -179,18 +214,28 @@ export function bankHolidaysForYear(year, region) {
  * @returns {Map<string, string>}
  */
 export function bankHolidayMap({ region = 'none', overrides, fromYear, toYear, today = todayISO() } = {}) {
-  const centre = parts(today).y;
-  const from = fromYear == null ? centre - 2 : Number(fromYear);
-  const to = toYear == null ? centre + 2 : Number(toYear);
+  let from = toYearNumber(fromYear);
+  let to = toYearNumber(toYear);
+  if (from === null && to === null) {
+    const centre = parts(today).y;
+    from = centre - 2;
+    to = centre + 2;
+  } else if (from === null) {
+    from = to;
+  } else if (to === null) {
+    to = from;
+  }
   const entries = new Map();
   for (let y = from; y <= to; y++) {
     for (const { date, name } of bankHolidaysForYear(y, region)) entries.set(date, name);
   }
-  for (const item of overrides?.added || []) {
+  const added = Array.isArray(overrides?.added) ? overrides.added : [];
+  const removed = Array.isArray(overrides?.removed) ? overrides.removed : [];
+  for (const item of added) {
     if (!item || !isValidISO(item.date)) continue;
     entries.set(item.date, String(item.name || '').trim() || DEFAULT_NAME);
   }
-  for (const date of overrides?.removed || []) entries.delete(date);
+  for (const date of removed) entries.delete(date);
   return new Map([...entries].sort(([a], [b]) => compareISO(a, b)));
 }
 
@@ -203,7 +248,7 @@ export function bankHolidayMap({ region = 'none', overrides, fromYear, toYear, t
  */
 export function bankHolidaysBetween(start, end, map) {
   const out = [];
-  if (!map || !start || !end || end < start) return out;
+  if (!isMap(map) || !start || !end || end < start) return out;
   for (const [date, name] of map) {
     if (date >= start && date <= end) out.push({ date, name });
   }
@@ -217,7 +262,7 @@ export function bankHolidaysBetween(start, end, map) {
  * @returns {boolean}
  */
 export function isBankHoliday(iso, map) {
-  return !!map && map.has(iso);
+  return isMap(map) && map.has(iso);
 }
 
 /**
@@ -227,6 +272,6 @@ export function isBankHoliday(iso, map) {
  * @returns {string | null}
  */
 export function bankHolidayName(iso, map) {
-  if (!map || !map.has(iso)) return null;
+  if (!isMap(map) || !map.has(iso)) return null;
   return map.get(iso);
 }
