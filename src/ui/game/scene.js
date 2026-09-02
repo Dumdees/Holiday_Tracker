@@ -35,7 +35,7 @@ export function createScene(canvas, { onCoin } = {}) {
   const ctx = canvas.getContext('2d');
   let W = 820, H = 380, k = 1, dpr = 1; // W, H are logical; k scales logical → CSS pixels
   const world = {
-    level: 0, houses: [], agents: [], cars: [], clouds: [], particles: [], coins: [], birds: [], lamps: [], landmarks: [],
+    level: 0, homes: 1, cooldowns: {}, houses: [], agents: [], cars: [], clouds: [], particles: [], coins: [], birds: [], lamps: [], landmarks: [],
     prismatic: null, card: null, buildings: {}, effects: [], mode: 'manual', invoices: 0, teamSize: 0,
     names: [], starName: 'Sam', t: 0, now: Date.now(), lastFrame: 0, synced: false,
     shake: 0, flashUntil: 0, expandFlash: 0, rocket: null, satelliteAngle: 0, rain: 0, rainCooldown: rand(60, 120),
@@ -61,27 +61,31 @@ export function createScene(canvas, { onCoin } = {}) {
 
   function layoutHouses() {
     const maxByWidth = Math.max(3, Math.floor((W - 180) / 58));
-    const count = clamp(Math.min(4 + world.level, maxByWidth), 3, 9);
+    const count = clamp(Math.min(world.homes, maxByWidth), 1, 9);
     const left = 135, right = W - 26;
     const gap = (right - left) / count;
     const w = Math.min(56, gap * 0.82);
     const old = world.houses;
     world.houses = Array.from({ length: count }, (_, i) => ({
       x: left + gap * i + gap / 2, w, colour: HOUSE_COLOURS[(i + world.level) % HOUSE_COLOURS.length], roof: i % 2 ? '#c96b4d' : '#8b6b5a', tall: i % 3 === 1,
-      glow: old[i] ? old[i].glow : 0, pop: old[i] ? old[i].pop : 1,
+      glow: old[i] ? old[i].glow : 0, pop: old[i] ? old[i].pop : (world.synced ? 0 : 1), busy: old[i] ? old[i].busy : -1, shake: 0,
     }));
-    world.lamps = world.houses.slice(0, -1).map((h) => h.x + gap / 2);
+    if (world.synced && count > old.length) { const h = world.houses[count - 1]; burst(h.x, pavementY() - 40, 'sparkle', 10); floatText('New client! 🏠', h.x, pavementY() - 70); }
+    world.lamps = count > 1 ? world.houses.slice(0, -1).map((h) => h.x + gap / 2) : [W * 0.55];
     if (!world.clouds.length) world.clouds = Array.from({ length: 5 }, () => ({ x: rand(0, W), y: rand(14, H * 0.28), w: rand(50, 110), speed: rand(4, 10) }));
-    for (const a of world.agents) if (a.house >= count) { a.house = -1; a.state = 'idle'; a.timer = 0.2; }
+    for (const a of world.agents) { if (a.house >= count) { a.house = -1; a.state = 'idle'; a.timer = 0.2; } else if (a.house >= 0 && a.state === 'walk') a.targetX = world.houses[a.house].x; }
   }
 
   function makeAgent(i, name) {
-    return { id: i, name, colour: hueColour(i), skin: SKIN[i % SKIN.length], hair: HAIR[(i * 5) % HAIR.length], x: officeX() + rand(-12, 12), targetX: officeX(), state: 'idle', timer: rand(0.2, 2), speed: rand(34, 48), dir: 1, phase: rand(0, TWO_PI), house: -1, pop: 0, dash: 0 };
+    return { id: i, name, colour: hueColour(i), skin: SKIN[i % SKIN.length], hair: HAIR[(i * 5) % HAIR.length], x: officeX() + rand(-12, 12), targetX: officeX(), state: 'idle', timer: rand(0.2, 2), speed: rand(34, 48), dir: 1, phase: rand(0, TWO_PI), house: -1, pop: 0, dash: 0, waiting: false };
   }
 
   /** Keep the scene in step with the game state. Cheap; called every tick. */
   function sync(state, names, now) {
     world.now = now; world.names = names; world.starName = names[0] || 'Sam';
+    world.cooldowns = state.cooldowns || {};
+    const homes = Math.max(1, state.buildings.home || 0);
+    if (world.homes !== homes) { world.homes = homes; layoutHouses(); }
     if (world.level !== state.level) {
       world.level = state.level; layoutHouses();
       for (const h of world.houses) h.pop = 0;
@@ -89,14 +93,18 @@ export function createScene(canvas, { onCoin } = {}) {
     }
     const carers = state.buildings.carer || 0;
     world.teamSize = carers;
-    const wanted = clamp(1 + carers, 1, MAX_AGENTS);
+    // Carers with a home to visit are shown working (up to the houses on screen); a few without one wait at the office.
+    const working = Math.min(world.houses.length, Math.min(carers, homes), MAX_AGENTS - 1);
+    const waiting = Math.min(3, Math.max(0, carers - homes), MAX_AGENTS - 1 - working);
+    const wanted = 1 + working + waiting;
     while (world.agents.length < wanted) {
       const i = world.agents.length;
       const a = makeAgent(i, i === 0 ? world.starName : (names[(i - 1) % Math.max(1, names.length)] || `Carer ${i}`));
       world.agents.push(a);
       if (world.synced && i > 0) { burst(a.x, pavementY() - 30, 'sparkle', 8); floatText('Hello! 👋', a.x, pavementY() - 52); }
     }
-    while (world.agents.length > wanted) world.agents.pop();
+    while (world.agents.length > wanted) { const gone = world.agents.pop(); if (gone.house >= 0 && world.houses[gone.house]) world.houses[gone.house].busy = -1; }
+    world.agents.forEach((a, i) => { const shouldWait = i > working; if (a.waiting !== shouldWait) { a.waiting = shouldWait; if (shouldWait) { if (a.house >= 0 && world.houses[a.house]) world.houses[a.house].busy = -1; a.house = -1; a.targetX = officeX() + rand(-16, 16); a.state = 'walk'; } } });
     world.agents[0].name = world.starName;
     const cars = clamp(state.buildings.car || 0, 0, 5);
     while (world.cars.length < cars) {
@@ -157,10 +165,20 @@ export function createScene(canvas, { onCoin } = {}) {
   }
 
   /** The player tapped the world at CSS pixel (x, y): the star carer dashes to the nearest house. */
-  function playerVisit(cssX, cssY, hearts = 3) {
+  function houseAt(cssX) { return nearestHouse(cssX / k); }
+  function houseCount() { return world.houses.length; }
+
+  /** The player tapped a home that is still cooling down: a wobble and a word. */
+  function refuse(index) {
+    const h = world.houses[index]; if (!h) return;
+    h.shake = 0.4;
+    if (world.t - (h.refusedAt || -9) > 1.2) { h.refusedAt = world.t; floatText('Just visited – give them a minute', h.x, pavementY() - 80); }
+  }
+
+  function playerVisit(cssX, cssY, hearts = 3, index = -1) {
     const x = cssX / k, y = cssY / k;
     const a = world.agents[0];
-    const hi = nearestHouse(x);
+    const hi = index >= 0 && world.houses[index] ? index : nearestHouse(x);
     const house = world.houses[hi];
     a.house = hi; a.targetX = house.x + rand(-10, 10); a.state = 'walk'; a.dash = 1;
     house.glow = 1;
@@ -211,7 +229,11 @@ export function createScene(canvas, { onCoin } = {}) {
       a.dash = Math.max(0, a.dash - dt * 0.7);
       if (a.state === 'idle') {
         a.timer -= dt;
-        if (a.timer <= 0) { a.house = Math.floor(Math.random() * world.houses.length); a.targetX = world.houses[a.house].x + rand(-14, 14); a.state = 'walk'; }
+        if (a.timer <= 0 && !a.waiting) {
+          const free = world.houses.map((h, i) => (h.busy < 0 ? i : -1)).filter((i) => i >= 0);
+          if (free.length) { a.house = free[Math.floor(Math.random() * free.length)]; world.houses[a.house].busy = a.id; a.targetX = world.houses[a.house].x + rand(-14, 14); a.state = 'walk'; }
+          else a.timer = rand(0.3, 0.8);
+        }
       } else if (a.state === 'walk') {
         const dx = a.targetX - a.x; a.dir = dx >= 0 ? 1 : -1;
         const stepX = a.speed * rush * dt * (a.id === 0 ? 1.15 + a.dash * 1.8 : 1);
@@ -223,13 +245,12 @@ export function createScene(canvas, { onCoin } = {}) {
       } else if (a.state === 'visit') {
         a.timer -= dt;
         if (a.timer <= 0) {
-          if (a.house >= 0) launchCoin(a.x, pavementY() - 34);
-          if (Math.random() < 0.35) { a.house = -1; a.targetX = officeX() + rand(-12, 12); a.state = 'walk'; }
-          else { a.house = Math.floor(Math.random() * world.houses.length); a.targetX = world.houses[a.house].x + rand(-14, 14); a.state = 'walk'; }
+          if (a.house >= 0) { launchCoin(a.x, pavementY() - 34); if (world.houses[a.house]) world.houses[a.house].busy = -1; }
+          a.house = -1; a.targetX = officeX() + rand(-12, 12); a.state = 'walk';
         }
       }
     }
-    for (const h of world.houses) { h.glow = Math.max(0, h.glow - dt * 0.8); h.pop = Math.min(1, h.pop + dt * 1.8); }
+    for (const h of world.houses) { h.glow = Math.max(0, h.glow - dt * 0.8); h.pop = Math.min(1, h.pop + dt * 1.8); h.shake = Math.max(0, h.shake - dt); }
     for (const m of world.landmarks) m.pop = Math.min(1, m.pop + dt * 2);
     for (const c of world.cars) { c.x += c.dir * c.speed * rush * dt; c.honk = Math.max(0, c.honk - dt); if (c.x > W + 60) c.x = -60; if (c.x < -60) c.x = W + 60; }
     for (const c of world.clouds) { c.x += c.speed * dt; if (c.x - c.w > W) c.x = -c.w; }
@@ -385,7 +406,8 @@ export function createScene(canvas, { onCoin } = {}) {
     const y = pavementY() + 2, w = h.w, hh = h.tall ? 58 : 46;
     const visited = world.agents.some((a) => a.state === 'visit' && a.house === i);
     const s = h.pop < 1 ? 0.2 + 0.8 * h.pop : 1;
-    ctx.save(); ctx.translate(h.x, y); ctx.scale(s, s); ctx.translate(-h.x, -y);
+    const cool = Math.max(0, ((world.cooldowns[i] || 0) - world.now) / 1000);
+    ctx.save(); ctx.translate(h.x + (h.shake > 0 ? Math.sin(world.t * 60) * 3 * h.shake : 0), y); ctx.scale(s, s); ctx.translate(-h.x, -y);
     if (th().space) {
       const r = w / 2 + 6;
       const g = ctx.createRadialGradient(h.x - r * 0.3, y - r * 0.8, 2, h.x, y - r * 0.3, r); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, h.colour);
@@ -406,6 +428,11 @@ export function createScene(canvas, { onCoin } = {}) {
       if (h.glow > 0.05) { ctx.fillStyle = `rgba(255, 210, 90, ${h.glow * 0.35})`; ctx.beginPath(); ctx.arc(h.x, y - 10, 22, 0, TWO_PI); ctx.fill(); }
       if ((world.buildings.sensors || 0) > 0) { ctx.strokeStyle = `rgba(80, 160, 230, ${0.4 + 0.3 * Math.sin(world.t * 3 + h.x)})`; ctx.lineWidth = 1.5; for (let r = 5; r <= 13; r += 4) { ctx.beginPath(); ctx.arc(h.x + w / 2 - 4, y - hh - 6, r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); } }
       if ((world.buildings.franchise || 0) > 0) { ctx.fillStyle = CAR_COLOURS[i % 3]; ctx.fillRect(h.x - w / 2 - 2, y - hh - 30, 2, 22); ctx.beginPath(); ctx.moveTo(h.x - w / 2, y - hh - 30); ctx.lineTo(h.x - w / 2 + 12, y - hh - 26); ctx.lineTo(h.x - w / 2, y - hh - 22); ctx.fill(); }
+    }
+    if (cool > 0) {
+      const top = y - (th().space ? w / 2 + 22 : hh + 30);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(h.x, top, 9, 0, TWO_PI); ctx.fill();
+      ctx.strokeStyle = '#E5734A'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(h.x, top, 7, -Math.PI / 2, -Math.PI / 2 + TWO_PI * Math.min(1, cool / 1.5)); ctx.stroke();
     }
     ctx.restore();
   }
@@ -436,6 +463,7 @@ export function createScene(canvas, { onCoin } = {}) {
     if (space) { ctx.fillStyle = 'rgba(200,230,255,.35)'; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, -35, 10, 0, TWO_PI); ctx.fill(); ctx.stroke(); }
     ctx.restore();
     ctx.textAlign = 'center';
+    if (a.waiting && a.state !== 'walk') { ctx.font = `12px ${EMOJI_FONT}`; ctx.fillText('⏳', x, y - 48 + Math.sin(world.t * 3 + a.id) * 2); }
     if (isStar) {
       ctx.font = `700 11px ${UI_FONT}`; ctx.fillStyle = '#fff'; const tw = ctx.measureText(a.name).width + 10;
       ctx.beginPath(); ctx.roundRect(x - tw / 2, y + 6, tw, 15, 7); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.fillText(a.name, x, y + 17);
@@ -532,7 +560,7 @@ export function createScene(canvas, { onCoin } = {}) {
   raf = requestAnimationFrame(frame);
 
   return {
-    sync, playerVisit, hitTest, spawnPos, celebrate,
+    sync, playerVisit, hitTest, spawnPos, celebrate, houseAt, houseCount, refuse,
     destroy() { cancelAnimationFrame(raf); ro?.disconnect(); },
   };
 }

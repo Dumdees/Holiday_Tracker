@@ -8,6 +8,7 @@ const ADMIN_COLLECT_EVERY = 5;
 const SPAWN_LIFETIME = 13;
 const PRISMATIC_CHANCE_PER_SECOND = 1 / 210;
 const CARD_CHANCE_PER_SECOND = 1 / 70;
+export const HOUSE_COOLDOWN_MS = 1500; // a home just visited by the player needs a moment before the next knock
 
 const BUILDINGS_BY_ID = new Map(BUILDINGS.map((b) => [b.id, b]));
 const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
@@ -26,7 +27,7 @@ export function newGame(now = Date.now()) {
     visits: 0,
     clicks: 0,
     collections: 0,
-    buildings: {},
+    buildings: { home: 1 },  // you start with one client home; every carer needs one
     upgrades: [],
     achievements: [],
     level: 0,
@@ -36,6 +37,7 @@ export function newGame(now = Date.now()) {
     effects: [],            // { id, name, emoji, until, prodMult?, clickMult? }
     spawn: null,            // { type: 'prismatic'|'card', name, x, y, until }
     spawnsThisRun: 0,
+    cooldowns: {},          // house index → timestamp until which the player cannot visit it
     prismaticHires: [],     // names of permanent prismatic carers this run
     prismaticsMet: 0,
     cardsOpened: 0,
@@ -49,9 +51,10 @@ export function newGame(now = Date.now()) {
 /** Apply the starting bonuses from perks to a fresh run. */
 function applyStartPerks(state) {
   if (state.perks.includes('admin') && !state.upgrades.includes('admin')) state.upgrades.push('admin');
-  if (state.perks.includes('alumni')) state.buildings.carer = Math.max(state.buildings.carer || 0, 5);
+  if (state.perks.includes('alumni')) { state.buildings.carer = Math.max(state.buildings.carer || 0, 5); state.buildings.home = Math.max(state.buildings.home || 0, 5); }
   if (state.perks.includes('momentum')) {
     state.buildings.carer = Math.max(state.buildings.carer || 0, 25);
+    state.buildings.home = Math.max(state.buildings.home || 0, 25);
     state.buildings.car = Math.max(state.buildings.car || 0, 5);
   }
 }
@@ -60,7 +63,7 @@ function applyStartPerks(state) {
 export function loadGame(saved, now = Date.now()) {
   const fresh = newGame(now);
   if (!saved || typeof saved !== 'object') return { state: fresh, offline: null };
-  const state = { ...fresh, ...saved, buildings: { ...(saved.buildings || {}) }, upgrades: [...(saved.upgrades || [])], achievements: [...(saved.achievements || [])], perks: [...(saved.perks || [])], effects: [...(saved.effects || [])].filter((e) => e && e.until > now), spawn: null, prismaticHires: [...(saved.prismaticHires || [])], log: [...(saved.log || [])].slice(0, 12) };
+  const state = { ...fresh, ...saved, buildings: { ...(saved.buildings || {}) }, upgrades: [...(saved.upgrades || [])], achievements: [...(saved.achievements || [])], perks: [...(saved.perks || [])], effects: [...(saved.effects || [])].filter((e) => e && e.until > now), spawn: null, cooldowns: {}, prismaticHires: [...(saved.prismaticHires || [])], log: [...(saved.log || [])].slice(0, 12) };
   state.version = SAVE_VERSION;
   const offline = applyOffline(state, now);
   state.lastSeen = now;
@@ -116,10 +119,34 @@ export function globalMultiplier(state, now = Date.now()) {
   return m;
 }
 
+/** How many of a building are actually working: carers need a free client home each. */
+export function workingCount(state, id) {
+  const owned = state.buildings[id] || 0;
+  if (id === 'carer') return Math.min(owned, state.buildings.home || 0);
+  return owned;
+}
+
+/** Carers with nowhere to go until more client homes are bought. */
+export function carersWaiting(state) {
+  return Math.max(0, (state.buildings.carer || 0) - (state.buildings.home || 0));
+}
+
 export function visitsPerSecond(state) {
   let total = 0;
-  for (const b of BUILDINGS) total += (state.buildings[b.id] || 0) * buildingRate(state, b.id);
+  for (const b of BUILDINGS) total += workingCount(state, b.id) * buildingRate(state, b.id);
   return total;
+}
+
+/** Seconds before house `index` can be visited by the player again (0 = ready). */
+export function houseCooldown(state, index, now = Date.now()) {
+  const until = state.cooldowns ? state.cooldowns[index] || 0 : 0;
+  return Math.max(0, (until - now) / 1000);
+}
+
+/** The first of `count` houses that is ready to visit, or -1 if all are cooling down. */
+export function readyHouse(state, count, now = Date.now()) {
+  for (let i = 0; i < count; i++) if (houseCooldown(state, i, now) <= 0) return i;
+  return -1;
 }
 
 export function productionPerSecond(state, now = Date.now()) {
@@ -189,7 +216,10 @@ function addLog(state, emoji, text, now) {
 }
 
 /** The player does a visit themselves. */
-export function click(state, now = Date.now()) {
+export function click(state, now = Date.now(), house = 0) {
+  if (houseCooldown(state, house, now) > 0) return 0;
+  if (!state.cooldowns) state.cooldowns = {};
+  state.cooldowns[house] = now + HOUSE_COOLDOWN_MS;
   const earned = clickValue(state, now);
   state.clicks += 1;
   state.visits += 1;
@@ -396,6 +426,6 @@ export function perkList(state) {
 
 /** Plain data for saving. */
 export function serialise(state) {
-  const { spawn, effects, ...rest } = state;
+  const { spawn, effects, cooldowns, ...rest } = state;
   return { ...rest, effects: effects.filter((e) => e.until > Date.now()) };
 }

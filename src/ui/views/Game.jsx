@@ -167,9 +167,12 @@ export function Game() {
     setTimeout(() => setFloaters((f) => f.filter((z) => z.id !== id)), 900);
   }
 
-  function doVisit(x, y, rect) {
-    const earned = mutate((st) => G.click(st, Date.now()));
-    sceneRef.current?.playerVisit(x, y, frenzy ? 6 : 3);
+  function doVisit(x, y, rect, house = null) {
+    const scene = sceneRef.current;
+    const index = house !== null ? house : (scene ? scene.houseAt(x) : 0);
+    const earned = mutate((st) => G.click(st, Date.now(), index));
+    if (!earned) { scene?.refuse(index); return; }
+    scene?.playerVisit(x, y, frenzy ? 6 : 3, index);
     addFloater(`+${fmtMoney(earned)}`, (x / rect.width) * 100, (y / rect.height) * 100, frenzy ? 'big' : '');
     scheduleSave();
   }
@@ -187,7 +190,10 @@ export function Game() {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
     const rect = worldRef.current.getBoundingClientRect();
-    doVisit(rect.width * 0.5, rect.height * 0.6, rect);
+    const count = sceneRef.current ? sceneRef.current.houseCount() : 1;
+    const house = G.readyHouse(s, count, Date.now());
+    if (house < 0) return;
+    doVisit(rect.width * 0.5, rect.height * 0.6, rect, house);
   }
 
   function onCollect() {
@@ -244,6 +250,8 @@ export function Game() {
   const progress = G.expandProgress(s);
   const nextLocked = G.nextLockedBuilding(s);
   const onShift = s.buildings.carer || 0;
+  const homes = s.buildings.home || 0;
+  const waiting = G.carersWaiting(s);
   const tickerText = TICKER[tickerIndex].replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName).replace(/\{co\}/g, settings.value?.companyName || 'Monteith');
 
   return (
@@ -258,13 +266,14 @@ export function Game() {
             <div class="game-funds-main">{fmtMoney(s.funds)}</div>
             <div class="world-rate">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div>
           </div>
-          <div class="world-level">{level.emoji} {level.name} · {onShift ? `${fmtNum(onShift + 1)} on shift` : `${starName} on shift`}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
+          <div class="world-level">{level.emoji} {level.name} · 🏠 {fmtNum(homes)} {homes === 1 ? 'home' : 'homes'} · {onShift ? `${fmtNum(onShift + 1)} on shift` : `${starName} on shift`}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
+          {waiting > 0 ? <div class="world-warning">⏳ {fmtNum(waiting)} {waiting === 1 ? 'carer has' : 'carers have'} no home to visit – buy more client homes</div> : null}
           {activeEffects.length ? (
             <div class="world-effects">
               {activeEffects.map((e) => <span key={e.id} class={`effect-chip effect-${e.id}`}>{e.emoji} {e.name} · {fmtSeconds((e.until - now) / 1000)}</span>)}
             </div>
           ) : null}
-          {s.clicks < 8 ? <div class="world-hint">👆 Tap a house to send {starName} on a visit</div> : null}
+          {s.clicks < 8 ? <div class="world-hint">👆 Tap the house to send {starName} on a visit</div> : homes < 2 && s.clicks < 40 ? <div class="world-hint">🏠 Each home needs a moment between visits – buy more client homes in the shop</div> : null}
           {confetti ? <Confetti key={confetti} /> : null}
           {floaters.map((f) => <span key={f.id} class={`floater ${f.cls}`} style={{ left: f.x + '%', top: f.y + '%' }}>{f.text}</span>)}
           {spawnBox ? (
@@ -329,7 +338,7 @@ export function Game() {
                       <span class="building-emoji">{b.emoji}</span>
                       <span class="building-main">
                         <span class="building-name">{b.name}{owned ? <span class="building-owned">{fmtNum(owned)}</span> : null}</span>
-                        <span class="building-sub muted">{fmtRate(each)} each{owned ? ` · ${fmtRate(each * owned)} total` : ''}</span>
+                        <span class="building-sub muted">{b.rate ? `${fmtRate(each)} each${owned ? ` · ${fmtRate(each * owned)} total` : ''}` : `Room for one carer each${waiting ? ` · ${fmtNum(waiting)} waiting for one` : ''}`}</span>
                       </span>
                       <span class="building-buy"><span class="building-cost">{fmtMoney(cost)}</span><span class="muted small">buy {qty === 1 ? '1' : qty}</span></span>
                     </button>

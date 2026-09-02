@@ -17,6 +17,28 @@ test('a new game starts with nothing and the player must click', () => {
   assert.equal(s.funds, 1);
   assert.equal(s.visits, 1);
   assert.equal(g.collectionMode(s), 'manual');
+  assert.deepEqual(s.buildings, { home: 1 }, 'one client home to start');
+  assert.equal(g.click(s, T0 + 500), 0, 'the same home cannot be visited again straight away');
+  assert.ok(g.houseCooldown(s, 0, T0 + 500) > 0);
+  assert.equal(g.readyHouse(s, 1, T0 + 500), -1);
+  assert.equal(g.click(s, T0 + 500, 1), 1, 'another home is fine');
+  assert.equal(g.click(s, T0 + g.HOUSE_COOLDOWN_MS), 1, 'ready again after the cooldown');
+  assert.equal(g.serialise(s).cooldowns, undefined, 'cooldowns are not saved');
+});
+
+test('carers only work when they have a client home each', () => {
+  const s = g.newGame(T0);
+  s.funds = 1e6;
+  g.buyBuilding(s, 'carer', 3);
+  assert.equal(g.workingCount(s, 'carer'), 1, '3 carers, 1 home: one works');
+  assert.equal(g.carersWaiting(s), 2);
+  assert.equal(g.visitsPerSecond(s), 0.2);
+  g.buyBuilding(s, 'home', 2);
+  assert.equal(g.workingCount(s, 'carer'), 3);
+  assert.equal(g.carersWaiting(s), 0);
+  assert.ok(Math.abs(g.visitsPerSecond(s) - 0.6) < 1e-9);
+  g.buyBuilding(s, 'car', 1);
+  assert.ok(Math.abs(g.visitsPerSecond(s) - 1.6) < 1e-9, 'cars are not gated by homes');
 });
 
 test('buildings cost 15% more each time and produce into invoices until collected', () => {
@@ -87,7 +109,7 @@ test('breakpoints gate buildings and expanding resets the run but keeps legacy',
   const r = g.expand(s, T0 + 1000);
   assert.deepEqual(r, { gained, level: 1 });
   assert.equal(s.funds, 0);
-  assert.deepEqual(s.buildings, {});
+  assert.deepEqual(s.buildings, { home: 1 });
   assert.equal(s.runEarned, 0);
   assert.equal(s.lifetimeEarned, 6e4, 'lifetime kept');
   assert.equal(s.starsEarned, gained);
@@ -200,6 +222,8 @@ test('buying max and formatting', () => {
   assert.equal(fmtNum(2.5), '2.5');
   assert.equal(fmtSeconds(75), '1m 15s');
   assert.equal(fmtSeconds(3600 * 5), '5h');
-  for (const b of BUILDINGS) assert.ok(b.rate > 0 && b.baseCost > 0);
-  for (let i = 1; i < BUILDINGS.length; i++) assert.ok(BUILDINGS[i].baseCost > BUILDINGS[i - 1].baseCost && BUILDINGS[i].rate > BUILDINGS[i - 1].rate);
+  assert.equal(BUILDINGS[0].id, 'home');
+  const producers = BUILDINGS.filter((b) => b.id !== 'home');
+  for (const b of producers) assert.ok(b.rate > 0 && b.baseCost > 0);
+  for (let i = 1; i < producers.length; i++) assert.ok(producers[i].baseCost > producers[i - 1].baseCost && producers[i].rate > producers[i - 1].rate);
 });

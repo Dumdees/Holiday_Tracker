@@ -5,6 +5,7 @@ export const COST_GROWTH = 1.15;
 
 /** Things that deliver visits on their own. `rate` = visits per second each. `level` = expansion level needed. */
 export const BUILDINGS = [
+  { id: 'home', name: 'Client home', plural: 'Client homes', emoji: '🏠', baseCost: 10, rate: 0, level: 0, blurb: 'Someone who needs care. Every carer needs a home to visit, and a home takes one carer at a time.' },
   { id: 'carer', name: 'Carer', plural: 'Carers', emoji: '👩‍⚕️', baseCost: 15, rate: 0.2, level: 0, blurb: 'A kind pair of hands doing visits on foot.' },
   { id: 'car', name: 'Care car', plural: 'Care cars', emoji: '🚗', baseCost: 100, rate: 1, level: 0, blurb: 'Gets the team from door to door.' },
   { id: 'rota', name: 'Rota app', plural: 'Rota apps', emoji: '📱', baseCost: 1100, rate: 8, level: 0, blurb: 'No more double-booked Tuesdays.' },
@@ -43,13 +44,13 @@ export function levelInfo(level) {
 /** Permanent perks bought with Legacy Stars. */
 export const PERKS = [
   { id: 'admin', name: 'Head office', emoji: '🏛️', cost: 2, blurb: 'Every new run starts with payments collected automatically.' },
-  { id: 'alumni', name: 'Alumni network', emoji: '🎓', cost: 8, blurb: 'Start each run with 5 carers already on the team.' },
+  { id: 'alumni', name: 'Alumni network', emoji: '🎓', cost: 8, blurb: 'Start each run with 5 carers and 5 client homes.' },
   { id: 'magnet', name: 'Prismatic magnet', emoji: '🌈', cost: 15, blurb: 'Prismatic carers appear twice as often.' },
   { id: 'cards', name: 'Card collector', emoji: '💌', cost: 20, blurb: 'Thank-you cards appear twice as often.' },
   { id: 'playbook', name: 'Franchise playbook', emoji: '📘', cost: 40, blurb: 'Everything costs 10% less.' },
   { id: 'nightshift', name: 'Night shift', emoji: '🌙', cost: 60, blurb: 'Earn at full speed while the game is closed, instead of half.' },
   { id: 'legend', name: 'Living legend', emoji: '🏆', cost: 120, blurb: 'Your clicks are 10 times stronger.' },
-  { id: 'momentum', name: 'Momentum', emoji: '⚡', cost: 250, blurb: 'Start each run with 25 carers and 5 care cars.' },
+  { id: 'momentum', name: 'Momentum', emoji: '⚡', cost: 250, blurb: 'Start each run with 25 carers, 25 client homes and 5 care cars.' },
 ];
 
 const TIER_COUNTS = [1, 5, 25, 50, 100, 200];
@@ -72,6 +73,7 @@ const TIER_NAMES = {
 /** Upgrades bought with money. `unlock(state)` decides when they appear. */
 export const UPGRADES = [];
 for (const b of BUILDINGS) {
+  if (!b.rate) continue; // homes are capacity, not production
   TIER_COUNTS.forEach((count, i) => {
     UPGRADES.push({
       id: `${b.id}-t${i + 1}`, name: TIER_NAMES[b.id][i], emoji: b.emoji, kind: 'building', building: b.id,
@@ -107,6 +109,8 @@ export const ACHIEVEMENTS = [
   { id: 'busy-bee', name: 'Busy bee', emoji: '🐝', blurb: 'Do 1,000 visits yourself.', test: (s) => s.clicks >= 1000 },
   { id: 'click-hero', name: 'Hands of steel', emoji: '💪', blurb: 'Do 10,000 visits yourself.', test: (s) => s.clicks >= 10000 },
   { id: 'first-hire', name: 'Welcome aboard', emoji: '🎉', blurb: 'Hire your first carer.', test: (s) => (s.buildings.carer || 0) >= 1 },
+  { id: 'street', name: 'Whole street', emoji: '🏘️', blurb: 'Care for 10 client homes.', test: (s) => (s.buildings.home || 0) >= 10 },
+  { id: 'neighbourhood', name: 'Neighbourhood', emoji: '🏙️', blurb: 'Care for 100 client homes.', test: (s) => (s.buildings.home || 0) >= 100 },
   { id: 'team-10', name: 'Proper team', emoji: '👥', blurb: 'Have 10 carers.', test: (s) => (s.buildings.carer || 0) >= 10 },
   { id: 'team-50', name: 'Big family', emoji: '🏡', blurb: 'Have 50 carers.', test: (s) => (s.buildings.carer || 0) >= 50 },
   { id: 'team-100', name: 'Care army', emoji: '🛡️', blurb: 'Have 100 carers.', test: (s) => (s.buildings.carer || 0) >= 100 },

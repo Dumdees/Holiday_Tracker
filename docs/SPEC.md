@@ -56,8 +56,10 @@ jargon. British English. Dates like "Mon 3 Mar 2026". Money never appears. Days 
 A Cookie-Clicker-style idle game in the menu, kept entirely separate from holiday data (saved under
 `localStorage['mhm:game']`). Pure engine in `src/core/game/` (`data.js` content, `engine.js` maths,
 `format.js` numbers), screen in `src/ui/views/Game.jsx`, state in `src/ui/game/gameStore.js`.
-Loop: click the star carer to do a visit → payments pile up as invoices until collected by hand →
-buy carers (named after the real team), cars, rota apps, offices, academies, hubs, networks,
+Loop: tap a client home to do a visit (each home then cools down for 1.5 s, `HOUSE_COOLDOWN_MS`) →
+payments pile up as invoices until collected by hand → buy client homes (you start with one; a home
+takes one carer at a time, so `workingCount('carer') = min(carers, homes)` and the rest wait) and
+carers (named after the real team), cars, rota apps, offices, academies, hubs, networks,
 sensors, franchises, satellites, lunar bases and starships (cost ×1.15 each) → upgrades unlock by
 ownership/clicks/earnings → office admin then direct debit automate collection → reaching a level
 threshold (`LEVELS`) lets you expand: the run resets, Legacy Stars (cbrt(lifetime/1e4)) are kept
