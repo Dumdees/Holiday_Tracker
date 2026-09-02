@@ -15,6 +15,8 @@ namespace MonteithHolidayManager
             bool smoke = Array.IndexOf(args, "--smoke-test") >= 0;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            // The installer looks for this name so it can ask the user to close the app before upgrading.
+            using (new System.Threading.Mutex(false, "MonteithHolidayManagerRunning"))
             using (var form = new MainForm(smoke))
             {
                 Application.Run(form);

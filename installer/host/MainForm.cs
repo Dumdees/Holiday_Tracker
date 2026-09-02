@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -88,9 +89,13 @@ namespace MonteithHolidayManager
             {
                 Fail(2, "This app needs the Microsoft Edge WebView2 component, which is normally part of Windows.\n\nPlease run the Monteith Holiday Manager installer again – it adds the component if it is missing.");
             }
+            catch (Exception ex) when (ex is BadImageFormatException || ex is DllNotFoundException || (ex.HResult == unchecked((int)0x8007000B)))
+            {
+                Fail(6, "Sorry – the app couldn't start because a part of it doesn't match this computer.\n\nPlease download the latest installer and run it again.\n\n" + Diagnostics(ex));
+            }
             catch (Exception ex)
             {
-                Fail(6, "Sorry – the app couldn't start.\n\n" + ex.Message);
+                Fail(6, "Sorry – the app couldn't start.\n\n" + ex.Message + "\n\n" + Diagnostics(ex));
             }
         }
 
@@ -121,6 +126,15 @@ namespace MonteithHolidayManager
             }
             _closingChecked = true;
             Close();
+        }
+
+        /// <summary>One line of technical detail to quote if something goes wrong.</summary>
+        private static string Diagnostics(Exception ex)
+        {
+            string dir = AppDomain.CurrentDomain.BaseDirectory;
+            string arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+            bool loader = File.Exists(Path.Combine(dir, arch, "WebView2Loader.dll")) || File.Exists(Path.Combine(dir, "runtimes", "win-" + arch, "native", "WebView2Loader.dll"));
+            return "(Details for support: " + arch + " program on " + RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant() + " Windows, helper " + (loader ? "present" : "missing") + ", " + ex.GetType().Name + ")";
         }
 
         private static void OpenExternally(string uri)

@@ -37,6 +37,24 @@ if (!has('--smoke-test') || has('--version')) {
   for (const f of ['Monteith Holiday Manager.html', 'READ ME FIRST.txt']) cpSync(path.join(srcFolder, f), path.join(dist, f));
   cpSync(hostOut, dist, { recursive: true });
   for (const f of readdirSync(dist)) if (/\.(pdb|xml)$/i.test(f) || /\.dll\.config$/i.test(f)) unlinkSync(path.join(dist, f));
+  // The native helper must be present for every Windows architecture, in both layouts the
+  // WebView2 SDK looks in (x64\ and runtimes\win-x64\native\), or the app fails with
+  // "incorrect format" on machines whose architecture differs from the build machine's.
+  const pkgVersion = readFileSync(path.join(root, 'installer', 'host', 'MonteithHolidayManager.csproj'), 'utf8').match(/Microsoft\.Web\.WebView2" Version="([^"]+)"/)[1];
+  const nuget = path.join(process.env.NUGET_PACKAGES || path.join(os.homedir(), '.nuget', 'packages'), 'microsoft.web.webview2', pkgVersion, 'runtimes');
+  for (const arch of ['x86', 'x64', 'arm64']) {
+    const src = path.join(nuget, `win-${arch}`, 'native', 'WebView2Loader.dll');
+    if (!existsSync(src)) { console.error('Missing native helper in the package cache:', src); process.exit(1); }
+    for (const dest of [path.join(dist, arch, 'WebView2Loader.dll'), path.join(dist, 'runtimes', `win-${arch}`, 'native', 'WebView2Loader.dll')]) {
+      mkdirSync(path.dirname(dest), { recursive: true });
+      cpSync(src, dest);
+    }
+  }
+  const rootLoader = path.join(dist, 'WebView2Loader.dll');
+  if (existsSync(rootLoader)) unlinkSync(rootLoader); // never leave a single-architecture copy where it shadows the right one
+  for (const arch of ['x86', 'x64', 'arm64']) for (const f of [path.join(dist, arch, 'WebView2Loader.dll'), path.join(dist, 'runtimes', `win-${arch}`, 'native', 'WebView2Loader.dll')]) {
+    if (!existsSync(f)) { console.error('Native helper missing after assembly:', f); process.exit(1); }
+  }
   console.log('Assembled', dist);
   for (const f of readdirSync(dist)) console.log('  ', f, statSync(path.join(dist, f)).isDirectory() ? '(folder)' : `${statSync(path.join(dist, f)).size} bytes`);
 }

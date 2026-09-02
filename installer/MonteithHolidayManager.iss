@@ -37,6 +37,7 @@ ShowLanguageDialog=no
 CloseApplications=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
+AppMutex=MonteithHolidayManagerRunning
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -53,6 +54,14 @@ Name: "desktopicon"; Description: "Put an icon on the Desktop"; GroupDescription
 [Files]
 Source: "{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#WebView2Bootstrapper}"; Flags: dontcopy
+
+[InstallDelete]
+; Files from earlier versions that are no longer used (the installer upgrades in place).
+Type: files; Name: "{app}\Open Monteith Holiday Manager.bat"
+Type: files; Name: "{app}\icon.ico"
+Type: files; Name: "{app}\WebView2Loader.dll"
+Type: files; Name: "{autoprograms}\{#AppName}.lnk"
+Type: files; Name: "{autodesktop}\{#AppName}.lnk"
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; Comment: "Plan carers' holidays"
