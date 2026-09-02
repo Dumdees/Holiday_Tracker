@@ -46,6 +46,20 @@ instead (if Windows asks whether you're sure, click *Run*). Full instructions ar
 - **Undo** on every change, half days, bank-holiday-aware day counting, and a friendly first-run
   welcome.
 
+## What it looks like
+
+| Home | Calendar |
+| --- | --- |
+| ![Home screen showing who is off today, upcoming holidays and things needing attention](docs/screenshots/home.png) | ![Month calendar with a colour-coded chip for each carer who is off](docs/screenshots/calendar.png) |
+
+| Carers | Reports |
+| --- | --- |
+| ![Searchable carer cards showing days left](docs/screenshots/carers.png) | ![Reports page with usage per carer, leave by month and a heat map](docs/screenshots/reports.png) |
+
+Adding holidays for several carers at once, with clashes explained before you confirm:
+
+![Bulk add preview listing each carer, the days used and any clash warnings](docs/screenshots/bulk-add.png)
+
 ## For the technically minded
 
 Source lives in `src/` (Preact + signals, plain CSS). `npm install`, then:
