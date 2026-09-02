@@ -127,7 +127,7 @@ export function createScene(canvas, { onCoin } = {}) {
       if (!world.prismatic || world.prismatic.born !== state.spawn.born) world.prismatic = { born: state.spawn.born, until: state.spawn.until, name: state.spawn.name, x: -40, phase: 0 };
     } else world.prismatic = null;
     if (state.spawn && state.spawn.type === 'card') {
-      if (!world.card || world.card.born !== state.spawn.born) world.card = { born: state.spawn.born, until: state.spawn.until, x: lerp(150, W - 70, state.spawn.x / 100), y: -30, targetY: H * 0.16 + (state.spawn.y / 100) * H * 0.18, phase: 0 };
+      if (!world.card || world.card.born !== state.spawn.born) world.card = { born: state.spawn.born, until: state.spawn.until, x: lerp(Math.min(300, W * 0.45), W - 70, state.spawn.x / 100), y: -30, targetY: H * 0.2 + (state.spawn.y / 100) * H * 0.2, phase: 0 };
     } else world.card = null;
     if ((state.buildings.starship || 0) > 0 && !world.rocket && Math.random() < 0.004) world.rocket = { x: -60, y: H * 0.35, t: 0 };
     world.synced = true;

@@ -144,6 +144,15 @@ test('prismatic carers and thank-you cards spawn, expire, and do fun things', ()
   assert.deepEqual(s.prismaticHires, ['Ewan MacLeod']);
 });
 
+test('a boost that is still running survives closing and reopening the game', () => {
+  const now = Date.now();
+  const s = g.newGame(now);
+  s.effects.push({ id: 'double-time', name: 'Double time', emoji: '⏩', until: now + 30000, prodMult: 2 });
+  s.effects.push({ id: 'old', name: 'Old', emoji: 'x', until: now - 1, prodMult: 9 });
+  const { state } = g.loadGame(JSON.parse(JSON.stringify(g.serialise(s))), now + 1000);
+  assert.deepEqual(state.effects.map((e) => e.id), ['double-time']);
+});
+
 test('achievements unlock and boost income; team names come from the real carers', () => {
   const s = g.newGame(T0);
   g.click(s, T0);

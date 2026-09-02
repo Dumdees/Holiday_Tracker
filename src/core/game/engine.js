@@ -60,7 +60,7 @@ function applyStartPerks(state) {
 export function loadGame(saved, now = Date.now()) {
   const fresh = newGame(now);
   if (!saved || typeof saved !== 'object') return { state: fresh, offline: null };
-  const state = { ...fresh, ...saved, buildings: { ...(saved.buildings || {}) }, upgrades: [...(saved.upgrades || [])], achievements: [...(saved.achievements || [])], perks: [...(saved.perks || [])], effects: [], spawn: null, prismaticHires: [...(saved.prismaticHires || [])], log: [...(saved.log || [])].slice(0, 12) };
+  const state = { ...fresh, ...saved, buildings: { ...(saved.buildings || {}) }, upgrades: [...(saved.upgrades || [])], achievements: [...(saved.achievements || [])], perks: [...(saved.perks || [])], effects: [...(saved.effects || [])].filter((e) => e && e.until > now), spawn: null, prismaticHires: [...(saved.prismaticHires || [])], log: [...(saved.log || [])].slice(0, 12) };
   state.version = SAVE_VERSION;
   const offline = applyOffline(state, now);
   state.lastSeen = now;
