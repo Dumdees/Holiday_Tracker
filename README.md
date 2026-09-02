@@ -11,24 +11,27 @@ on the computer it runs on. Nothing is sent over the internet.
 ## Getting it onto a Windows computer
 
 1. Open the **Releases** page for this project (the link on the right-hand side of the
-   GitHub page) and download **`Monteith-Holiday-Manager.zip`** from the latest release.
-2. Open the downloaded ZIP and drag the folder called **`Monteith Holiday Manager`** somewhere
-   handy (your Desktop or Documents folder is ideal).
-3. Open that folder and double-click **`Monteith Holiday Manager`** (the file with the browser icon).
+   GitHub page) and download the file whose name ends in **`Setup.exe`**
+   (for example `Monteith-Holiday-Manager-Setup-1.0.0.exe`).
+2. Double-click the downloaded file and click **Next** until it finishes. No administrator
+   password is needed.
+3. A **Monteith Holiday Manager** icon appears on your Desktop and in the Start menu.
+   Double-click it whenever you want to open the app.
 
-That's it. The first time, a short welcome screen asks for your holiday year and teams.
-You can start with sample data to explore, and clear it later from *Settings → Advanced*.
+> **If Windows says "Windows protected your PC"**, click *More info* and then *Run anyway*.
+> This message appears simply because the installer isn't from a large software company;
+> the app itself never goes on the internet.
 
-Prefer a tidy window without the browser bar? Double-click **`Open Monteith Holiday Manager`**
-instead (if Windows asks whether you're sure, click *Run*). Full instructions are in
-`READ ME FIRST.txt` inside the folder.
+The first time, a short welcome screen asks for your holiday year and teams. You can start
+with sample data to explore, and clear it later from *Settings → Advanced*.
 
-> **Keep it in one browser.** Your data lives inside the browser you use to open the app,
-> so always open it the same way. Use *Settings → Backup* to save a backup file every week
-> – the Home screen reminds you.
+> **Keep it in one browser.** Your data lives inside the browser that opens the app (the icon
+> uses Microsoft Edge), so always open it from the icon. Use *Settings → Backup* to save a
+> backup file every week – the Home screen reminds you.
 
-If you can't see a release, the green **Code** button → **Download ZIP** gives you the whole
-project; the same `Monteith Holiday Manager` folder is inside it.
+**Prefer not to install anything?** The release also has `Monteith-Holiday-Manager.zip`:
+open it, drag the `Monteith Holiday Manager` folder to your Desktop, and double-click
+`Monteith Holiday Manager` inside it. `READ ME FIRST.txt` in the folder explains the rest.
 
 ## What it does
 
@@ -76,4 +79,6 @@ Source lives in `src/` (Preact + signals, plain CSS). `npm install`, then:
 | `npm run check` | All of the above |
 
 See `CLAUDE.md` and `docs/SPEC.md` for the architecture, data model and product spec.
-The built file is committed so the download-ZIP route always works.
+The built file is committed so the download-ZIP route always works. The Windows installer is
+built by the Release workflow with Inno Setup from `installer/MonteithHolidayManager.iss`; run
+`node scripts/make-icon.mjs` to regenerate the icon.

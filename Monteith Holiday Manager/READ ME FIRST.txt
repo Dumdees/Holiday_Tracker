@@ -3,6 +3,10 @@ MONTEITH PERSONAL CARE - HOLIDAY MANAGER
 
 HOW TO OPEN IT
 --------------
+If you used the installer: double-click the "Monteith Holiday Manager"
+icon on your Desktop or in the Start menu. That is all you need to do.
+
+If you have the folder instead:
 1. Double-click the file called "Monteith Holiday Manager".
    It opens in your web browser (Microsoft Edge or Google Chrome).
    That is all - there is nothing to install.

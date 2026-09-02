@@ -155,5 +155,9 @@ below is stable – add optional parameters rather than changing or removing any
 
 ## 7. Windows deployment
 Folder `Monteith Holiday Manager/` contains the built HTML, a `.bat` launcher that opens it in Edge as
-an app-style window, and a plain-English `READ ME FIRST.txt`. README.md at repo root explains download
-(Code → Download ZIP), unzip, double-click.
+an app-style window, and a plain-English `READ ME FIRST.txt`. The Release workflow (Windows runner)
+builds `Monteith-Holiday-Manager-Setup-<version>.exe` with Inno Setup from
+`installer/MonteithHolidayManager.iss` – a per-user install (no admin) to
+`%LocalAppData%\Programs\Monteith Holiday Manager` with Desktop and Start menu icons that launch Edge or
+Chrome in `--app` mode (falling back to the default browser) – and attaches it plus the ZIP to the
+GitHub release. README.md explains the download in plain English.
