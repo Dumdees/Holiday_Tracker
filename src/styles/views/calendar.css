@@ -1,7 +1,7 @@
 /* Calendar */
 .calendar-toolbar { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin-top: 14px; width: 100%; }
 .calendar-nav { flex-wrap: nowrap; }
-.calendar-filters { margin-left: auto; }
+.calendar-filters { margin-left: 0; }
 .calendar-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .chip-sample { width: 22px; height: 12px; border-radius: 4px; background: var(--peach-300); }
