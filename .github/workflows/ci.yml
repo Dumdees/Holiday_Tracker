@@ -12,6 +12,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm test
       - run: npm run build
       - name: Built file is up to date

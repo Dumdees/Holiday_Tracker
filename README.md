@@ -10,8 +10,9 @@ on the computer it runs on. Nothing is sent over the internet.
 
 ## Getting it onto a Windows computer
 
-1. On this page click the green **Code** button, then **Download ZIP**.
-2. Open the downloaded ZIP and copy the folder called **`Monteith Holiday Manager`** somewhere
+1. Open the **Releases** page for this project (the link on the right-hand side of the
+   GitHub page) and download **`Monteith-Holiday-Manager.zip`** from the latest release.
+2. Open the downloaded ZIP and drag the folder called **`Monteith Holiday Manager`** somewhere
    handy (your Desktop or Documents folder is ideal).
 3. Open that folder and double-click **`Monteith Holiday Manager`** (the file with the browser icon).
 
@@ -25,6 +26,9 @@ instead (if Windows asks whether you're sure, click *Run*). Full instructions ar
 > **Keep it in one browser.** Your data lives inside the browser you use to open the app,
 > so always open it the same way. Use *Settings → Backup* to save a backup file every week
 > – the Home screen reminds you.
+
+If you can't see a release, the green **Code** button → **Download ZIP** gives you the whole
+project; the same `Monteith Holiday Manager` folder is inside it.
 
 ## What it does
 
