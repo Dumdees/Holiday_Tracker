@@ -1,4 +1,5 @@
 // Care Empire – a light-hearted clicker game. Start with one carer and one street; end up caring for the galaxy.
+// The street itself is a living canvas scene (src/ui/game/scene.js); this view owns the game loop, the HUD and the shop.
 import { useState, useEffect, useRef, useMemo } from 'preact/hooks';
 import { navigate } from '../../app/router.js';
 import { PageHeader } from '../components/PageHeader.jsx';
@@ -12,14 +13,23 @@ import { toast } from '../components/Toast.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { carers, settings } from '../../store/store.js';
 import * as G from '../../core/game/engine.js';
-import { BUILDINGS, TICKER, levelInfo } from '../../core/game/data.js';
+import { TICKER, levelInfo } from '../../core/game/data.js';
 import { fmtMoney, fmtNum, fmtRate, fmtSeconds, fmtPercent } from '../../core/game/format.js';
 import { game, offlineReport, startGame, saveGame, scheduleSave, mutate, resetGame } from '../game/gameStore.js';
+import { createScene } from '../game/scene.js';
 
 const TICK_MS = 100;
 
 function initialsOf(name) {
   return String(name || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+}
+
+/** Restart a CSS animation on an element without going through state. */
+function pulse(el) {
+  if (!el) return;
+  el.classList.remove('pulse');
+  void el.offsetWidth;
+  el.classList.add('pulse');
 }
 
 function useCarerNames() {
@@ -37,19 +47,25 @@ function useCarerNames() {
 export function Game() {
   const names = useCarerNames();
   const [floaters, setFloaters] = useState([]);
-  const [pressed, setPressed] = useState(false);
   const [buyQty, setBuyQty] = useState(1);
   const [rightTab, setRightTab] = useState('grow');
-  const areaRef = useRef(null);
-  const lastTick = useRef(Date.now());
   const [tickerIndex, setTickerIndex] = useState(() => Math.floor(Math.random() * TICKER.length));
   const [confetti, setConfetti] = useState(0);
-  const celebrate = () => setConfetti((c) => c + 1);
+  const worldRef = useRef(null);
+  const canvasRef = useRef(null);
+  const hudRef = useRef(null);
+  const sceneRef = useRef(null);
+  const lastTick = useRef(Date.now());
+  const s = game.value;
+  const hasGame = !!s;
+  const away = offlineReport.value;
+
   useEffect(() => {
     const id = setInterval(() => setTickerIndex((i) => (i + 1 + Math.floor(Math.random() * 3)) % TICKER.length), 11000);
     return () => clearInterval(id);
   }, []);
 
+  // The game loop: 10 ticks a second, saving every few seconds.
   useEffect(() => {
     startGame();
     lastTick.current = Date.now();
@@ -57,17 +73,22 @@ export function Game() {
       const now = Date.now();
       const dt = (now - lastTick.current) / 1000;
       lastTick.current = now;
-      mutate((s) => {
+      mutate((st) => {
         if (dt > 30) {
-          const away = G.applyOffline(s, now);
-          if (away) offlineReport.value = away;
-          s.lastSeen = now;
+          const report = G.applyOffline(st, now);
+          if (report) offlineReport.value = report;
+          st.lastSeen = now;
           return;
         }
-        const events = G.tick(s, dt, now, Math.random, names);
+        const events = G.tick(st, dt, now, Math.random, names);
         for (const e of events) {
-          if (e.kind === 'achievement') { toast(`${e.achievement.emoji} Achievement: ${e.achievement.name} – +1% to everything`, { kind: 'success', duration: 5000 }); setConfetti((c) => c + 1); }
-          if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 A prismatic ${e.spawn.name} has appeared – click them quickly!`, { kind: 'info', duration: 6000 });
+          if (e.kind === 'achievement') {
+            toast(`${e.achievement.emoji} Achievement: ${e.achievement.name} – +1% to everything`, { kind: 'success', duration: 5000 });
+            setConfetti((c) => c + 1);
+            sceneRef.current?.celebrate('achievement');
+          }
+          if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 A prismatic ${e.spawn.name} is walking down the street – catch them!`, { kind: 'info', duration: 6000 });
+          if (e.kind === 'spawn' && e.spawn.type === 'card') toast('💌 A thank-you card is floating down – click it!', { kind: 'info', duration: 5000 });
         }
       });
       scheduleSave();
@@ -78,82 +99,17 @@ export function Game() {
     return () => { clearInterval(id); saveGame(); document.removeEventListener('visibilitychange', onHide); window.removeEventListener('beforeunload', onHide); };
   }, [names]);
 
-  const s = game.value;
-  if (!s) return <div class="page"><PageHeader title="Care Empire" /></div>;
+  // The animated street lives for as long as the canvas does.
+  useEffect(() => {
+    if (!hasGame || !canvasRef.current) return undefined;
+    const scene = createScene(canvasRef.current, { onCoin: () => pulse(hudRef.current) });
+    sceneRef.current = scene;
+    return () => { scene.destroy(); sceneRef.current = null; };
+  }, [hasGame]);
 
-  const now = Date.now();
-  const rate = G.productionPerSecond(s, now);
-  const perClick = G.clickValue(s, now);
-  const mode = G.collectionMode(s);
-  const level = levelInfo(s.level);
-  const next = G.nextLevel(s);
-  const starName = names[0] || 'Sam';
-  const team = G.teamNames(s, names);
-  const activeEffects = s.effects.filter((e) => e.until > now);
+  // Keep the street in step with the game after every render (cheap).
+  useEffect(() => { if (s) sceneRef.current?.sync(s, names, Date.now()); });
 
-  function addFloater(text, x, y, cls = '') {
-    const id = Math.random();
-    setFloaters((f) => [...f.slice(-14), { id, text, x, y, cls }]);
-    setTimeout(() => setFloaters((f) => f.filter((z) => z.id !== id)), 900);
-  }
-
-  function onClickCarer(e) {
-    const earned = mutate((st) => G.click(st, Date.now()));
-    const rect = areaRef.current?.getBoundingClientRect();
-    const x = rect ? ((e.clientX - rect.left) / rect.width) * 100 : 50;
-    const y = rect ? ((e.clientY - rect.top) / rect.height) * 100 : 40;
-    addFloater(`+${fmtMoney(earned)}`, x, y);
-    setPressed(true);
-    setTimeout(() => setPressed(false), 120);
-    scheduleSave();
-  }
-
-  function onCollect() {
-    const amount = mutate((st) => G.collect(st));
-    if (amount > 0) addFloater(`+${fmtMoney(amount)}`, 50, 75, 'big');
-    scheduleSave();
-  }
-
-  function onSpawnClick() {
-    const r = mutate((st) => G.clickSpawn(st, Date.now(), Math.random));
-    if (!r) return;
-    addFloater(`${r.effect.emoji} ${r.effect.name}!`, 50, 30, 'big');
-    if (r.type === 'prismatic') celebrate();
-    toast(`${r.effect.emoji} ${r.message}${r.amount ? ` +${fmtMoney(r.amount)}` : ''}`, { kind: r.type === 'prismatic' ? 'success' : 'info', duration: 7000 });
-    saveGame();
-  }
-
-  function onBuy(id) {
-    const r = mutate((st) => G.buyBuilding(st, id, buyQty));
-    if (r.bought) scheduleSave();
-  }
-
-  function onUpgrade(u) {
-    if (mutate((st) => G.buyUpgrade(st, u.id))) { toast(`${u.emoji} ${u.name} – ${u.blurb}`, { kind: 'success' }); scheduleSave(); }
-  }
-
-  async function onExpand() {
-    const gained = G.starsOnExpand(s);
-    const ok = await confirm({
-      title: `Expand to ${next.name.toLowerCase()} ${next.emoji}?`,
-      message: `Your carers, buildings, upgrades and money start again from scratch – but you keep every achievement and gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 2% to everything, forever). New buildings unlock at this level.`,
-      confirmLabel: `Expand to ${next.name.toLowerCase()}`, icon: 'trending-up',
-    });
-    if (!ok) return;
-    const r = mutate((st) => G.expand(st, Date.now()));
-    if (r) { toast(`${levelInfo(r.level).emoji} Welcome to ${levelInfo(r.level).name.toLowerCase()}! +${r.gained} Legacy ${r.gained === 1 ? 'Star' : 'Stars'}`, { kind: 'success', duration: 7000 }); celebrate(); saveGame(); }
-  }
-
-  function onPerk(p) {
-    if (mutate((st) => G.buyPerk(st, p.id))) { toast(`${p.emoji} ${p.name} – ${p.blurb}`, { kind: 'success' }); saveGame(); }
-  }
-
-  async function onReset() {
-    const ok = await confirm({ title: 'Start the game over?', message: 'Everything in the game goes back to the very beginning, including Legacy Stars. Your real holiday records are not affected.', confirmLabel: 'Start over', danger: true, icon: 'refresh' });
-    if (ok) { resetGame(); toast('Back to the beginning. Good luck!'); }
-  }
-
-  const away = offlineReport.value;
   useEffect(() => {
     if (!away) return;
     offlineReport.value = null;
@@ -167,41 +123,138 @@ export function Game() {
     ), { size: 'sm', ariaLabel: 'Welcome back' });
   }, [away]);
 
+  if (!s) return <div class="page"><PageHeader title="Care Empire" /></div>;
+
+  const now = Date.now();
+  const rate = G.productionPerSecond(s, now);
+  const perClick = G.clickValue(s, now);
+  const mode = G.collectionMode(s);
+  const level = levelInfo(s.level);
+  const next = G.nextLevel(s);
+  const starName = names[0] || 'Sam';
+  const team = G.teamNames(s, names);
+  const activeEffects = s.effects.filter((e) => e.until > now);
+  const frenzy = activeEffects.some((e) => e.clickMult);
+  const spawnBox = s.spawn ? sceneRef.current?.spawnPos() : null;
+
+  function addFloater(text, x, y, cls = '') {
+    const id = Math.random();
+    setFloaters((f) => [...f.slice(-14), { id, text, x, y, cls }]);
+    setTimeout(() => setFloaters((f) => f.filter((z) => z.id !== id)), 900);
+  }
+
+  function doVisit(x, y, rect) {
+    const earned = mutate((st) => G.click(st, Date.now()));
+    sceneRef.current?.playerVisit(x, y, frenzy ? 6 : 3);
+    addFloater(`+${fmtMoney(earned)}`, (x / rect.width) * 100, (y / rect.height) * 100, frenzy ? 'big' : '');
+    scheduleSave();
+  }
+
+  function onWorldClick(e) {
+    const rect = worldRef.current.getBoundingClientRect();
+    const fromKeyboard = !e.clientX && !e.clientY;
+    const x = fromKeyboard ? rect.width * 0.5 : e.clientX - rect.left;
+    const y = fromKeyboard ? rect.height * 0.6 : e.clientY - rect.top;
+    if (!fromKeyboard && sceneRef.current?.hitTest(x, y)) { onSpawnClick(); return; }
+    doVisit(x, y, rect);
+  }
+
+  function onWorldKey(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    const rect = worldRef.current.getBoundingClientRect();
+    doVisit(rect.width * 0.5, rect.height * 0.6, rect);
+  }
+
+  function onCollect() {
+    const amount = mutate((st) => G.collect(st));
+    if (amount > 0) { addFloater(`+${fmtMoney(amount)}`, 14, 40, 'big'); sceneRef.current?.celebrate('collect'); }
+    scheduleSave();
+  }
+
+  function onSpawnClick() {
+    const r = mutate((st) => G.clickSpawn(st, Date.now(), Math.random));
+    if (!r) return;
+    addFloater(`${r.effect.emoji} ${r.effect.name}!`, 50, 30, 'big');
+    sceneRef.current?.celebrate(r.type);
+    if (r.type === 'prismatic') setConfetti((c) => c + 1);
+    toast(`${r.effect.emoji} ${r.message}${r.amount ? ` +${fmtMoney(r.amount)}` : ''}`, { kind: r.type === 'prismatic' ? 'success' : 'info', duration: 7000 });
+    saveGame();
+  }
+
+  function onBuy(id) {
+    const r = mutate((st) => G.buyBuilding(st, id, buyQty));
+    if (r.bought) { sceneRef.current?.celebrate('buy'); scheduleSave(); }
+  }
+
+  function onUpgrade(u) {
+    if (mutate((st) => G.buyUpgrade(st, u.id))) { toast(`${u.emoji} ${u.name} – ${u.blurb}`, { kind: 'success' }); sceneRef.current?.celebrate('upgrade'); scheduleSave(); }
+  }
+
+  async function onExpand() {
+    const gained = G.starsOnExpand(s);
+    const ok = await confirm({
+      title: `Expand to ${next.name.toLowerCase()} ${next.emoji}?`,
+      message: `Your carers, buildings, upgrades and money start again from scratch – but you keep every achievement and gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 2% to everything, forever). New buildings unlock at this level.`,
+      confirmLabel: `Expand to ${next.name.toLowerCase()}`, icon: 'trending-up',
+    });
+    if (!ok) return;
+    const r = mutate((st) => G.expand(st, Date.now()));
+    if (r) {
+      toast(`${levelInfo(r.level).emoji} Welcome to ${levelInfo(r.level).name.toLowerCase()}! +${r.gained} Legacy ${r.gained === 1 ? 'Star' : 'Stars'}`, { kind: 'success', duration: 7000 });
+      setConfetti((c) => c + 1);
+      sceneRef.current?.celebrate('expand');
+      saveGame();
+    }
+  }
+
+  function onPerk(p) {
+    if (mutate((st) => G.buyPerk(st, p.id))) { toast(`${p.emoji} ${p.name} – ${p.blurb}`, { kind: 'success' }); saveGame(); }
+  }
+
+  async function onReset() {
+    const ok = await confirm({ title: 'Start the game over?', message: 'Everything in the game goes back to the very beginning, including Legacy Stars. Your real holiday records are not affected.', confirmLabel: 'Start over', danger: true, icon: 'refresh' });
+    if (ok) { resetGame(); toast('Back to the beginning. Good luck!'); }
+  }
+
   const upgrades = G.availableUpgrades(s).slice(0, 12);
   const progress = G.expandProgress(s);
   const nextLocked = G.nextLockedBuilding(s);
+  const onShift = s.buildings.carer || 0;
+  const tickerText = TICKER[tickerIndex].replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName).replace(/\{co\}/g, settings.value?.companyName || 'Monteith');
 
   return (
     <div class="page game-page">
-      <PageHeader title={<span class="row">Care Empire <Badge tone="peach" size="md">{level.emoji} {level.name}</Badge></span>} lede={level.tagline}
-        actions={<div class="game-funds"><div class="game-funds-main">{fmtMoney(s.funds)}</div><div class="muted">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div></div>} />
+      <PageHeader title={<span class="row">Care Empire <Badge tone="peach" size="md">{level.emoji} {level.name}</Badge></span>} lede={level.tagline} />
+
+      {/* ---------- The street: click anywhere to send your star carer on a visit ---------- */}
+      <div class="world-frame">
+        <div class={`world ${frenzy ? 'frenzy' : ''}`} ref={worldRef} role="button" tabIndex={0} aria-label={`Send ${starName} on a visit`} data-test="clicker" onClick={onWorldClick} onKeyDown={onWorldKey}>
+          <canvas ref={canvasRef} aria-hidden="true" />
+          <div class="world-hud" ref={hudRef}>
+            <div class="game-funds-main">{fmtMoney(s.funds)}</div>
+            <div class="world-rate">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div>
+          </div>
+          <div class="world-level">{level.emoji} {level.name} · {onShift ? `${fmtNum(onShift + 1)} on shift` : `${starName} on shift`}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
+          {activeEffects.length ? (
+            <div class="world-effects">
+              {activeEffects.map((e) => <span key={e.id} class={`effect-chip effect-${e.id}`}>{e.emoji} {e.name} · {fmtSeconds((e.until - now) / 1000)}</span>)}
+            </div>
+          ) : null}
+          {s.clicks < 8 ? <div class="world-hint">👆 Tap a house to send {starName} on a visit</div> : null}
+          {confetti ? <Confetti key={confetti} /> : null}
+          {floaters.map((f) => <span key={f.id} class={`floater ${f.cls}`} style={{ left: f.x + '%', top: f.y + '%' }}>{f.text}</span>)}
+          {spawnBox ? (
+            <button type="button" class={`spawn-hit spawn-${spawnBox.type}`} style={{ left: spawnBox.x + 'px', top: spawnBox.y + 'px', width: spawnBox.r * 2 + 'px', height: spawnBox.r * 2 + 'px' }}
+              onClick={(e) => { e.stopPropagation(); onSpawnClick(); }} data-test="spawn" aria-label={s.spawn.type === 'prismatic' ? `Catch prismatic ${s.spawn.name}` : 'Open the thank-you card'} />
+          ) : null}
+        </div>
+        <div class="ticker-bar" aria-live="off"><span>📰</span><span class="ticker-text" key={tickerIndex}>{tickerText}</span></div>
+      </div>
 
       <div class="game-grid">
-        {/* ---------- Left: the clicker ---------- */}
+        {/* ---------- Left: money in, and the team ---------- */}
         <div class="game-left">
-          <div class={`play-area ${s.spawn ? 'has-spawn' : ''}`} ref={areaRef}>
-            <div class="play-sky" data-level={Math.min(s.level, 9)} />
-            {activeEffects.length ? (
-              <div class="effects">
-                {activeEffects.map((e) => <span key={e.id} class={`effect-chip effect-${e.id}`}>{e.emoji} {e.name} · {fmtSeconds((e.until - now) / 1000)}</span>)}
-              </div>
-            ) : null}
-            <button type="button" class={`clicker ${pressed ? 'pressed' : ''} ${activeEffects.some((e) => e.clickMult) ? 'frenzy' : ''}`} onClick={onClickCarer} aria-label={`Do a visit with ${starName}`} data-test="clicker">
-              <span class="clicker-initials">{initialsOf(starName)}</span>
-              <span class="clicker-hat">{s.level >= 6 ? '👑' : s.level >= 3 ? '🎩' : '🧢'}</span>
-            </button>
-            <div class="clicker-caption"><strong>{starName}</strong> is on shift – click to do a visit</div>
-            <div class="ticker" key={tickerIndex} aria-live="off">📰 {TICKER[tickerIndex].replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName).replace(/\{co\}/g, settings.value?.companyName || 'Monteith')}</div>
-            {confetti ? <Confetti key={confetti} /> : null}
-            {floaters.map((f) => <span key={f.id} class={`floater ${f.cls}`} style={{ left: f.x + '%', top: f.y + '%' }}>{f.text}</span>)}
-            {s.spawn ? (
-              <button type="button" class={`spawn spawn-${s.spawn.type}`} style={{ left: s.spawn.x + '%', top: s.spawn.y + '%' }} onClick={onSpawnClick} data-test="spawn" aria-label={s.spawn.type === 'prismatic' ? `Prismatic ${s.spawn.name}` : 'Thank-you card'}>
-                {s.spawn.type === 'prismatic' ? <><span class="spawn-ring" /><span class="spawn-initials">{initialsOf(s.spawn.name)}</span><span class="spawn-label">✨ Prismatic {s.spawn.name}</span></> : <><span class="spawn-card">💌</span><span class="spawn-label">Thank-you card</span></>}
-                <span class="spawn-timer" style={{ width: Math.max(0, ((s.spawn.until - now) / 13000) * 100) + '%' }} />
-              </button>
-            ) : null}
-          </div>
-
           {mode === 'manual' ? (
             <button type="button" class={`collect-btn ${s.invoices > 0 ? 'ready' : ''}`} onClick={onCollect} disabled={s.invoices <= 0} data-test="collect">
               <span class="collect-label">💷 Collect payments</span>
