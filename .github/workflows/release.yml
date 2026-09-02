@@ -2,11 +2,18 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. v1.0.0 (the tag is created if it does not exist)'
+        required: true
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,14 +28,16 @@ jobs:
         run: zip -r "Monteith-Holiday-Manager.zip" "Monteith Holiday Manager"
       - name: Release notes
         run: |
-          if [ -f "docs/release-notes/${{ github.ref_name }}.md" ]; then
-            cp "docs/release-notes/${{ github.ref_name }}.md" release-body.md
+          if [ -f "docs/release-notes/${{ env.VERSION }}.md" ]; then
+            cp "docs/release-notes/${{ env.VERSION }}.md" release-body.md
           else
             echo "Download Monteith-Holiday-Manager.zip below, open it, and double-click Monteith Holiday Manager inside the folder." > release-body.md
           fi
       - uses: softprops/action-gh-release@v2
         with:
-          name: Monteith Holiday Manager ${{ github.ref_name }}
+          tag_name: ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: Monteith Holiday Manager ${{ env.VERSION }}
           body_path: release-body.md
           files: Monteith-Holiday-Manager.zip
           generate_release_notes: true
