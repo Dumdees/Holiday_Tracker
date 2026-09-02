@@ -16,7 +16,11 @@ const SIZES = [
 ];
 
 const problems = [];
-const browser = await chromium.launch({ headless: true, ...(existsSync(chromiumPath) ? { executablePath: chromiumPath } : {}) });
+const browser = await chromium.launch({
+  headless: true,
+  args: ['--disable-background-networking', '--disable-component-update', '--disable-sync'],
+  ...(existsSync(chromiumPath) ? { executablePath: chromiumPath } : {}),
+});
 try {
   for (const [name, viewport] of SIZES) {
     const page = await browser.newPage({ viewport, locale: 'en-GB', timezoneId: 'Europe/London' });
@@ -28,11 +32,18 @@ try {
     // Nothing may push the page wider than the window.
     const overflow = await page.evaluate(() => {
       const width = document.documentElement.clientWidth;
+      const name = (el) => `${el.tagName.toLowerCase()}${typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).join('.') : ''}`;
+      // Anything inside a scrolling or clipping box cannot widen the page, so it is not a culprit.
+      const clipped = (el) => {
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+          if (/auto|scroll|hidden/.test(getComputedStyle(p).overflowX)) return true;
+        }
+        return false;
+      };
       const wide = [...document.querySelectorAll('body *')]
-        .filter((el) => el.getBoundingClientRect().right > width + 1 && getComputedStyle(el).position !== 'fixed')
-        .slice(0, 8)
-        .map((el) => `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''}`);
-      return { scrollWidth: document.documentElement.scrollWidth, width, wide };
+        .filter((el) => el.getBoundingClientRect().right > width + 1 && getComputedStyle(el).position !== 'fixed' && !clipped(el));
+      const outermost = wide.filter((el) => !wide.some((other) => other !== el && other.contains(el)));
+      return { scrollWidth: document.documentElement.scrollWidth, width, wide: outermost.slice(0, 8).map((el) => `${name(el)} (${Math.round(el.getBoundingClientRect().width)}px wide)`) };
     });
     if (overflow.scrollWidth > overflow.width + 1) {
       problems.push(`[${name}] page is ${overflow.scrollWidth}px wide in a ${overflow.width}px window: ${overflow.wide.join(', ')}`);

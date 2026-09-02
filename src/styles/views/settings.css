@@ -1,1 +1,28 @@
-/* views/settings styles */
+/* Settings */
+.settings-page .page-head .tabs { margin-top: 14px; }
+.settings-list { list-style: none; margin: 0; padding: 0; }
+.settings-row { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-top: 1px solid var(--line); min-height: 60px; flex-wrap: wrap; }
+.settings-row:first-child { border-top: 0; }
+.settings-row-main { flex: 1 1 200px; display: flex; flex-direction: column; min-width: 0; }
+.settings-row-main .muted { font-size: 13px; }
+.settings-row.is-removed strong { text-decoration: line-through; color: var(--ink-muted); }
+.colour-dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 2px #fff; }
+.settings-save-bar { display: flex; align-items: center; gap: 14px; position: sticky; bottom: 12px; background: var(--paper); padding: 12px 16px; border-radius: var(--radius); box-shadow: var(--shadow); }
+.settings-hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+.backup-due { color: var(--amber-ink); font-weight: 600; }
+.clash-list { margin: 6px 0 0; padding-left: 18px; }
+.clash-list li { margin: 2px 0; }
+.holiday-summary { background: var(--peach-50); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
+.holiday-summary-after { margin-top: 4px; }
+.holiday-summary-after.negative strong { color: var(--rose-ink); }
+.small { font-size: 13px; }
+.carer-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border-radius: 6px; }
+.carer-link:hover .carer-name-text { text-decoration: underline; color: var(--peach-800); }
+.carer-name { display: inline-flex; align-items: center; gap: 8px; }
+.type-tag { display: inline-flex; align-items: center; gap: 6px; }
+.type-tag-sm { font-size: 13px; }
+.type-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .settings-row { padding: 12px 16px; }
+  .settings-save-bar { position: static; }
+}

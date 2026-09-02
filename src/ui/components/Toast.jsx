@@ -13,9 +13,9 @@ export function toast(message, { kind = 'success', duration = 4000, action = nul
 }
 toast.dismiss = (id) => { toasts.value = toasts.value.filter((t) => t.id !== id); };
 toast.success = (m, o) => toast(m, { ...o, kind: 'success' });
-toast.error = (m, o) => toast(m, { ...o, kind: 'error', duration: 7000 });
+toast.error = (m, o) => toast(m, { duration: 7000, ...o, kind: 'error' });
 toast.info = (m, o) => toast(m, { ...o, kind: 'info' });
-toast.warn = (m, o) => toast(m, { ...o, kind: 'warning', duration: 6000 });
+toast.warn = (m, o) => toast(m, { duration: 6000, ...o, kind: 'warning' });
 
 const ICONS = { success: 'check-circle', error: 'alert-circle', info: 'info', warning: 'alert' };
 

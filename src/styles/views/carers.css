@@ -1,1 +1,52 @@
-/* views/carers styles */
+/* Carers list */
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; width: 100%; }
+.toolbar .search-box { flex: 1 1 260px; }
+.toolbar select, .toolbar .select-field { min-width: 150px; }
+.carer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.carer-card { text-align: left; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; font: inherit; color: inherit; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-sm); transition: box-shadow .15s, transform .1s, border-color .15s; }
+.carer-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); border-color: var(--peach-300); }
+.carer-card:focus-visible { outline: none; box-shadow: var(--focus); }
+.carer-card-head { display: flex; align-items: center; gap: 12px; }
+.carer-card-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.carer-card-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carer-card-name .muted { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carer-card-left { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.carer-card-left strong { font-size: 22px; color: var(--peach-800); }
+.carer-card-left.low strong { color: var(--amber-ink); }
+.carer-card-left.negative strong { color: var(--rose-ink); }
+.carer-card-left .muted { font-size: 12px; }
+.carer-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.ml { margin-left: 8px; }
+
+/* Profile */
+.profile-grid { grid-template-columns: 3fr 2fr; }
+@media (max-width: 1000px) { .profile-grid { grid-template-columns: 1fr; } }
+.entitlement-summary { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.entitlement-lines, .detail-lines { margin: 0; flex: 1 1 260px; }
+.entitlement-lines > div, .detail-lines > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.entitlement-lines > div:last-child, .detail-lines > div:last-child { border-bottom: 0; }
+.entitlement-lines dt, .detail-lines dt { color: var(--ink-soft); }
+.entitlement-lines dd, .detail-lines dd { margin: 0; font-weight: 600; text-align: right; }
+.detail-lines dd.row { justify-content: flex-end; }
+.entitlement-lines .total-line { background: var(--peach-50); margin: 0 -8px; padding: 8px; border-radius: 8px; border-bottom: 0; }
+.entitlement-lines .total-line dd { color: var(--peach-800); }
+.entitlement-lines dd.negative { color: var(--rose-ink); }
+.adjustment-line dd { display: inline-flex; align-items: center; gap: 4px; }
+.profile-danger { justify-content: flex-end; }
+.btn-danger-ghost { color: var(--rose-ink); }
+.nowrap-sm { white-space: nowrap; }
+@media (max-width: 700px) { .nowrap-sm { white-space: normal; } }
+
+/* Mini year */
+.mini-year { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.mini-month-title { font-weight: 650; font-size: 13px; margin-bottom: 6px; color: var(--ink-soft); }
+.mini-month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.mini-dow { font-size: 10px; color: var(--ink-faint); text-align: center; }
+.mini-day { aspect-ratio: 1; border: 0; border-radius: 5px; background: var(--peach-50); font-size: 10.5px; color: var(--ink-soft); padding: 0; cursor: pointer; display: grid; place-items: center; min-width: 0; }
+.mini-day.off { background: #F3EEEB; color: var(--ink-faint); }
+.mini-day.abs { color: #fff; font-weight: 600; }
+.mini-day.pending { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 3px, transparent 3px 6px); }
+.mini-day.today { box-shadow: inset 0 0 0 2px var(--peach-700); }
+.mini-day.empty { background: transparent; cursor: default; }
+.mini-day:hover:not(.empty) { filter: brightness(.92); }
+@media print { .mini-day { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }

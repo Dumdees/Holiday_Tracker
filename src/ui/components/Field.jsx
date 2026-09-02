@@ -10,7 +10,11 @@ import { IconButton } from './Button.jsx';
 import { formatShort, isValidISO } from '../../core/dates.js';
 import { WEEKDAYS, PALETTE } from '../../store/defaults.js';
 
-const FieldContext = createContext(null);
+/**
+ * Shared with every control inside a <Field>: { id, labelId, hintId, errorId, invalid }, or null outside one.
+ * Composite controls (MultiSelect) read it for their trigger and reset it to null around their inner inputs.
+ */
+export const FieldContext = createContext(null);
 
 /** id, aria-describedby and aria-invalid for a control, taken from the surrounding Field when present. */
 function useFieldProps(id) {
@@ -34,7 +38,8 @@ function useGroupProps(id, fallbackLabel) {
  * @param {any} [props.hint] – shown under the control (hidden while there is an error)
  * @param {any} [props.error] – a sentence a person would say; marks the control invalid
  * @param {boolean} [props.required] – shows an asterisk after the label
- * @param {string} [props.id] – id given to the control (generated when omitted)
+ * @param {string} [props.id] – id given to the control (generated when omitted). Put ids here rather than on
+ *   the control, so the label's `for` and the control's id always agree.
  * @param {any} [props.children] – exactly one control, usually
  * @param {boolean} [props.inline] – label and control side by side
  * @param {string} [props.class]

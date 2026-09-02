@@ -3,7 +3,7 @@
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import {
-  Icon, BrandMark, toast, ToastHost, openModal, ModalHost,
+  Icon, BrandMark, toast, ToastHost, openModal, confirm, alert, ModalHost,
   Button, IconButton, Card, CardSection, PageHeader,
   Field, TextField, NumberField, TextArea, DateField, SelectField, Toggle, Checkbox, RadioCards, WeekdayPicker, ColourPicker, SearchBox,
   MultiSelect, Avatar, Badge, Chip, StatusBadge, Tabs, TabPanel, EmptyState, ProgressBar, ProgressRing, StatTile,
@@ -163,7 +163,7 @@ function CardsSection() {
         <StatTile label="Clashes this month" value="2" hint="Day team, Wed 4 Mar" icon="alert" tone="rose" />
         <StatTile label="Days left (team average)" value="11.5" icon="umbrella" tone="sage" />
       </div>
-      <div class="g-row">
+      <div class="grid grid-4">
         <StatTile small label="Taken" value="12" tone="peach" />
         <StatTile small label="Booked" value="6.5" icon="calendar" tone="sky" />
         <StatTile small label="Remaining" value="9.5" icon="check-circle" tone="sage" />
@@ -293,17 +293,21 @@ function MultiSelectSection() {
   const [openValue, setOpenValue] = useState(['c1', 'c2', 'c4', 'c7']);
   const [closedValue, setClosedValue] = useState(['c3', 'c5']);
   const [plain, setPlain] = useState([]);
+  // The drawer and dialog take focus when they appear, which would close an already-open panel
+  // (it closes when focus leaves it), so this example opens a moment after the page loads.
+  const [showOpen, setShowOpen] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setShowOpen(true), 150); return () => clearTimeout(t); }, []);
   return (
     <Section title="MultiSelect" desc="Picking carers. Open with groups, closed with chips, a plain list, and disabled.">
       <div class="grid grid-2">
-        <div style="min-height: 420px">
-          <Field label="Carers (open)" hint="Grouped by team. Tick a whole team at once.">
-            <MultiSelect id="ms-open" options={CARER_OPTIONS} value={openValue} onChange={setOpenValue} defaultOpen />
+        <div style="min-height: 480px">
+          <Field id="ms-open" label="Carers (open)" hint="Grouped by team. Tick a whole team at once.">
+            <MultiSelect key={showOpen ? 'open' : 'closed'} options={CARER_OPTIONS} value={openValue} onChange={setOpenValue} defaultOpen={showOpen} />
           </Field>
         </div>
         <div class="stack">
-          <Field label="Carers (closed)">
-            <MultiSelect id="ms-closed" options={CARER_OPTIONS} value={closedValue} onChange={setClosedValue} maxChips={2} />
+          <Field id="ms-closed" label="Carers (closed)">
+            <MultiSelect options={CARER_OPTIONS} value={closedValue} onChange={setClosedValue} maxChips={2} />
           </Field>
           <Field label="Nothing chosen yet">
             <MultiSelect options={CARER_OPTIONS} value={[]} onChange={noop} placeholder="Choose carers…" />
@@ -323,6 +327,8 @@ function MultiSelectSection() {
 function TabsSection() {
   const [tab, setTab] = useState('add');
   const [tab2, setTab2] = useState('month');
+  const [tab3, setTab3] = useState('general');
+  const SETTINGS_TABS = [{ id: 'general', label: 'General', icon: 'sliders' }, { id: 'teams', label: 'Teams', icon: 'users' }, { id: 'types', label: 'Leave types', icon: 'layers' }, { id: 'bank', label: 'Bank holidays', icon: 'calendar' }, { id: 'rules', label: 'Staffing rules', icon: 'shield' }, { id: 'backup', label: 'Backup', icon: 'save' }, { id: 'advanced', label: 'Advanced', icon: 'settings' }];
   const [page, setPage] = useState(3);
   const [banner, setBanner] = useState(true);
   const TABS = [{ id: 'add', label: 'Add holidays', icon: 'calendar-plus' }, { id: 'remove', label: 'Remove holidays', icon: 'calendar-x' }, { id: 'all', label: 'All holidays', icon: 'list', count: 132 }];
@@ -333,6 +339,8 @@ function TabsSection() {
       <TabPanel tabsId="hol" id={tab}><p class="soft">Showing the “{TABS.find((t) => t.id === tab).label}” tab.</p></TabPanel>
       <div class="g-label">Underline tabs</div>
       <Tabs variant="underline" tabs={[{ id: 'month', label: 'Month', icon: 'calendar' }, { id: 'year', label: 'Year overview', icon: 'grid' }, { id: 'week', label: 'This week', icon: 'list', count: 4 }]} value={tab2} onChange={setTab2} />
+      <div class="g-label">Segmented tabs (many, as in Settings)</div>
+      <Tabs tabs={SETTINGS_TABS} value={tab3} onChange={setTab3} ariaLabel="Settings sections" />
       <div class="g-label">Pagination</div>
       <div class="g-col">
         <Pagination page={page} pageSize={25} total={132} onPageChange={setPage} />
@@ -498,6 +506,8 @@ function OverlaysSection() {
       <div class="g-row mt">
         <Button variant="primary" onClick={() => openModal(({ close }) => <div class="stack"><p>A larger dialog with a title and close button.</p><div class="modal-actions"><Button variant="primary" onClick={() => close()}>Done</Button></div></div>, { title: 'Large dialog', size: 'lg' })}>Open a large dialog</Button>
         <Button onClick={() => toast('Saved')}>Fire a toast</Button>
+        <Button variant="danger" icon="trash" onClick={() => confirm({ title: 'Remove Priya Sharma?', message: 'Her 12 holidays will be removed too. You can undo this straight afterwards.', confirmLabel: 'Remove carer', danger: true, icon: 'trash' }).then((yes) => toast(yes ? 'Removed (not really)' : 'Kept'))}>Ask before removing</Button>
+        <Button onClick={() => alert({ title: 'Backup saved', message: 'Keep the file somewhere safe, such as a memory stick or a shared drive.', icon: 'check-circle' })}>Show a notice</Button>
       </div>
     </Section>
   );

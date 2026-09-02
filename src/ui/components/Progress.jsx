@@ -60,6 +60,19 @@ export function ProgressBar({ segments = [], total, height = 12, showLegend = fa
 }
 
 /**
+ * Font size (px) so that `text` fits across `room` px – SVG text cannot wrap. Nodes keep `base`.
+ * @param {any} text
+ * @param {number} base – the size wanted when there is room
+ * @param {number} room – usable width inside the ring
+ * @returns {number}
+ */
+function fitText(text, base, room) {
+  if (typeof text !== 'string' && typeof text !== 'number') return base;
+  const chars = Math.max(1, String(text).length);
+  return Math.max(8, Math.min(base, Math.floor((room - 6) / (chars * 0.6))));
+}
+
+/**
  * ProgressRing – an SVG ring with a number in the middle.
  * @param {object} props
  * @param {number} [props.value=0]
@@ -78,13 +91,14 @@ export function ProgressRing({ value = 0, total = 1, size = 72, stroke = 8, colo
   const c = 2 * Math.PI * r;
   const fraction = total > 0 ? Math.max(0, Math.min(1, (Number(value) || 0) / total)) : 0;
   const half = size / 2;
-  const labelSize = Math.round(size * (sublabel ? 0.24 : 0.28));
-  const subSize = Math.round(size * 0.14);
+  const labelText = label ?? formatDays(value);
+  const labelSize = fitText(labelText, Math.round(size * (sublabel ? 0.24 : 0.28)), size - stroke * 2);
+  const subSize = fitText(sublabel, Math.round(size * 0.14), size - stroke * 2);
   return (
     <svg class={`progress-ring ${cls}`.trim()} width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={ariaLabel || `${formatDays(value)} of ${formatDays(total)}`}>
       <circle class="progress-ring-track" cx={half} cy={half} r={r} stroke-width={stroke} style={trackColour ? { stroke: trackColour } : undefined} />
       <circle class="progress-ring-value" cx={half} cy={half} r={r} stroke-width={stroke} stroke={colour} stroke-dasharray={c} stroke-dashoffset={c * (1 - fraction)} transform={`rotate(-90 ${half} ${half})`} />
-      <text class="progress-ring-label" x={half} y={sublabel ? half - subSize * 0.55 : half} text-anchor="middle" dominant-baseline="central" font-size={labelSize}>{label ?? formatDays(value)}</text>
+      <text class="progress-ring-label" x={half} y={sublabel ? half - subSize * 0.55 : half} text-anchor="middle" dominant-baseline="central" font-size={labelSize}>{labelText}</text>
       {sublabel ? <text class="progress-ring-sub" x={half} y={half + labelSize * 0.6} text-anchor="middle" dominant-baseline="central" font-size={subSize}>{sublabel}</text> : null}
     </svg>
   );

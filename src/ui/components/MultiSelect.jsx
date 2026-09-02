@@ -1,10 +1,10 @@
 // A big friendly dropdown for picking several carers (or anything) at once.
 //   <MultiSelect options={carerOptions(...)} value={ids} onChange={setIds} itemNoun="carer" />
 // Options may carry a `group` (team name): the panel then shows group headers with an "All <group>" tick box.
-import { useEffect, useId, useMemo, useRef, useState } from 'preact/hooks';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'preact/hooks';
 import { Icon } from './Icon.jsx';
 import { Chip } from './Badge.jsx';
-import { SearchBox } from './Field.jsx';
+import { FieldContext, SearchBox } from './Field.jsx';
 import { pluralise } from '../../core/dates.js';
 
 /** Split options into groups, keeping the order groups were first seen in. */
@@ -70,7 +70,7 @@ function Row({ option: o, selected, onToggle }) {
  * @param {string} [props.itemNoun='carer'] – "3 carers selected"
  * @param {string} [props.itemNounPlural] – defaults to itemNoun + 's'
  * @param {string} [props.emptyText] – shown when nothing matches the search
- * @param {string} [props.id]
+ * @param {string} [props.id] – id of the trigger (inside a <Field>, give the id to the Field instead)
  * @param {number} [props.maxChips=3] – chips shown on the trigger before "+N more"
  * @param {boolean} [props.disabled]
  * @param {boolean} [props.defaultOpen] – start with the panel open (used by the gallery)
@@ -79,7 +79,8 @@ function Row({ option: o, selected, onToggle }) {
  */
 export function MultiSelect({ options = [], value = [], onChange, placeholder = 'Choose…', searchable = true, itemNoun = 'carer', itemNounPlural, emptyText, id, maxChips = 3, disabled = false, defaultOpen = false, ariaLabel, class: cls = '' }) {
   const generated = useId();
-  const baseId = id || `ms-${generated}`;
+  const field = useContext(FieldContext);
+  const baseId = id || field?.id || `ms-${generated}`;
   const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState('');
   const rootRef = useRef(null);
@@ -163,10 +164,14 @@ export function MultiSelect({ options = [], value = [], onChange, placeholder = 
         aria-expanded={open}
         aria-controls={open ? `${baseId}-panel` : undefined}
         aria-disabled={disabled || undefined}
-        aria-label={ariaLabel ? `${ariaLabel}: ${summary}` : summary}
+        aria-labelledby={field?.labelId ? `${field.labelId} ${baseId}-summary` : undefined}
+        aria-label={field?.labelId ? undefined : (ariaLabel ? `${ariaLabel}: ${summary}` : summary)}
+        aria-describedby={field ? [field.errorId, field.hintId].filter(Boolean).join(' ') || undefined : undefined}
+        aria-invalid={field?.invalid ? 'true' : undefined}
         onClick={() => (open ? close() : openPanel())}
         onKeyDown={onTriggerKey}
       >
+        <span id={`${baseId}-summary`} class="visually-hidden">{summary}</span>
         {shownChips.map((o) => (
           <Chip key={String(o.value)} label={o.label} colour={o.colour} small onRemove={disabled ? undefined : () => toggleOne(o.value)} removeLabel={`Remove ${o.label}`} />
         ))}
@@ -175,6 +180,8 @@ export function MultiSelect({ options = [], value = [], onChange, placeholder = 
         <Icon name="chevron-down" className="multiselect-chevron" />
       </div>
       {open ? (
+        // The inputs inside the panel must not inherit the surrounding Field's id, label or error.
+        <FieldContext.Provider value={null}>
         <div class="multiselect-panel" id={`${baseId}-panel`} role="dialog" aria-label={ariaLabel || `Choose ${plural}`}>
           {searchable ? (
             <div class="ms-search">
@@ -198,6 +205,7 @@ export function MultiSelect({ options = [], value = [], onChange, placeholder = 
             ))}
           </div>
         </div>
+        </FieldContext.Provider>
       ) : null}
     </div>
   );

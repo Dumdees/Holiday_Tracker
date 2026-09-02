@@ -126,12 +126,27 @@ function pickColour(used) {
   return best;
 }
 
+
+/** Keep "must not be off with" symmetrical: if A lists B, B lists A. */
+function syncPairings(d, carerId, ids) {
+  const wanted = new Set((ids || []).filter((x) => x && x !== carerId && d.carers.some((c) => c.id === x)));
+  const me = d.carers.find((c) => c.id === carerId);
+  if (me) me.mustNotBeOffWith = [...wanted];
+  for (const c of d.carers) {
+    if (c.id === carerId) continue;
+    const has = (c.mustNotBeOffWith || []).includes(carerId);
+    if (wanted.has(c.id) && !has) c.mustNotBeOffWith = [...(c.mustNotBeOffWith || []), carerId];
+    if (!wanted.has(c.id) && has) c.mustNotBeOffWith = c.mustNotBeOffWith.filter((x) => x !== carerId);
+  }
+}
+
 // ---------- Carers ----------
 export function addCarer(data) {
   return commit('Added carer', (d) => {
     const colour = data.colour || pickColour(d.carers.map((c) => c.colour));
     const carer = newCarerRecord({ ...data, id: newId('carer'), colour }, d.settings);
     d.carers.push(carer);
+    syncPairings(d, carer.id, data.mustNotBeOffWith);
     return carer.id;
   });
 }
@@ -154,6 +169,7 @@ export function updateCarer(id, patch) {
     const c = d.carers.find((x) => x.id === id);
     if (!c) return false;
     Object.assign(c, patch, { updatedAt: new Date().toISOString() });
+    if (patch.mustNotBeOffWith) syncPairings(d, id, patch.mustNotBeOffWith);
     return true;
   });
 }
@@ -243,6 +259,26 @@ export function removeHolidays(ids, label) {
 // ---------- Settings, teams, leave types ----------
 export function updateSettings(patch, label = 'Updated settings') {
   return commit(label, (d) => { Object.assign(d.settings, patch); }, { undoable: false });
+}
+
+/**
+ * Make the team list match these names (used by the welcome screen). Existing teams whose
+ * name matches (ignoring case) are kept, new names are added, the rest are removed.
+ */
+export function setTeams(names) {
+  return commit('Set up teams', (d) => {
+    const clean = [...new Set(names.map((n) => String(n || '').trim()).filter(Boolean))];
+    const keep = [];
+    for (const name of clean) {
+      const existing = d.teams.find((t) => t.name.toLowerCase() === name.toLowerCase());
+      if (existing) keep.push(existing);
+      else keep.push({ id: newId('team'), name, colour: pickColour([...d.teams, ...keep].map((t) => t.colour)), maxOffPerDay: null });
+    }
+    const keptIds = new Set(keep.map((t) => t.id));
+    for (const c of d.carers) if (c.teamId && !keptIds.has(c.teamId)) c.teamId = null;
+    d.teams = keep;
+    return keep.map((t) => t.id);
+  }, { undoable: false });
 }
 
 export function addTeam({ name, colour, maxOffPerDay = null }) {

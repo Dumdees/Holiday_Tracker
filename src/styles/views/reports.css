@@ -1,1 +1,9 @@
-/* views/reports styles */
+/* Reports */
+.reports-page .toolbar { margin-top: 12px; }
+.card-inner { padding: 16px 20px 4px; }
+.text-rose { color: var(--rose-ink); }
+.report-print-head { margin-bottom: 12px; }
+@media print {
+  .reports-page .page-head, .reports-page .toolbar, .report-tiles .stat-tile { break-inside: avoid; }
+  .reports-page .card { margin-bottom: 12px; }
+}

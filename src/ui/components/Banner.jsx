@@ -24,12 +24,12 @@ export function Banner({ tone = 'info', icon, title, children, action, onDismiss
         {title ? <div class="banner-title">{title}</div> : null}
         {children ? <div class="banner-text">{children}</div> : null}
       </div>
-      {action || onDismiss ? (
+      {action ? (
         <div class="banner-actions">
-          {action ? <Button variant="soft" size="sm" icon={action.icon} onClick={action.onClick}>{action.label}</Button> : null}
-          {onDismiss ? <IconButton icon="x" label="Dismiss" size="sm" onClick={onDismiss} /> : null}
+          <Button variant="soft" size="sm" icon={action.icon} onClick={action.onClick}>{action.label}</Button>
         </div>
       ) : null}
+      {onDismiss ? <IconButton icon="x" label="Dismiss" size="sm" class="banner-dismiss" onClick={onDismiss} /> : null}
     </div>
   );
 }
