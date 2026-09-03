@@ -401,3 +401,21 @@ test('exported cells never start with a character a spreadsheet would run as a f
   assert.equal(back[0].Notes.trim(), '=1+1', 'the original text survives a round trip once trimmed');
   assert.equal(back[4].Notes, 'plain', 'ordinary text is untouched');
 });
+
+test('shift patterns round-trip through the carers spreadsheet', async () => {
+  const { carersToCsv, parseCarersCsv, formatWorkingPattern, parseShiftPattern } = await import('../../src/core/csv.js');
+  const carer = { firstName: 'Fiona', lastName: 'Campbell', teamId: null, role: 'Carer', startDate: null, endDate: null, workingDays: [1, 2, 3, 4, 5], shiftPattern: { weeks: [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]], anchor: '2026-09-02' }, entitlementDays: 28, phone: '', email: '', notes: '', active: true };
+  assert.equal(formatWorkingPattern(carer), 'Week 1: Mon, Tue, Wed, Thu, Fri / Week 2: Wed, Thu, Fri, Sat, Sun (week 1 from 31/08/2026)');
+  const csv = carersToCsv([carer], { teams: [] });
+  const { carers, errors } = parseCarersCsv(csv, { teams: [] });
+  assert.equal(errors.length, 0);
+  assert.deepEqual(carers[0].shiftPattern, { weeks: [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]], anchor: '2026-08-31' });
+  assert.deepEqual(carers[0].workingDays, [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseShiftPattern('Mon-Fri; Wed-Sun'), { weeks: [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]], anchor: null });
+  assert.deepEqual(parseShiftPattern('week 1: mon-fri | week 2: off | week 3: sat, sun'), { weeks: [[1, 2, 3, 4, 5], [], [6, 7]], anchor: null });
+  assert.equal(parseShiftPattern('Mon-Fri'), null, 'a single week is not a pattern');
+  assert.equal(parseShiftPattern('Mon-Fri / Blursday'), null);
+  const r = parseCarersCsv('First name,Last name,Working days\nSam,Ahmed,Mon-Fri / Wed-Sun', { teams: [] });
+  assert.ok(r.errors.some((e) => e.warning && /week 1/.test(e.message)), 'warns when no week-1 date is given');
+  assert.equal(r.carers[0].shiftPattern.weeks.length, 2);
+});

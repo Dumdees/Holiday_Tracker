@@ -386,3 +386,26 @@ test('the sample data behaves: one staffing and one pairing problem ahead, and e
     assert.equal(rows.filter((r) => r.blocked).length, 0, 'every existing holiday could be re-added on its own');
   }
 });
+
+test('alternate-weekend shift patterns: staffing and pairing only count the weeks people work', () => {
+  const db = fixture();
+  db.settings.defaultMaxOffPerDay = 1;
+  // Two carers on opposite alternate-weekend patterns. 2026-08-31 (Mon) starts a week 1 for Fiona; Hamza is a week behind.
+  const weeks = [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]];
+  db.carers.push(
+    { id: 'p1', firstName: 'Fiona', lastName: 'Test', role: 'Carer', teamId: 'team_day', startDate: '2020-01-01', endDate: null, workingDays: [1, 2, 3, 4, 5], shiftPattern: { weeks, anchor: '2026-08-31' }, entitlementDays: 20, active: true, mustNotBeOffWith: ['p2'], adjustments: [] },
+    { id: 'p2', firstName: 'Hamza', lastName: 'Test', role: 'Carer', teamId: 'team_day', startDate: '2020-01-01', endDate: null, workingDays: [1, 2, 3, 4, 5], shiftPattern: { weeks, anchor: '2026-08-24' }, entitlementDays: 20, active: true, mustNotBeOffWith: ['p1'], adjustments: [] },
+  );
+  // Sat 12 Sep: Fiona is on her working weekend (week 2), Hamza is off (his week 1).
+  db.holidays.push({ id: 'hp', carerId: 'p2', start: '2026-09-12', end: '2026-09-13', typeId: 'lt_annual', status: 'approved', halfDay: null });
+  const c = ctx(db);
+  const fionaWeekend = findClashes({ carerId: 'p1', start: '2026-09-12', end: '2026-09-13', typeId: 'lt_annual', status: 'approved' }, db, c);
+  assert.ok(!fionaWeekend.some((x) => x.kind === 'pairing'), 'Hamza is not at work that weekend anyway, so no pairing clash');
+  assert.ok(!fionaWeekend.some((x) => x.kind === 'no-working-days'), 'Fiona works that weekend');
+  const fionaOffWeekend = findClashes({ carerId: 'p1', start: '2026-09-05', end: '2026-09-06', typeId: 'lt_annual', status: 'approved' }, db, c);
+  assert.ok(fionaOffWeekend.some((x) => x.kind === 'no-working-days'), 'Fiona does not work the other weekend');
+  // Wed 9 Sep: both work (Fiona week 2 Wed–Sun, Hamza week 1 Mon–Fri) – a pairing clash if Hamza is off.
+  db.holidays.push({ id: 'hq', carerId: 'p2', start: '2026-09-09', end: '2026-09-09', typeId: 'lt_annual', status: 'approved', halfDay: null });
+  const midweek = findClashes({ carerId: 'p1', start: '2026-09-09', end: '2026-09-09', typeId: 'lt_annual', status: 'approved' }, db, ctx(db));
+  assert.ok(midweek.some((x) => x.kind === 'pairing'), 'both would have worked on the Wednesday');
+});

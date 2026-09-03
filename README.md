@@ -51,6 +51,8 @@ open it, drag the `Monteith Holiday Manager` folder to your Desktop, and double-
   options are tucked away under *Advanced*.
 - **Undo** on every change, half days, bank-holiday-aware day counting, and a friendly first-run
   welcome.
+- **Shift patterns** – carers who work a repeating 2, 3 or 4 week pattern (alternate weekends, say)
+  get a week-by-week pattern; holidays, clash warnings and the profile calendar follow the week that applies.
 - **Care Empire** – an optional tea-break game in the menu: an animated street where your carers
   (named after the real team) walk to visits, residents wave and coins fly in. Tap a house to send your
   star carer over, take on more client homes, hire, upgrade, and grow from one street to the whole

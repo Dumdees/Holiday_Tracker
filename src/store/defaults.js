@@ -103,6 +103,7 @@ export function newCarerRecord(patch = {}, settings = defaultSettings()) {
     startDate: null,     // 'YYYY-MM-DD' | null
     endDate: null,       // 'YYYY-MM-DD' | null (leavers)
     workingDays: [...settings.defaultWorkingDays],
+    shiftPattern: null,  // { weeks: number[][], anchor: 'YYYY-MM-DD' } for a repeating 2–4 week pattern
     entitlementDays: settings.defaultEntitlementDays,
     phone: '',
     email: '',

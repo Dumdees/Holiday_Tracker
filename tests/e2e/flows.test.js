@@ -247,3 +247,41 @@ test('phone-sized screen: bottom navigation works', async () => {
     await noErrors(app);
   } finally { await app.close(); }
 });
+
+test('a carer on an alternate-weekend shift pattern: the form, the profile and holiday counting follow the pattern', async () => {
+  const app = await seeded();
+  const { page } = app;
+  try {
+    await page.goto(page.url().split('#')[0] + '#carers');
+    await page.getByRole('button', { name: 'Add carer' }).first().click();
+    await page.getByPlaceholder('e.g. Priya').fill('Pat');
+    await page.getByPlaceholder('e.g. Patel').fill('Tern');
+    // Choose a 2-week pattern and fill it with the alternate-weekends preset; this week is week 1.
+    await page.locator('.modal select').filter({ hasText: 'The same days every week' }).selectOption('2');
+    await page.waitForSelector('[data-test="shift-pattern"]');
+    await page.getByRole('button', { name: /Alternate weekends/ }).click();
+    await page.getByRole('button', { name: 'Add carer' }).last().click();
+    await page.waitForSelector('h1:has-text("Pat Tern")');
+    assert.ok(await page.getByText('Works Mon to Fri, then Wed to Sun (repeats every 2 weeks)').isVisible());
+    assert.match(await page.locator('.carer-profile').textContent(), /This week: Week 1 of 2 – Mon to Fri/);
+
+    // The app is frozen on Wed 2 Sep 2026, so Sat 5 – Sun 6 Sep is an off weekend and Sat 12 – Sun 13 Sep is a working one.
+    await page.getByRole('button', { name: 'Add holiday' }).first().click();
+    await page.locator('.modal input[type=date]').nth(0).fill('2026-09-05');
+    await page.locator('.modal input[type=date]').nth(1).fill('2026-09-06');
+    await page.waitForSelector('.holiday-summary');
+    assert.match(await page.locator('.holiday-summary').textContent(), /Uses 0 days/);
+    await page.locator('.modal input[type=date]').nth(0).fill('2026-09-12');
+    await page.locator('.modal input[type=date]').nth(1).fill('2026-09-13');
+    await page.waitForFunction(() => /Uses 2 days/.test(document.querySelector('.holiday-summary')?.textContent || ''));
+    await page.locator('.modal').getByRole('button', { name: 'Add holiday' }).click();
+    await page.waitForSelector('.toast');
+    assert.match(await page.locator('.carer-profile table').textContent(), /Sat 12 – Sun 13 Sep 2026/);
+
+    // Editing shows the pattern again, with this week still marked as week 1.
+    await page.getByRole('button', { name: 'Edit details' }).click();
+    await page.waitForSelector('[data-test="shift-pattern"]');
+    assert.ok(await page.getByText('Week 1 (this week)').isVisible());
+    await noErrors(app);
+  } finally { await app.close(); }
+});

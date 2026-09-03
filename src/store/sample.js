@@ -8,7 +8,8 @@
 // have been in. Entitlement is only approximated (pro rata isn't rounded), which
 // is why random annual leave stops well short of each allowance.
 import { createEmptyDb, defaultSettings, newCarerRecord, newHolidayRecord, PALETTE } from './defaults.js';
-import { addDays, addMonths, addYears, diffDays, eachDay, isoWeekday, maxISO, minISO, parts, rangesOverlap, todayISO } from '../core/dates.js';
+import { addDays, addMonths, addYears, diffDays, eachDay, isoWeekday, maxISO, minISO, parts, rangesOverlap, startOfWeek, todayISO } from '../core/dates.js';
+import { workingDaysOn } from '../core/leaveDays.js';
 import { yearBounds, yearBoundsFor, yearKeyFor, employedFractionOfYear } from '../core/holidayYear.js';
 import { bankHolidayMap } from '../core/bankHolidays.js';
 
@@ -47,12 +48,12 @@ export const SAMPLE_CARERS = [
   { id: 'carer_s04', firstName: 'Aisha', lastName: 'Rahman', role: 'Carer', teamId: 'team_day', workingDays: MON_FRI, entitlementDays: 25, phone: '07700 900104', email: 'aisha.rahman@example.com', notes: 'Prefers morning visits.' },
   { id: 'carer_s05', firstName: 'Ewan', lastName: 'MacLeod', role: 'Carer', teamId: 'team_day', workingDays: MON_FRI, entitlementDays: 24 },
   { id: 'carer_s06', firstName: 'Grace', lastName: 'Okafor', role: 'Carer', teamId: 'team_day', workingDays: [1, 3, 5], entitlementDays: 17, phone: '07700 900106', notes: 'Part time – Mon, Wed, Fri.' },
-  { id: 'carer_s07', firstName: 'Fiona', lastName: 'Campbell', role: 'Carer', teamId: 'team_day', workingDays: MON_FRI, entitlementDays: 28 },
+  { id: 'carer_s07', firstName: 'Fiona', lastName: 'Campbell', role: 'Carer', teamId: 'team_day', workingDays: MON_FRI, entitlementDays: 28, pattern: { weeks: [MON_FRI, [3, 4, 5, 6, 7]], offset: 0 }, notes: 'Works alternate weekends (opposite to Hamza).' },
   { id: 'carer_s08', firstName: 'Tomasz', lastName: 'Nowak', role: 'Carer', teamId: 'team_day', workingDays: MON_FRI, entitlementDays: 25, phone: '07700 900108', notes: 'Started this year, so entitlement is pro rata.', kind: 'starter' },
   { id: 'carer_s09', firstName: 'Isla', lastName: 'Robertson', role: 'Senior carer', teamId: 'team_night', workingDays: MON_FRI, entitlementDays: 28, phone: '07700 900109', email: 'isla.robertson@example.com' },
   { id: 'carer_s10', firstName: 'Daniel', lastName: 'Adeyemi', role: 'Carer', teamId: 'team_night', workingDays: MON_FRI, entitlementDays: 25 },
   { id: 'carer_s11', firstName: 'Kirsty', lastName: 'Buchanan', role: 'Carer', teamId: 'team_night', workingDays: [2, 4, 6], entitlementDays: 16, email: 'kirsty.buchanan@example.com', notes: 'Part time – Tue, Thu, Sat.' },
-  { id: 'carer_s12', firstName: 'Hamza', lastName: 'Iqbal', role: 'Carer', teamId: 'team_night', workingDays: MON_FRI, entitlementDays: 22 },
+  { id: 'carer_s12', firstName: 'Hamza', lastName: 'Iqbal', role: 'Carer', teamId: 'team_night', workingDays: MON_FRI, entitlementDays: 22, pattern: { weeks: [MON_FRI, [3, 4, 5, 6, 7]], offset: 1 }, notes: 'Works alternate weekends (opposite to Fiona).' },
   { id: 'carer_s13', firstName: 'Eilidh', lastName: 'Grant', role: 'Carer', teamId: 'team_night', workingDays: MON_FRI, entitlementDays: 25, email: 'eilidh.grant@example.com', notes: 'Leaving soon – last day is in the diary.', kind: 'leaver' },
   { id: 'carer_s14', firstName: 'Marek', lastName: 'Kowalski', role: 'Team leader', teamId: 'team_weekend', workingDays: [2, 3, 4, 5, 6], entitlementDays: 30, phone: '07700 900114', email: 'marek.kowalski@example.com' },
   { id: 'carer_s15', firstName: 'Shona', lastName: 'Douglas', role: 'Carer', teamId: 'team_weekend', workingDays: [5, 6, 7], entitlementDays: 18 },
@@ -103,7 +104,7 @@ const LOOKAROUND_DAYS = 14;
  * A predicate saying whether a date is a working day for someone with these working
  * days, given the bank holidays (a Map or Set of ISO dates) that count as days off.
  */
-const worksOn = (workingDays, bank) => (iso) => workingDays.includes(isoWeekday(iso)) && !bank.has(iso);
+const worksOn = (carer, bank) => (iso) => workingDaysOn(iso, carer).includes(isoWeekday(iso)) && !bank.has(iso);
 
 /** First working day on or after `iso` (looks a fortnight ahead), or null. */
 function onOrAfter(iso, isWorkingDay) {
@@ -171,13 +172,14 @@ function adjustmentsFor(carerId, yearKey, yearStart) {
 function buildCarers(rng, today, settings) {
   const year = yearBoundsFor(today, settings);
   return SAMPLE_CARERS.map((def, i) => {
-    const { kind, ...fields } = def;
+    const { kind, pattern, ...fields } = def;
     const dates = employmentDates(rng, kind, { today, yearStart: year.start });
     const created = stamp(minISO(dates.startDate, today));
     return newCarerRecord({
       ...fields,
       ...dates,
       workingDays: [...def.workingDays],
+      shiftPattern: pattern ? { weeks: pattern.weeks.map((w) => [...w]), anchor: addDays(startOfWeek(today, 1), -7 * pattern.offset) } : null,
       phone: def.phone || '',
       email: def.email || '',
       notes: def.notes || '',
@@ -217,7 +219,7 @@ function createWorld(rng, today, db) {
     rng, today, settings, carers, years, lo, hi, bank,
     carer: (id) => carers.find((c) => c.id === id),
     /** Is a date a working day for this carer? */
-    days: (carer) => worksOn(carer.workingDays, bank),
+    days: (carer) => worksOn(carer, bank),
     capByTeam: new Map(teams.map((t) => [t.id, capOf(t)])),
     holidays: [],
     rangesByCarer: new Map(carers.map((c) => [c.id, []])),

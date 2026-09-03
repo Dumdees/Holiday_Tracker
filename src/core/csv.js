@@ -1,7 +1,8 @@
 // CSV export and import. Plain text in, plain objects out – no DOM.
 // Exports open cleanly in Excel (UTF-8 BOM, CRLF, quoted fields); imports are
 // forgiving about headings, dates and working-day patterns typed by hand.
-import { addDays, formatNumeric, isValidISO, makeISO, parseLooseDate, WEEKDAYS_LONG, WEEKDAYS_SHORT } from './dates.js';
+import { addDays, formatNumeric, isValidISO, makeISO, parseLooseDate, startOfWeek, todayISO, WEEKDAYS_LONG, WEEKDAYS_SHORT } from './dates.js';
+import { shiftPatternOf } from './leaveDays.js';
 import { HOLIDAY_STATUSES, defaultSettings } from '../store/defaults.js';
 import { normaliseText } from './search.js';
 
@@ -159,6 +160,36 @@ export function formatWorkingDays(days) {
   return (tidyDays(days) ?? []).map((n) => WEEKDAYS_SHORT[n - 1]).join(', ');
 }
 
+/**
+ * A carer's working days for the spreadsheet. Shift patterns come out as
+ * 'Week 1: Mon, Tue, Wed, Thu, Fri / Week 2: Wed, Thu, Fri, Sat, Sun (week 1 from 31/08/2026)'
+ * so they survive a round trip through parseShiftPattern.
+ */
+export function formatWorkingPattern(carer) {
+  const p = shiftPatternOf(carer);
+  if (!p) return formatWorkingDays(carer?.workingDays);
+  const weeks = p.weeks.map((w, i) => `Week ${i + 1}: ${formatWorkingDays(w) || 'none'}`).join(' / ');
+  return `${weeks} (week 1 from ${formatNumeric(p.anchor)})`;
+}
+
+/**
+ * Read a shift pattern written as 'Week 1: Mon-Fri / Week 2: Wed-Sun (week 1 from 31/08/2026)'
+ * (weeks may also be separated by ';' or '|'; the "week n:" labels and the date are optional).
+ * Returns { weeks, anchor } (anchor null when no date was given) or null when the text is not a
+ * multi-week pattern.
+ */
+export function parseShiftPattern(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return null;
+  let anchor = null;
+  const body = raw.replace(/\(\s*(?:week\s*1\s*)?(?:from|starting|starts|beginning)\s+([^)]+)\)/i, (_, d) => { anchor = readCsvDate(d.trim()).iso || null; return ''; });
+  const parts = body.split(/\s*[/;|]\s*/).map((x) => x.replace(/^\s*(?:week|wk|w)\s*\d+\s*[:\-–]\s*/i, '').trim());
+  if (parts.length < 2 || parts.length > 4) return null;
+  const weeks = parts.map((x) => (/^(none|off|no days|-)?$/i.test(x) ? [] : parseWorkingDays(x)));
+  if (weeks.some((w) => w === null) || !weeks.some((w) => w.length)) return null;
+  return { weeks, anchor };
+}
+
 function tidyDays(days) {
   if (!days) return null;
   const set = new Set(days.map(Number).filter((n) => n >= 1 && n <= 7));
@@ -271,7 +302,7 @@ export function carersToCsv(carers, lookups = {}) {
     { key: 'role', label: 'Role' },
     { key: 'startDate', label: 'Start date', get: (c) => formatNumeric(c.startDate) },
     { key: 'endDate', label: 'End date', get: (c) => formatNumeric(c.endDate) },
-    { key: 'workingDays', label: 'Working days', get: (c) => formatWorkingDays(c.workingDays) },
+    { key: 'workingDays', label: 'Working days', get: (c) => formatWorkingPattern(c) },
     { key: 'entitlementDays', label: 'Entitlement days' },
     { key: 'phone', label: 'Phone' },
     { key: 'email', label: 'Email' },
@@ -499,18 +530,28 @@ export function parseCarersCsv(text, db = {}) {
     if (startDate && endDate && endDate < startDate) warn(`${name}’s end date ${formatNumeric(endDate)} is before the start date ${formatNumeric(startDate)} – check it after importing.`);
 
     let workingDays = [...settings.defaultWorkingDays];
+    let shiftPattern = null;
     const daysText = cell('workingDays');
     if (daysText) {
-      const parsed = parseWorkingDays(daysText);
-      if (parsed) workingDays = parsed;
-      else warn(`The working days “${daysText}” weren’t understood, so ${defaultDays} has been used.`);
+      const pattern = parseShiftPattern(daysText);
+      if (pattern) {
+        const anchor = pattern.anchor || startOfWeek(todayISO(), 1);
+        shiftPattern = { weeks: pattern.weeks, anchor };
+        workingDays = pattern.weeks.find((w) => w.length) || workingDays;
+        if (!pattern.anchor) warn(`${name}’s pattern didn’t say which week is week 1, so this week (from ${formatNumeric(anchor)}) has been taken as week 1.`);
+      } else {
+        const parsed = parseWorkingDays(daysText);
+        if (parsed) workingDays = parsed;
+        else warn(`The working days “${daysText}” weren’t understood, so ${defaultDays} has been used.`);
+      }
     }
+    const daysPerWeek = shiftPattern ? shiftPattern.weeks.reduce((n, w) => n + w.length, 0) / shiftPattern.weeks.length : workingDays.length;
 
     let entitlementDays = settings.defaultEntitlementDays;
     const entitlementText = cell('entitlement');
     if (entitlementText) {
       const parsed = parseEntitlement(entitlementText);
-      const days = parsed?.weeks != null ? Math.round(parsed.weeks * workingDays.length * 100) / 100 : parsed?.days;
+      const days = parsed?.weeks != null ? Math.round(parsed.weeks * daysPerWeek * 100) / 100 : parsed?.days;
       if (days == null) warn(`The entitlement “${entitlementText}” isn’t a number of days, so ${settings.defaultEntitlementDays} days has been used.`);
       else if (days > 366) warn(`The entitlement “${entitlementText}” is more than a year of days, so ${settings.defaultEntitlementDays} days has been used.`);
       else entitlementDays = days;
@@ -525,6 +566,7 @@ export function parseCarersCsv(text, db = {}) {
       startDate,
       endDate,
       workingDays,
+      ...(shiftPattern ? { shiftPattern } : {}),
       entitlementDays,
       phone: cell('phone'),
       email: cell('email'),

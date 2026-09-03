@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   workingDaysOf, classifyDay, isWorkingDay, leaveDaysBreakdown, countLeaveDays, clipToRange, describeWorkingPattern,
 } from '../../src/core/leaveDays.js';
+import * as ldm from '../../src/core/leaveDays.js';
 
 // Fixtures. 2026-06-15 is a Monday; 2026-05-04 and 2026-05-25 are Mondays and bank holidays.
 const bankHolidayMap = new Map([
@@ -292,5 +293,59 @@ describe('clipToRange – year boundaries', () => {
     const h = { start: '2026-04-01', end: '2026-04-01', halfDay: 'pm' };
     assert.equal(countLeaveDays(clipToRange(h, '2026-04-01', '2027-03-31'), fullTime, ctx), 0.5);
     assert.equal(clipToRange(h, '2025-04-01', '2026-03-31'), null);
+  });
+});
+
+describe('shift patterns', () => {
+  // Week 1 = Mon to Fri, week 2 = Wed to Sun. 2026-08-31 is a Monday and starts a week 1.
+  const alternate = { id: 'p1', workingDays: [1, 2, 3, 4, 5], shiftPattern: { weeks: [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]], anchor: '2026-09-02' } };
+
+  test('shiftPatternOf tidies the weeks and anchors on a Monday; incomplete patterns are ignored', () => {
+    const { shiftPatternOf } = ldm;
+    assert.deepEqual(shiftPatternOf(alternate), { weeks: [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]], anchor: '2026-08-31' });
+    assert.equal(shiftPatternOf(fullTime), null);
+    assert.equal(shiftPatternOf({ shiftPattern: { weeks: [[1]], anchor: '2026-08-31' } }), null, 'one week is not a pattern');
+    assert.equal(shiftPatternOf({ shiftPattern: { weeks: [[1], [2]], anchor: 'nope' } }), null, 'needs a valid anchor');
+    assert.equal(shiftPatternOf({ shiftPattern: { weeks: [[], []], anchor: '2026-08-31' } }), null, 'needs at least one working day');
+    assert.deepEqual(shiftPatternOf({ shiftPattern: { weeks: [['5', 5, 1, 9], []], anchor: '2026-08-31' } }).weeks, [[1, 5], []], 'a week off is allowed');
+  });
+
+  test('the pattern repeats in both directions from the anchor week', () => {
+    const { workingDaysOn, patternWeekIndex, shiftPatternOf } = ldm;
+    const p = shiftPatternOf(alternate);
+    assert.equal(patternWeekIndex('2026-08-31', p), 0);
+    assert.equal(patternWeekIndex('2026-09-06', p), 0, 'Sunday is still week 1');
+    assert.equal(patternWeekIndex('2026-09-07', p), 1);
+    assert.equal(patternWeekIndex('2026-09-14', p), 0);
+    assert.equal(patternWeekIndex('2026-08-24', p), 1, 'the week before the anchor is week 2');
+    assert.equal(patternWeekIndex('2026-08-17', p), 0);
+    assert.deepEqual(workingDaysOn('2026-09-05', alternate), [1, 2, 3, 4, 5]);
+    assert.deepEqual(workingDaysOn('2026-09-12', alternate), [3, 4, 5, 6, 7]);
+    assert.deepEqual(workingDaysOn('2026-09-12', fullTime), [1, 2, 3, 4, 5], 'no pattern: the usual week');
+  });
+
+  test('holidays only use days on the weeks they would have worked', () => {
+    // Sat 5 – Sun 6 Sep is a week-1 weekend (off); Sat 12 – Sun 13 Sep is a week-2 weekend (working).
+    assert.equal(countLeaveDays({ start: '2026-09-05', end: '2026-09-06' }, alternate, ctx), 0);
+    assert.equal(countLeaveDays({ start: '2026-09-12', end: '2026-09-13' }, alternate, ctx), 2);
+    assert.equal(countLeaveDays({ start: '2026-09-07', end: '2026-09-13' }, alternate, ctx), 5, 'week 2: Wed to Sun');
+    assert.equal(countLeaveDays({ start: '2026-08-31', end: '2026-09-13' }, alternate, ctx), 10);
+    assert.equal(classifyDay('2026-09-07', alternate, ctx), 'non-working', 'Monday of a week 2');
+    assert.equal(isWorkingDay('2026-09-13', alternate, ctx), true);
+    const b = leaveDaysBreakdown({ start: '2026-09-07', end: '2026-09-08' }, alternate, ctx);
+    assert.deepEqual(b.skipped.map((x) => x.reason), ['non-working', 'non-working']);
+  });
+
+  test('describing patterns', () => {
+    const { describeDays, describePatternWeek, workingDaysPerWeek } = ldm;
+    assert.equal(describeWorkingPattern(alternate), 'Mon to Fri, then Wed to Sun (repeats every 2 weeks)');
+    assert.equal(describeWorkingPattern({ shiftPattern: { weeks: [[1, 2, 3, 4, 5], [1, 2, 3, 4, 5], []], anchor: '2026-08-31' } }), 'Mon to Fri, then Mon to Fri, then no days (repeats every 3 weeks)');
+    assert.equal(describeDays([6, 7]), 'Sat and Sun');
+    assert.equal(describeDays([]), 'no days');
+    assert.equal(describePatternWeek('2026-09-09', alternate), 'Week 2 of 2 – Wed to Sun');
+    assert.equal(describePatternWeek('2026-09-09', fullTime), '');
+    assert.equal(workingDaysPerWeek(alternate), 5);
+    assert.equal(workingDaysPerWeek({ shiftPattern: { weeks: [[1, 2, 3, 4, 5], []], anchor: '2026-08-31' } }), 2.5);
+    assert.equal(workingDaysPerWeek(partTime), 3);
   });
 });

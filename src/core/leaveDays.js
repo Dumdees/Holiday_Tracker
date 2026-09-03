@@ -1,6 +1,6 @@
 // How many days a holiday really uses. Only the carer's working days count, and
 // (when the setting says so) bank holidays inside the range are given back.
-import { isValidISO, isoWeekday, addDays, rangesOverlap, minISO, maxISO, WEEKDAYS_SHORT } from './dates.js';
+import { isValidISO, isoWeekday, addDays, diffDays, startOfWeek, rangesOverlap, minISO, maxISO, WEEKDAYS_SHORT } from './dates.js';
 
 const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5];
 /** Safety cap so a mistyped year (e.g. 9999) can never hang the app. */
@@ -14,15 +14,81 @@ const HALF_DAY_VALUES = new Set(['am', 'pm']);
  * @returns {number[]}
  */
 export function workingDaysOf(carer) {
-  const raw = Array.isArray(carer?.workingDays) ? carer.workingDays : [];
-  const valid = raw.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7);
-  const days = [...new Set(valid)].sort((a, b) => a - b);
+  const days = tidyDays(carer?.workingDays);
   return days.length ? days : [...DEFAULT_WORKING_DAYS];
 }
 
-/** Core rule, with the working days already resolved (so loops don't recompute them). */
-function classify(iso, workingDays, ctx) {
-  if (!workingDays.includes(isoWeekday(iso))) return 'non-working';
+/** Valid, de-duplicated, sorted ISO weekday numbers from any list. */
+function tidyDays(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const valid = list.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7);
+  return [...new Set(valid)].sort((a, b) => a - b);
+}
+
+export const MAX_PATTERN_WEEKS = 4;
+
+/**
+ * The carer's repeating shift pattern, if they have one: working days for each week of a
+ * cycle of 2–4 weeks, plus the Monday that starts a "week 1". Some carers work every other
+ * weekend, for example. Null when they work the same days every week (or the pattern on the
+ * record is incomplete), so callers can fall back to `workingDaysOf`.
+ * @param {{ shiftPattern?: { weeks?: number[][], anchor?: string } } | null | undefined} carer
+ * @returns {{ weeks: number[][], anchor: string } | null}
+ */
+export function shiftPatternOf(carer) {
+  const p = carer?.shiftPattern;
+  if (!p || !Array.isArray(p.weeks) || p.weeks.length < 2 || !isValidISO(p.anchor)) return null;
+  const weeks = p.weeks.slice(0, MAX_PATTERN_WEEKS).map(tidyDays);
+  if (!weeks.some((w) => w.length)) return null;
+  return { weeks, anchor: startOfWeek(p.anchor, 1) };
+}
+
+/**
+ * Which week of the pattern (0-based) a date falls in. Weeks run Monday to Sunday and the
+ * cycle repeats forever in both directions from the anchor week.
+ * @param {string} iso – 'YYYY-MM-DD'
+ * @param {{ weeks: number[][], anchor: string }} pattern – from shiftPatternOf
+ * @returns {number}
+ */
+export function patternWeekIndex(iso, pattern) {
+  const n = pattern.weeks.length;
+  const weeks = Math.floor(diffDays(pattern.anchor, startOfWeek(iso, 1)) / 7);
+  return ((weeks % n) + n) % n;
+}
+
+/**
+ * The working days that apply on a particular date: the usual week, or the matching week of
+ * the carer's shift pattern.
+ * @param {string} iso – 'YYYY-MM-DD'
+ * @param {object} carer
+ * @returns {number[]}
+ */
+export function workingDaysOn(iso, carer) {
+  const p = shiftPatternOf(carer);
+  return p ? p.weeks[patternWeekIndex(iso, p)] : workingDaysOf(carer);
+}
+
+/** A function giving the working days for any date, resolved once per carer for loops. */
+function dayResolver(carer) {
+  const p = shiftPatternOf(carer);
+  if (!p) { const usual = workingDaysOf(carer); return () => usual; }
+  return (iso) => p.weeks[patternWeekIndex(iso, p)];
+}
+
+/**
+ * Average number of working days a week (over the whole cycle for a shift pattern).
+ * @param {object} carer
+ * @returns {number}
+ */
+export function workingDaysPerWeek(carer) {
+  const p = shiftPatternOf(carer);
+  if (!p) return workingDaysOf(carer).length;
+  return p.weeks.reduce((sum, w) => sum + w.length, 0) / p.weeks.length;
+}
+
+/** Core rule, with a resolver for the working days (so loops don't recompute the pattern). */
+function classify(iso, daysFor, ctx) {
+  if (!daysFor(iso).includes(isoWeekday(iso))) return 'non-working';
   if (ctx?.settings?.bankHolidaysAreDaysOff && ctx.bankHolidayMap?.has(iso)) return 'bank-holiday';
   return 'working';
 }
@@ -35,7 +101,7 @@ function classify(iso, workingDays, ctx) {
  * @returns {'working' | 'non-working' | 'bank-holiday'}
  */
 export function classifyDay(iso, carer, ctx) {
-  return classify(iso, workingDaysOf(carer), ctx);
+  return classify(iso, dayResolver(carer), ctx);
 }
 
 /**
@@ -63,11 +129,11 @@ export function isWorkingDay(iso, carer, ctx) {
 export function leaveDaysBreakdown(holidayLike, carer, ctx) {
   const { start, end, halfDay } = holidayLike || {};
   if (!isValidISO(start) || !isValidISO(end) || end < start) return { days: 0, countedDays: [], skipped: [] };
-  const workingDays = workingDaysOf(carer);
+  const daysFor = dayResolver(carer);
   const countedDays = [];
   const skipped = [];
   for (let iso = start, n = 0; iso <= end && n < MAX_RANGE_DAYS; iso = addDays(iso, 1), n++) {
-    const kind = classify(iso, workingDays, ctx);
+    const kind = classify(iso, daysFor, ctx);
     if (kind === 'working') countedDays.push(iso);
     else skipped.push({ date: iso, reason: kind });
   }
@@ -123,11 +189,38 @@ function isConsecutive(sorted) {
  * @returns {string}
  */
 export function describeWorkingPattern(carer) {
-  const days = workingDaysOf(carer);
+  const p = shiftPatternOf(carer);
+  if (!p) return describeDays(workingDaysOf(carer));
+  return `${p.weeks.map(describeDays).join(', then ')} (repeats every ${p.weeks.length} weeks)`;
+}
+
+/**
+ * One week's days in plain English: 'Mon to Fri', 'Mon, Wed, Fri', 'Sat and Sun', 'Wed only',
+ * 'Every day' or 'no days'.
+ * @param {number[]} raw – ISO weekday numbers
+ * @returns {string}
+ */
+export function describeDays(raw) {
+  const days = tidyDays(raw);
   const names = days.map((n) => WEEKDAYS_SHORT[n - 1]);
+  if (days.length === 0) return 'no days';
   if (days.length === 7) return 'Every day';
   if (days.length === 1) return `${names[0]} only`;
   if (days.length === 2) return `${names[0]} and ${names[1]}`;
   if (isConsecutive(days)) return `${names[0]} to ${names[names.length - 1]}`;
   return names.join(', ');
+}
+
+/**
+ * For a carer on a shift pattern: which week of the pattern a date is in, in plain English,
+ * e.g. 'Week 2 of 2 – Wed to Sun'. Empty string for carers without a pattern.
+ * @param {string} iso – 'YYYY-MM-DD'
+ * @param {object} carer
+ * @returns {string}
+ */
+export function describePatternWeek(iso, carer) {
+  const p = shiftPatternOf(carer);
+  if (!p) return '';
+  const i = patternWeekIndex(iso, p);
+  return `Week ${i + 1} of ${p.weeks.length} – ${describeDays(p.weeks[i])}`;
 }

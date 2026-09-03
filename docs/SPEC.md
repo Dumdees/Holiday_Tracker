@@ -82,9 +82,15 @@ them for clicks and tests.
   label "2026/27" (or "2026" for January starts). A holiday spanning the boundary is split, each piece
   counted in its own year.
 - **Days used by a holiday** = number of the carer's working days (per `carer.workingDays`, ISO
-  1=Mon…7=Sun) between start and end inclusive, minus bank holidays if
+  1=Mon…7=Sun, or the matching week of their `shiftPattern`) between start and end inclusive, minus bank holidays if
   `settings.bankHolidaysAreDaysOff` is true. Single-day with `halfDay` = 0.5. Leave types with
   `deductsEntitlement=false` (sick etc.) are tracked but don't reduce remaining.
+- **Shift patterns**: a carer may work a repeating cycle of 2–4 weeks (`carer.shiftPattern`), e.g.
+  alternate weekends (Mon–Fri, then Wed–Sun). Weeks run Monday to Sunday; `anchor` is any date in a
+  week 1 and the cycle repeats forever in both directions. Every rule that asks "would they be at
+  work that day" (leave counting, staffing, pairing, no-working-days, the profile calendar) uses the
+  week that applies. `workingDays` is kept as the first working week for exports and defaults. The
+  carer form asks which week the current week is and works the anchor out from that.
 - **Entitlement for a year** = `carer.entitlementDays` × pro-rata fraction (if
   `settings.proRataStartersAndLeavers` and start/end date falls inside the year), rounded to
   `settings.roundEntitlementTo` (0.5), plus the sum of `carer.adjustments` for that year key.
@@ -110,6 +116,7 @@ them for clicks and tests.
 ```
 db = { schemaVersion, settings, leaveTypes[], teams[], carers[], holidays[], bankHolidayOverrides{added[],removed[]} }
 carer = { id, firstName, lastName, role, teamId|null, startDate|null, endDate|null, workingDays[1..7],
+          shiftPattern: null | { weeks: [[1..7], …] (2–4 weeks), anchor: 'YYYY-MM-DD' (a Monday starting a week 1) },
           entitlementDays, phone, email, notes, colour, active, mustNotBeOffWith[], adjustments[{id,yearKey,days,reason,createdAt}] }
 holiday = { id, carerId, start, end (inclusive), typeId, status: approved|pending|declined, halfDay: null|'am'|'pm', notes, batchId }
 team = { id, name, colour, maxOffPerDay|null }
@@ -127,6 +134,8 @@ below is stable – add optional parameters rather than changing or removing any
     `overrides.added` / `overrides.removed` (`fromYear`/`toYear` default to a few years around `today`).
   - `bankHolidaysBetween(start, end, map)` → `[{ date, name }]`; `isBankHoliday(iso, map)`, `bankHolidayName(iso, map)`.
 - `leaveDays.js`
+  - `shiftPatternOf(carer)` → `{ weeks, anchor }|null`; `workingDaysOn(iso, carer)` → the days that apply that week;
+    `patternWeekIndex(iso, pattern)`; `describePatternWeek(iso, carer)` ('Week 2 of 2 – Wed to Sun'); `workingDaysPerWeek(carer)`.
   - `isWorkingDay(iso, carer, ctx)`; `countLeaveDays(holidayLike, carer, ctx)` → number;
     `leaveDaysBreakdown(holidayLike, carer, ctx)` → `{ days, countedDays: [iso], skipped: [{ date, reason }] }`.
   - `ctx = { settings, bankHolidayMap, leaveTypesById, today, … }` built by `buildContext(db, { today })` in

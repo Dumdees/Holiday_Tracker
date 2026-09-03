@@ -8,6 +8,17 @@ import { HelpTip } from '../components/HelpTip.jsx';
 import { toast } from '../components/Toast.jsx';
 import { carers, teams, settings, addCarer, updateCarer, carerName } from '../../store/store.js';
 import { carerOptions, roleOptions } from '../shared/options.js';
+import { today } from '../shared/today.js';
+import { shiftPatternOf, patternWeekIndex, MAX_PATTERN_WEEKS } from '../../core/leaveDays.js';
+import { startOfWeek, addDays, formatShort } from '../../core/dates.js';
+
+const PATTERN_OPTIONS = [
+  { value: 1, label: 'The same days every week' },
+  { value: 2, label: 'Repeats every 2 weeks (for example alternate weekends)' },
+  { value: 3, label: 'Repeats every 3 weeks' },
+  { value: 4, label: 'Repeats every 4 weeks' },
+];
+const ALTERNATE_WEEKENDS = [[1, 2, 3, 4, 5], [3, 4, 5, 6, 7]];
 
 /**
  * @param {{ carerId?: string|null, defaults?: object }} opts – pass carerId to edit, or defaults for a new carer
@@ -31,6 +42,9 @@ function CarerForm({ carerId, defaults, close }) {
     startDate: existing?.startDate ?? '',
     endDate: existing?.endDate ?? '',
     workingDays: existing?.workingDays ?? [...s.defaultWorkingDays],
+    // A repeating pattern: one list of days per week, and which of those weeks the current week is.
+    patternWeeks: shiftPatternOf(existing)?.weeks ?? null,
+    thisWeek: shiftPatternOf(existing) ? patternWeekIndex(today.value, shiftPatternOf(existing)) : 0,
     entitlementDays: existing?.entitlementDays ?? s.defaultEntitlementDays,
     phone: existing?.phone ?? '',
     email: existing?.email ?? '',
@@ -42,6 +56,18 @@ function CarerForm({ carerId, defaults, close }) {
   const [errors, setErrors] = useState({});
   const set = (key) => (value) => { setForm((f) => ({ ...f, [key]: value })); if (errors[key]) setErrors((e) => ({ ...e, [key]: '' })); };
 
+  function setCycle(n) {
+    if (n <= 1) { set('patternWeeks')(null); return; }
+    const base = form.patternWeeks || [[...form.workingDays]];
+    const weeks = Array.from({ length: Math.min(n, MAX_PATTERN_WEEKS) }, (_, i) => [...(base[i] || base[base.length - 1] || form.workingDays)]);
+    setForm((f) => ({ ...f, patternWeeks: weeks, thisWeek: Math.min(f.thisWeek, weeks.length - 1) }));
+    if (errors.pattern) setErrors((e) => ({ ...e, pattern: '' }));
+  }
+  function setWeek(i, days) {
+    setForm((f) => ({ ...f, patternWeeks: f.patternWeeks.map((w, j) => (j === i ? days : w)) }));
+    if (errors.pattern) setErrors((e) => ({ ...e, pattern: '' }));
+  }
+
   const others = carerOptions(carers.value.filter((c) => c.id !== carerId), teams.value, { includeArchived: false });
   const teamOpts = [{ value: '', label: 'No team' }, ...teams.value.map((t) => ({ value: t.id, label: t.name }))];
   const roles = roleOptions(s, carers.value);
@@ -51,7 +77,9 @@ function CarerForm({ carerId, defaults, close }) {
     const e = {};
     if (!form.firstName.trim()) e.firstName = 'Please enter a first name.';
     if (!form.lastName.trim()) e.lastName = 'Please enter a last name.';
-    if (!form.workingDays?.length) e.workingDays = 'Choose at least one working day.';
+    if (form.patternWeeks) {
+      if (!form.patternWeeks.some((w) => w.length)) e.pattern = 'Choose at least one working day somewhere in the pattern.';
+    } else if (!form.workingDays?.length) e.workingDays = 'Choose at least one working day.';
     if (form.entitlementDays == null || form.entitlementDays < 0) e.entitlementDays = 'Enter their holiday entitlement (0 or more days).';
     if (form.endDate && form.startDate && form.endDate < form.startDate) e.endDate = 'The leaving date must be after the start date.';
     if (form.email && !/^\S+@\S+\.\S+$/.test(form.email.trim())) e.email = 'That email address doesn’t look right.';
@@ -74,8 +102,12 @@ function CarerForm({ carerId, defaults, close }) {
       email: form.email.trim(),
       notes: form.notes.trim(),
       entitlementDays: Number(form.entitlementDays) || 0,
-      workingDays: [...form.workingDays].sort((a, b) => a - b),
+      workingDays: form.patternWeeks ? [...(form.patternWeeks.find((w) => w.length) || form.workingDays)] : [...form.workingDays].sort((a, b) => a - b),
+      // Week 1 of the pattern is `thisWeek` weeks before the current week.
+      shiftPattern: form.patternWeeks ? { weeks: form.patternWeeks.map((w) => [...w].sort((a, b) => a - b)), anchor: addDays(startOfWeek(today.value, 1), -7 * form.thisWeek) } : null,
     };
+    delete data.patternWeeks;
+    delete data.thisWeek;
     if (existing) {
       updateCarer(existing.id, data);
       toast(`${carerName(data)} updated`);
@@ -110,9 +142,32 @@ function CarerForm({ carerId, defaults, close }) {
         </Field>
       </div>
 
-      <Field label="Working days" required error={errors.workingDays} hint="Holidays only use up days on the days they normally work.">
-        <WeekdayPicker value={form.workingDays} onChange={set('workingDays')} />
+      <Field label="Working pattern" hint="Holidays only use up days on the days they would have worked, and clash checks only count them on those days.">
+        <SelectField options={PATTERN_OPTIONS} value={form.patternWeeks ? form.patternWeeks.length : 1} onChange={(v) => setCycle(Number(v))} />
       </Field>
+      {!form.patternWeeks ? (
+        <Field label="Working days" required error={errors.workingDays}>
+          <WeekdayPicker value={form.workingDays} onChange={set('workingDays')} />
+        </Field>
+      ) : (
+        <div class="shift-pattern" data-test="shift-pattern">
+          {form.patternWeeks.map((days, i) => (
+            <Field key={i} label={`Week ${i + 1}${i === form.thisWeek ? ' (this week)' : ''}`} error={i === 0 ? errors.pattern : undefined}>
+              <WeekdayPicker value={days} onChange={(v) => setWeek(i, v)} />
+            </Field>
+          ))}
+          <div class="grid grid-2">
+            <Field label="Which week is it this week?" hint={`The week beginning ${formatShort(startOfWeek(today.value, 1))}.`}>
+              <SelectField options={form.patternWeeks.map((_, i) => ({ value: i, label: `Week ${i + 1}` }))} value={form.thisWeek} onChange={(v) => set('thisWeek')(Number(v))} />
+            </Field>
+            {form.patternWeeks.length === 2 ? (
+              <Field label="Quick fill" hint="Mon to Fri one week, Wed to Sun the next.">
+                <Button variant="secondary" icon="calendar" onClick={() => set('patternWeeks')(ALTERNATE_WEEKENDS.map((w) => [...w]))}>Alternate weekends</Button>
+              </Field>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       <div class="grid grid-2">
         <Field label={<>Holiday entitlement <HelpTip text="The number of days' holiday they get in a full holiday year. Half days are fine (for example 22.5)." /></>} required error={errors.entitlementDays} hint="Days per full holiday year.">

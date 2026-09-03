@@ -778,3 +778,7 @@ th[aria-sort="ascending"] .th-sort svg, th[aria-sort="descending"] .th-sort svg 
   .collapsible-body { display: block; }
   .tabs { display: none; }
 }
+
+/* Shift pattern editor in the carer form */
+.shift-pattern { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--peach-50); }
+.shift-pattern .grid { margin-top: 2px; }

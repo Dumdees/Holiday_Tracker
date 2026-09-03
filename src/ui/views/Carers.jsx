@@ -21,7 +21,7 @@ import { Icon } from '../components/Icon.jsx';
 import { carers, holidays, teams, teamsById, leaveTypesById, settings, carersById, carerName, setCarerActive, removeCarer, removeAdjustment } from '../../store/store.js';
 import { searchCarers } from '../../core/search.js';
 import { formatDays } from '../../core/entitlement.js';
-import { describeWorkingPattern, countLeaveDays, classifyDay } from '../../core/leaveDays.js';
+import { describeWorkingPattern, describePatternWeek, countLeaveDays, classifyDay } from '../../core/leaveDays.js';
 import { formatShort, formatRange, formatLong, rangesOverlap, monthGrid, parts, addMonths, monthName, weekdayHeaders, relativeDay } from '../../core/dates.js';
 import { yearBounds } from '../../core/holidayYear.js';
 import { usageMap, usageFor } from '../shared/usage.js';
@@ -257,7 +257,7 @@ function CarerProfile({ id }) {
           <dl class="detail-lines">
             <div><dt>Team</dt><dd>{team?.name || 'No team'}</dd></div>
             <div><dt>Role</dt><dd>{carer.role || '—'}</dd></div>
-            <div><dt>Working days</dt><dd>{describeWorkingPattern(carer)}</dd></div>
+            <div><dt>Working days</dt><dd>{describeWorkingPattern(carer)}{carer.shiftPattern ? <div class="muted small">This week: {describePatternWeek(todayIso, carer)}</div> : null}</dd></div>
             <div><dt>Full-year entitlement</dt><dd>{formatDays(carer.entitlementDays)} days</dd></div>
             <div><dt>Started</dt><dd>{carer.startDate ? formatLong(carer.startDate) : 'Not recorded'}</dd></div>
             {carer.endDate ? <div><dt>Leaving</dt><dd>{formatLong(carer.endDate)}</dd></div> : null}
