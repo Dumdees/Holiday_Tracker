@@ -274,27 +274,27 @@ export const BRANCHES = [
     slot: 'buyer', name: 'Who do you work for?', emoji: '🤝', level: 1,
     blurb: 'Most of your work is going to come from one place. Which?',
     options: [
-      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.5, blurb: 'Everything earns 50% more.', question: 'Flat, simple and never wrong.' },
-      { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.25, discount: 0.75, blurb: 'Everything earns 25% more, and work costs 25% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
-      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.25, per: 0.01, from: 'chc', cap: 1.5, blurb: 'Everything earns 25% more, plus 1% for every NHS-funded package, up to +150%.', question: 'Weakest now, strongest later – if you get to NHS work.' },
+      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.45, blurb: 'Everything earns 50% more.', question: 'Flat, simple and never wrong.' },
+      { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.3, discount: 0.55, blurb: 'Everything earns 30% more, and taking on work costs 45% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
+      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.35, per: 0.02, from: 'chc', cap: 1.6, blurb: 'Everything earns 35% more, plus 2% for every NHS-funded package, up to +160%.', question: 'Weakest now, strongest later – if you get to NHS work.' },
     ],
   },
   {
     slot: 'growth', name: 'How do you grow?', emoji: '🌱', level: 3,
     blurb: 'Everybody grows differently. What is your way?',
     options: [
-      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.1, per: 0.015, from: 'carer', cap: 1.6, blurb: 'Everything earns 10% more, plus 1.5% for every carer, up to +160%.', question: 'Grows with the team and nothing else. The biggest ceiling if you keep hiring.' },
-      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.35, discount: 0.5, blurb: 'Everything earns 35% more, and carers, key safes, cars and offices all cost half as much.', question: 'Not a bonus but a discount: everything on the team side is a third cheaper, for ever.' },
-      { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 1.8, clickBoost: 3, blurb: 'Every visit is worth 80% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
+      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.1, per: 0.01, from: 'carer', cap: 0.95, blurb: 'Everything earns 10% more, plus 1% for every carer, up to +95%.', question: 'Grows with the team and nothing else. The biggest ceiling if you keep hiring.' },
+      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.85, discount: 0.4, blurb: 'Everything earns 85% more, and carers, key safes, cars and offices all cost 60% less.', question: 'Not a bonus but a discount: everything on the team side is a third cheaper, for ever.' },
+      { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.1, clickBoost: 3, blurb: 'Every visit is worth 110% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
   },
   {
     slot: 'known', name: 'What are you known for?', emoji: '🏅', level: 5,
     blurb: 'Every good agency is known for something.',
     options: [
-      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.3, per: 0.002, from: 'client', cap: 1.2, blurb: 'Everything earns 30% more, plus a little for everybody you look after, up to +120%.', question: 'Rewards a long client list and life story work.' },
-      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 1.8, discount: 0.72, blurb: 'Everything earns 80% more, and taking on work costs 28% less.', question: 'Short, intensive, and people leave you better than they arrived.' },
-      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.3, per: 0.035, from: ['chc', 'nurse'], cap: 1.4, blurb: 'Everything earns 30% more, plus 3.5% for every NHS package and nurse-led team, up to +140%.', question: 'The hardest work, the highest ceiling.' },
+      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.35, per: 0.0018, from: 'client', cap: 1.0, blurb: 'Everything earns 35% more, plus a little for everybody you look after, up to +100%.', question: 'Rewards a long client list and life story work.' },
+      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2.05, discount: 0.62, blurb: 'Everything earns 105% more, and taking on work costs 38% less.', question: 'Short, intensive, and people leave you better than they arrived.' },
+      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.35, per: 0.02, from: ['chc', 'nurse'], cap: 1.0, blurb: 'Everything earns 35% more, plus 2% for every NHS package and nurse-led team, up to +100%.', question: 'The hardest work, the highest ceiling.' },
     ],
   },
 ];
