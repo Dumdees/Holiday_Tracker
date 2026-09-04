@@ -274,7 +274,7 @@ export const BRANCHES = [
     slot: 'buyer', name: 'Who do you work for?', emoji: '🤝', level: 1,
     blurb: 'Most of your work is going to come from one place. Which?',
     options: [
-      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.45, blurb: 'Everything earns 50% more.', question: 'Flat, simple and never wrong.' },
+      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.45, blurb: 'Everything earns 45% more.', question: 'Flat, simple and never wrong.' },
       { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.3, discount: 0.55, blurb: 'Everything earns 30% more, and taking on work costs 45% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
       { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.35, per: 0.02, from: 'chc', cap: 1.6, blurb: 'Everything earns 35% more, plus 2% for every NHS-funded package, up to +160%.', question: 'Weakest now, strongest later – if you get to NHS work.' },
     ],

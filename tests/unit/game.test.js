@@ -9,9 +9,9 @@ const T0 = Date.UTC(2026, 8, 2, 9, 0, 0);
 /** A board with sensible amounts of everything, for probing the maths. */
 const board = (extra = {}) => ({ ...g.newGame(T0), level: 9, buildings: { carer: 40, client: 40, keysafe: 20, package: 10, ...extra } });
 
-test('a new game starts with a couple of front doors and no carers', () => {
+test('a new game starts with a few front doors and no carers', () => {
   const s = g.newGame(T0);
-  assert.deepEqual(s.buildings, { client: 2 });
+  assert.deepEqual(s.buildings, { client: 3 });
   assert.equal(s.funds, 0);
   assert.equal(g.productionPerSecond(s, T0), 0, 'nobody to do the visits yet');
   assert.equal(g.clickValue(s, T0), 1);
@@ -29,7 +29,7 @@ describe('the two sides', () => {
     g.buyBuilding(s, 'carer', 1);
     assert.ok(g.productionPerSecond(s, T0) > 0, 'one carer and one person is a working business');
     const m = g.boardMetrics(s);
-    assert.ok(Math.abs(m.work - 6.4) < 1e-9, 'two front doors');
+    assert.ok(Math.abs(m.work - 9.6) < 1e-9, 'three front doors');
     assert.ok(Math.abs(m.team - 0.8) < 1e-9, 'one carer');
     assert.ok(Math.abs(m.visits - (m.work + m.team + Math.sqrt(m.work * m.team)) / 3) < 1e-9, 'the two sides averaged, with a bonus for keeping them level');
     assert.equal(g.combineSides(0, 0), 0);
@@ -73,10 +73,14 @@ describe('the two sides', () => {
     }
   });
 
-  test('the shop says which side is behind', () => {
-    assert.equal(g.bottleneck(board({ carer: 4, client: 80 })).side, 'team');
-    assert.equal(g.bottleneck(board({ carer: 80, client: 4 })).side, 'work');
-    assert.ok(['balanced', 'work', 'team'].includes(g.bottleneck(board({ carer: 48, client: 40, keysafe: 0, package: 0 })).side));
+  test('the shop says which side a minute of takings is better spent on', () => {
+    const only = (b) => ({ ...board(), buildings: b });
+    assert.equal(g.bottleneck(only({ carer: 4, client: 80 })).side, 'team', 'far more work than team: buy hands');
+    assert.equal(g.bottleneck(only({ carer: 80, client: 4 })).side, 'work', 'far more team than work: take work on');
+    assert.ok(['balanced', 'work', 'team'].includes(g.bottleneck(only({ carer: 48, client: 40 })).side));
+    // The advice names the bonus the board is costing you, so the axis is never invisible.
+    const held = { ...only({ carer: 400, client: 30 }), upgrades: ['cond-busy', 'cond-waiting'] };
+    assert.match(g.bottleneck(held).advice, /A full round|People ask for you first/);
   });
 });
 

@@ -30,6 +30,7 @@ const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
 const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
+const CLICK_SHARE_CAP = 0.15;     // one visit of your own is never worth more than this much of a second
 export const MILESTONES_BEYOND = 4;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
@@ -46,7 +47,7 @@ export function newGame(now = Date.now()) {
     visits: 0,
     clicks: 0,
     collections: 0,
-    buildings: { client: 2 },   // two front doors to be going on with; you do the visits yourself at first
+    buildings: { client: 3 },   // three front doors to be going on with; you do the visits yourself at first
     upgrades: [],
     branches: {},               // slot -> option id, chosen once per run
     achievements: [],
@@ -121,6 +122,8 @@ export function loadGame(saved, now = Date.now()) {
     log: [...(from.log || [])].slice(0, 12),
   };
   state.version = SAVE_VERSION;
+  // A game saved before the finish line was kept starts its next run with one worked out now.
+  if (!(from.runTarget > 0)) state.runTarget = runTargetFor(state.level, state.lastPeak, 0);
   const offline = applyOffline(state, now);
   state.lastSeen = now;
   // Somebody who has been away half a day comes back to a card on the mat.
@@ -326,7 +329,7 @@ export function clickValue(state, now = Date.now()) {
     if (u.kind === 'clickpct') pct += u.pct || 0.01;
   }
   if (state.perks.includes('legend')) v *= 10;
-  let value = v * globalMultiplier(state, now) + pct * productionPerSecond(state, now);
+  let value = v * globalMultiplier(state, now) + Math.min(CLICK_SHARE_CAP, pct) * productionPerSecond(state, now);
   for (const e of state.effects) if (e.clickMult && e.until > now) value *= e.clickMult;
   return value;
 }
@@ -363,7 +366,8 @@ export function buildingCost(state, id, qty = 1) {
  * this stays quick: working out the price from scratch for every number in turn is the difference
  * between a thousand sums and a million on a big board.
  */
-export function maxAffordable(state, id) {
+/** How many of something a given purse would buy, up to a sensible armful. */
+function maxAffordableFor(state, id, funds) {
   const b = buildingDef(state, id);
   if (!b) return 0;
   const owned = state.buildings[id] || 0;
@@ -371,11 +375,15 @@ export function maxAffordable(state, id) {
   let n = 0, total = 0;
   while (n < 2000) {
     const next = total + unitCost(b.baseCost, owned + n);
-    if (!(Math.ceil(next * discount) <= state.funds)) break;
+    if (!(Math.ceil(next * discount) <= funds)) break;
     total = next;
     n++;
   }
   return n;
+}
+
+export function maxAffordable(state, id) {
+  return maxAffordableFor(state, id, state.funds);
 }
 
 export function upgradeCost(state, id) {
@@ -503,21 +511,31 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
 export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   if (m.work <= 0) return { side: 'work', ratio: 0, advice: 'Take somebody on – there is nobody to visit yet.' };
   if (m.team <= 0) return { side: 'team', ratio: 0, advice: 'You need a carer before anybody gets a visit.' };
-  const best = { work: Infinity, team: Infinity };
+  // Judged on what a minute's takings actually buys on each side, not on one unit's payback: with
+  // bonuses that swing on the shape of the board, one unit is far too short a view.
+  const income = productionPerSecond(state, now);
+  const budget = Math.max(income * 60, 1);
+  const worth = { work: 0, team: 0 };
   for (const b of unlockedBuildings(state)) {
-    const p = buildingOffer(state, b.id, 1, now).payback;
-    if (p < best[b.side]) best[b.side] = p;
+    const qty = maxAffordableFor(state, b.id, budget);
+    if (!qty) continue;                       // only what a minute's takings would really buy
+    const gain = buildingGain(state, b.id, qty, now, income);
+    if (gain > worth[b.side]) worth[b.side] = gain;
   }
   const ratio = m.team / m.work;
   const state_ = ratio > 1.1 ? 'The team can cover the work.' : ratio < 0.9 ? 'There is more work than the team can cover.' : 'The two sides are level.';
-  const held = activeConditionals(state, m).filter((c) => c.share >= 0.999).map((c) => c.name);
-  const holding = held.length ? ` ${held[0]} is paying.` : '';
-  if (!Number.isFinite(best.work) && !Number.isFinite(best.team)) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
-  const gap = best.team / best.work;
+  // Name the bonus that is furthest from paying in full: that is the one the board is costing you.
+  const live = activeConditionals(state, m);
+  const behind = live.filter((c) => c.share < 0.98).sort((a, b) => a.share - b.share)[0];
+  const holding = behind
+    ? ` ${behind.name} would pay ${Math.round((1 - behind.share) * (behind.mult - 1) * 100)}% more ${behind.label}.`
+    : (live.length ? ` ${live[0].name} is paying in full.` : '');
+  if (!worth.work && !worth.team) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
+  const gap = worth.work / Math.max(worth.team, 1e-9);
   const side = gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
-  const tip = side === 'work' ? ' Taking on more work is the best value right now.'
-    : side === 'team' ? ' Another pair of hands is the best value right now.'
-      : ' Either side is about the same value right now.';
+  const tip = side === 'work' ? ' A minute of takings buys more by taking work on.'
+    : side === 'team' ? ' A minute of takings buys more by putting it into the team.'
+      : ' A minute of takings is worth about the same on either side.';
   return { side, ratio, advice: `${state_}${holding}${tip}` };
 }
 

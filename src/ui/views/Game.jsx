@@ -120,6 +120,7 @@ export function Game() {
   const names = useCarerNames();
   const [floaters, setFloaters] = useState([]);
   const [buyQty, setBuyQty] = useState(1);
+  const [showOld, setShowOld] = useState(false);
   const [rightTab, setRightTab] = useState('grow');
   const [tickerIndex, setTickerIndex] = useState(() => Math.floor(Math.random() * 32));
   const [confetti, setConfetti] = useState(0);
@@ -239,6 +240,10 @@ export function Game() {
   const earning = G.productionPerSecond(s, now);
   const shop = G.unlockedBuildings(s).map((b) => G.buildingOffer(s, b.id, buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty, now, earning));
   const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
+  // Rungs you have left far behind are folded away: at the far stages there are dozens of them and
+  // every one reads "earns nothing extra just now".
+  const outgrown = shop.filter((b) => b !== bestBuy && b.count > 0 && earning > 0 && b.gain < earning * 0.001);
+  const rows = showOld ? shop : shop.filter((b) => !outgrown.includes(b));
   const hint = nextStep(s, shop);
   const pending = G.pendingBranch(s);
   const progress = G.expandProgress(s, now);
@@ -488,7 +493,7 @@ export function Game() {
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => setBuyQty(q)}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
             <ul class="building-list">
-              {shop.map((b) => (
+              {rows.map((b) => (
                 <li key={b.id}>
                   <button type="button" class={`building-row ${b.affordable ? 'affordable' : ''} ${bestBuy && bestBuy.id === b.id ? 'best' : ''}`} onClick={() => onBuy(b)} disabled={!b.affordable}
                     title={`${b.name} – ${b.blurb}\nYou will see: ${b.visual}`} data-test={`buy-${b.id}`}>
@@ -512,6 +517,11 @@ export function Game() {
                 <li class="building-locked">🔒 <strong>{nextLocked.name}</strong> unlocks when you hand over and reach {levelInfo(nextLocked.level).name.toLowerCase()} {levelInfo(nextLocked.level).emoji}</li>
               ) : null}
             </ul>
+            {outgrown.length ? (
+              <button type="button" class="shop-more" onClick={() => setShowOld((v) => !v)}>
+                {showOld ? 'Tidy the older rungs away' : `Show ${fmtNum(outgrown.length)} older ${outgrown.length === 1 ? 'rung' : 'rungs'} you have left behind`}
+              </button>
+            ) : null}
           </Card>
         </div>
 

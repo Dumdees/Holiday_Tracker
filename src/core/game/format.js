@@ -1,5 +1,7 @@
 // Friendly big numbers for the game: £1,234 → £1.23 million → £4.5 quadrillion.
-const NAMES = ['', 'thousand', 'million', 'billion', 'trillion', 'quadrillion', 'quintillion', 'sextillion', 'septillion', 'octillion', 'nonillion', 'decillion', 'undecillion', 'duodecillion'];
+const NAMES = ['', 'thousand', 'million', 'billion', 'trillion', 'quadrillion', 'quintillion', 'sextillion', 'septillion', 'octillion', 'nonillion', 'decillion', 'undecillion', 'duodecillion', 'tredecillion', 'quattuordecillion', 'quindecillion', 'sexdecillion', 'septendecillion', 'octodecillion', 'novemdecillion', 'vigintillion'];
+/** Short tags for tight spaces. Every one is different, so £1.2Qa is never £1.2Qi. */
+const SHORT = ['', 'k', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'Ud', 'Dd', 'Td', 'Qd', 'Qn', 'Sd', 'St', 'Od', 'Nd', 'Vg'];
 
 export function fmtNum(n, { short = false } = {}) {
   if (!Number.isFinite(n)) return '∞';
@@ -7,11 +9,11 @@ export function fmtNum(n, { short = false } = {}) {
   n = Math.abs(n);
   if (n < 1000) return neg + (n < 10 && !Number.isInteger(n) ? n.toFixed(1).replace(/\.0$/, '') : Math.floor(n).toLocaleString('en-GB'));
   if (n < 1e6) return neg + Math.floor(n).toLocaleString('en-GB');
-  const tier = Math.min(NAMES.length - 1, Math.floor(Math.log10(n) / 3));
-  if (tier >= NAMES.length - 1 && n >= 1e42) return neg + n.toExponential(2).replace('e+', ' × 10^');
+  const tier = Math.floor(Math.log10(n) / 3);
+  if (tier >= NAMES.length) return neg + n.toExponential(2);      // past every name there is, plainly
   const scaled = n / Math.pow(1000, tier);
   const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
-  const word = short ? NAMES[tier].slice(0, 1).toUpperCase() : ' ' + NAMES[tier];
+  const word = short ? SHORT[tier] : ' ' + NAMES[tier];
   return neg + scaled.toFixed(digits) + word;
 }
 

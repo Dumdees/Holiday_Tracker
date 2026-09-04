@@ -48,6 +48,8 @@
 .team-avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; background: hsl(var(--hue, 20) 60% 55%); box-shadow: 0 2px 4px rgba(0,0,0,.12); }
 .team-avatar.prismatic { background: conic-gradient(#ff6b6b, #ffd93d, #6bcb77, #4d96ff, #b06bff, #ff6b6b); animation: spin 4s linear infinite; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); box-shadow: 0 0 10px rgba(180, 120, 255, .7); }
 .team-more { font-size: 13px; color: var(--ink-soft); font-weight: 650; }
+.shop-more { display: block; width: 100%; min-height: 44px; padding: 12px; border: 0; background: none; color: var(--ink-soft); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; border-top: 1px solid var(--line); }
+.shop-more:hover { background: var(--peach-50); color: var(--ink); }
 .team-shifts { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--ink-soft); background: linear-gradient(90deg, rgba(255,107,107,.10), rgba(77,150,255,.10), rgba(176,107,255,.10)); border-radius: 10px; padding: 8px 10px; }
 .game-log { list-style: none; margin: 12px 0 0; padding: 0; font-size: 13px; color: var(--ink-soft); display: flex; flex-direction: column; gap: 4px; }
 .game-log li { display: flex; gap: 6px; }

@@ -886,9 +886,9 @@ export function createScene(canvas, { onCoin } = {}) {
 
   function fmtCount(n) {
     if (n < 1000) return String(n);
-    if (n < 1e6) return `${(n / 1000).toFixed(n < 1e4 ? 1 : 0)}k`;
-    if (n < 1e9) return `${(n / 1e6).toFixed(1)}m`;
-    return n.toExponential(1);
+    if (n < 1e6) return `${(n / 1000).toFixed(2)}k`;      // enough figures that one more always shows
+    if (n < 1e9) return `${(n / 1e6).toFixed(2)}m`;
+    return n.toExponential(2);
   }
 
   function draw(frameNow) {
