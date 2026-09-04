@@ -327,29 +327,33 @@ export function productionPerSecond(state, now = Date.now()) {
 /** How much of a second's takings your own visit is worth, after the cap for this stage. */
 export function clickShare(state) {
   let pct = 0;
+  let mult = 1;
   for (const u of ownedUpgrades(state)) {
-    if (u.kind === 'click') pct += u.pct || 0;
+    if (u.kind === 'click') { pct += u.pct || 0; mult *= u.mult || 2; }
     if (u.kind === 'clickpct') pct += u.pct || 0.01;
+    if (u.clickBoost) mult *= u.clickBoost;
   }
-  return Math.min(clickShareCap(state.level), pct);
+  if (state.perks.includes('legend')) mult *= 10;
+  // Everything that says it makes your own visits stronger multiplies the share as well as the
+  // flat part, so none of them is quietly worthless. The cap still has the last word.
+  return Math.min(clickShareCap(state.level), pct * mult);
 }
 
 /** What another share would really add, once the cap has had its say. */
 export function clickShareGain(state, u) {
-  const now_ = clickShare(state);
-  return Math.min(clickShareCap(state.level), now_ + (u.pct || 0.01)) - now_;
+  const before = clickShare(state);
+  const after = clickShare({ ...state, upgrades: [...state.upgrades, u.id] });
+  return after - before;
 }
 
 export function clickValue(state, now = Date.now()) {
   let v = visitValue(state);
-  let pct = 0;
   for (const u of ownedUpgrades(state)) {
-    if (u.kind === 'click') { v *= u.mult || 2; pct += u.pct || 0; }
+    if (u.kind === 'click') v *= u.mult || 2;
     if (u.clickBoost) v *= u.clickBoost;
-    if (u.kind === 'clickpct') pct += u.pct || 0.01;
   }
   if (state.perks.includes('legend')) v *= 10;
-  let value = v * globalMultiplier(state, now) + Math.min(clickShareCap(state.level), pct) * productionPerSecond(state, now);
+  let value = v * globalMultiplier(state, now) + clickShare(state) * productionPerSecond(state, now);
   for (const e of state.effects) if (e.clickMult && e.until > now) value *= e.clickMult;
   return value;
 }
@@ -415,6 +419,10 @@ export function upgradeCost(state, id) {
   // A stage's own shelf is priced as a share of what this run has to earn. The printed list keeps its
   // printed prices, lifted as the runs get bigger – otherwise the whole of it is pocket money by the
   // third stage and every run afterwards is over in ninety seconds.
+  // A stage's own shelf is priced in seconds of what you are earning right now, so it always costs a
+  // legible amount of saving whatever shape the run is in. The printed list keeps its printed
+  // prices, lifted as the runs get bigger.
+  if (def.costSeconds) return Math.ceil(def.costSeconds * Math.max(1, steadyIncome(state)) * f);
   const target = expandRequirement(state);
   const base = def.costShare
     ? def.costShare * target
@@ -437,9 +445,17 @@ export function buildingGain(state, id, qty = 1, now = Date.now(), income = null
   return after - before;
 }
 
-/** Extra income a second from owning an upgrade. */
+/**
+ * Extra income a second from owning an upgrade. A discount earns nothing by itself, so it is judged
+ * on what the saving buys: how many more of that rung the same money now reaches.
+ */
 export function upgradeGain(state, id, now = Date.now(), income = null) {
   const before = income === null ? productionPerSecond(state, now) : income;
+  const def = upgradeById(id);
+  if (def && def.kind === 'discount' && def.building) {
+    const extra = Math.max(1, Math.floor(Math.log(1 / def.factor) / Math.log(COST_GROWTH)));
+    return buildingGain(state, def.building, extra, now, before);
+  }
   const after = incomeWith(state, { upgrades: [...state.upgrades, id] }, now);
   return after - before;
 }
@@ -515,15 +531,20 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
   // question is which one is biggest – otherwise a late shop fills up with pennies that happen to
   // pay back instantly and the useful ones are pushed off the shelf.
   const free = (u) => u.gain > 0 && u.payback < 2;
-  return availableUpgrades(state)
-    .map((u) => upgradeOffer(state, u, now, earning))
-    .sort((a, b) => {
-      const fa = free(a), fb = free(b);
-      if (fa && fb) return b.gain - a.gain;
-      if (fa !== fb) return fa ? -1 : 1;
-      return (rank(a) - rank(b)) || (a.cost - b.cost);
-    })
-    .slice(0, limit);
+  const order = (a, b) => {
+    const fa = free(a), fb = free(b);
+    if (fa && fb) return b.gain - a.gain;
+    if (fa !== fb) return fa ? -1 : 1;
+    return (rank(a) - rank(b)) || (a.cost - b.cost);
+  };
+  const all = availableUpgrades(state).map((u) => upgradeOffer(state, u, now, earning)).sort(order);
+  // Two places are kept for the things that do a job rather than earn – the office admin, the
+  // on-call phone, a share of your own visits – so a whole kind of upgrade is never pushed off the
+  // shelf by things with a payback time.
+  const quiet = all.filter((u) => !(u.gain > 0)).slice(0, 2);
+  const rest = all.filter((u) => !quiet.includes(u));
+  const shown = [...rest.slice(0, Math.max(0, limit - quiet.length)), ...quiet].sort(order);
+  return Object.assign(shown, { total: all.length });
 }
 
 /**
@@ -749,14 +770,6 @@ export function expandOutlook(state, now = Date.now()) {
     fraction: target > 0 ? Math.min(1, earned / target) : 0,
     seconds: rate > 0 ? left / rate : Infinity,
   };
-}
-
-export function expandProgress(state) {
-  const target = expandRequirement(state);
-  const floor = target / 100;
-  const earned = Math.max(0, state.runEarned);
-  if (earned <= floor) return (earned / floor) * 0.15;
-  return Math.min(1, 0.15 + 0.85 * (Math.log(earned / floor) / Math.log(100)));
 }
 
 export function canExpand(state) {

@@ -231,9 +231,9 @@ const CONDITIONALS = [
   // `share` returns 0..1: how much of the bonus is paying. It slides rather than switching off, so
   // taking on more work can never make you poorer, only dilute a bonus you were holding.
   { id: 'cond-covered', name: 'Nobody is rushed', emoji: '🫶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / m.work)) : 1), label: 'the more of the work your team can cover', blurb: 'Everything earns up to 30% more, in full once your team can cover the work.', question: 'Rewards staffing ahead of the work – the opposite of chasing volume.', unlock: (s) => s.runEarned >= 6000 },
-  { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.45, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / (m.work * 1.8))) : 1), label: 'the further your team is ahead of the work', blurb: 'Everything earns up to 45% more, in full once your team is nearly twice the work.', question: 'Deliberate slack, held on purpose. You cannot hold this and People ask for you first at the same time.', unlock: (s) => s.upgrades.includes('cond-covered') },
+  { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.45, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / (m.work * 1.8))) : 1), label: 'the further your team is ahead of the work', blurb: 'Everything earns up to 45% more, in full once your team is nearly twice the work.', question: 'Deliberate slack, held on purpose. Taking this closes off People ask for you first.', unlock: (s) => s.upgrades.includes('cond-covered') && !s.upgrades.includes('cond-waiting') },
   { id: 'cond-busy', name: 'A full round', emoji: '🚶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / m.team)) : 1), label: 'the fuller the rounds are', blurb: 'Everything earns up to 30% more, in full once there is a full round of work for everybody.', question: 'The other bet: nobody drives across town for one call. The opposite of staffing ahead.', unlock: (s) => s.runEarned >= 6000 },
-  { id: 'cond-waiting', name: 'People ask for you first', emoji: '📖', mult: 1.45, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / (m.team * 1.8))) : 1), label: 'the more people are asking for you than you can take on yet', blurb: 'Everything earns up to 45% more, in full once there is nearly twice the work your team can carry.', question: 'Take the work on first and hire into it. You cannot hold this and The same carer at the same time.', unlock: (s) => s.upgrades.includes('cond-busy') },
+  { id: 'cond-waiting', name: 'People ask for you first', emoji: '📖', mult: 1.45, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / (m.team * 1.8))) : 1), label: 'the more people are asking for you than you can take on yet', blurb: 'Everything earns up to 45% more, in full once there is nearly twice the work your team can carry.', question: 'Take the work on first and hire into it. Taking this closes off The same carer, every time.', unlock: (s) => s.upgrades.includes('cond-busy') && !s.upgrades.includes('cond-continuity') },
   { id: 'cond-tidy', name: 'A tidy patch', emoji: '🧰', mult: 1.25, cost: 250000, archetype: 'conditional', share: (s) => Math.min(1, kitCount(s) / KIT_FOR_TIDY), label: 'the more of your kit is out on the patch', blurb: 'Everything earns up to 25% more, in full once you have twelve bits of kit out on the patch.', question: 'Makes every small bit of kit count twice: once for its own rung, and once for the whole patch.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
   { id: 'cond-wellled', name: 'Well led', emoji: '🌟', mult: 1.35, cost: 4e8, archetype: 'conditional', share: (s, m) => (m.ratingIndex >= 2 ? 1 : 0), label: 'while you are rated Outstanding', blurb: 'While your rating is Outstanding, everything earns 35% more.', question: 'Turns the rating from a nice badge into a reason to keep training people.', unlock: (s) => (s.buildings.academy || 0) >= 1 },
 ];
@@ -309,7 +309,7 @@ export const BRANCHES = [
     blurb: 'Everybody grows differently. What is your way?',
     options: [
       { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.25, per: 0.012, from: 'carer', cap: 1.3, blurb: 'Everything earns 25% more, plus 1.2% for every carer, up to +130%.', question: 'Grows with the team and nothing else. The biggest ceiling if you keep hiring.' },
-      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 2.1, discount: 0.3, blurb: 'Everything earns 110% more, and carers, key safes, cars and offices all cost 70% less.', question: 'Not a bonus but a discount: everything on the team side costs 60% less, for ever.' },
+      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 2.1, discount: 0.3, blurb: 'Everything earns 110% more, and carers, key safes, cars and offices all cost 70% less.', question: 'Not a bonus but a discount: everything on the team side costs 70% less, for ever.' },
       { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.4, clickBoost: 3, blurb: 'Every visit is worth 140% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
   },
@@ -429,6 +429,7 @@ export const UPGRADES_BY_ID = new Map([...UPGRADES, ...BRANCH_OPTIONS].map((u) =
  * rungs.
  */
 const STAGE_CACHE = new Map();
+
 /** What this run has to earn, as the shelf sees it. Kept here so the unlock rules can read it too. */
 const runTargetOf = (s) => (s.runTarget > 0 ? s.runTarget : levelInfo(s.level + 1).threshold);
 const FAR_KIT = ['Warm boxes', 'Quiet engines', 'Deep-space kettles'];
@@ -436,105 +437,75 @@ const FAR_KIT = ['Warm boxes', 'Quiet engines', 'Deep-space kettles'];
 export function stageUpgrades(level) {
   if (STAGE_CACHE.has(level)) return STAGE_CACHE.get(level);
   const info = levelInfo(level);
-  const where = info.name;                    // always leads the name, so it reads right for every stage
-  // Priced as shares of what this run has to earn, so the first is affordable within a minute of
-  // starting and the last is worth saving the whole run for, at every stage for ever.
-  const at = (share) => ({ costShare: share });
-  const earned = (share) => (s) => s.runEarned >= runTargetOf(s) * share * 0.3;
-  const out = [];
-
+  const where = info.name;
   // The rung this stage brings with it: what the stage's own synergy and discount are about.
   const own = (level >= LEVELS.length
     ? beyondBuilding((level - LEVELS.length + 1) * BEYOND_PER_LEVEL - 1)
     : BUILDINGS.filter((b) => b.level === level).slice(-1)[0]) || BUILDINGS[0];
+  const side = own.side === 'team' ? 'team' : 'work';
 
-  const rates = [
-    { key: 'rate1', share: 0.012, name: `${where} pays better`, blurb: 'Every visit is worth twice as much.', question: 'The first thing worth having here, and it is never wasted.' },
-    { key: 'rate2', share: 0.28, name: `${where} pays what the work is worth`, blurb: 'Every visit is worth twice as much again.', question: 'Doubles the value of everything a second time. Save for it.' },
+  /**
+   * A shelf of twelve, in the order you will meet them. Each one is priced in seconds of what you
+   * are earning right now, and each appears a fixed way along the run – measured by how far the
+   * takings have climbed rather than by a share of the total, because the takings climb by orders of
+   * magnitude and a share of the total would put the whole shelf in the last minute.
+   */
+  const shelf = [
+    { key: 'rate1', seconds: 2, name: 'Better rates all round', emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
+      blurb: `${where}: every visit is worth twice as much.`, question: 'The first thing worth having here, and it is never wasted.',
+      visual: 'The coins coming into the office get bigger.' },
+    { key: 'hands', seconds: 3.5, name: 'Still on the round yourself', emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
+      blurb: 'Your own visits earn another 1% of the team’s income every second.', question: 'Cheap, and it keeps your own tapping worth doing.',
+      visual: 'Your own carer keeps walking the round with everybody else.' },
+    { key: 'syn', seconds: 5.5, name: `More ${own.plural.toLowerCase()} than anybody`, emoji: own.emoji, kind: 'synergy', archetype: 'synergy',
+      from: own.id, to: `*${side}`, per: 0.006, cap: 2,
+      blurb: `Every ${own.name.toLowerCase()} makes all of your ${side} 0.6% better, up to +200%.`,
+      question: `Grows with how many ${own.plural.toLowerCase()} you keep buying, and stops if you stop.`,
+      visual: `More ${own.plural.toLowerCase()} than anybody thought sensible.` },
+    { key: 'team', seconds: 8, name: 'The whole team lifts', emoji: '👥', kind: 'side', archetype: 'synergy', side: 'team', flat: 0.6,
+      blurb: `${where}: your whole team is 60% better.`, question: 'Lifts every pair of hands you own at once.',
+      visual: 'Everybody on the street works a little quicker.' },
+    { key: 'all1', seconds: 11, name: 'Everybody pulls together', emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
+      blurb: `${where}: everything you own earns 80% more.`, question: 'Touches every single thing you own, whichever way you have played.',
+      visual: 'The whole street lifts, and the office noticeboard fills up.' },
+    { key: 'disc', seconds: 15, name: `${own.plural} by the dozen`, emoji: '📦', kind: 'discount', archetype: 'discount', building: own.id, factor: 0.6,
+      blurb: `${own.plural} cost 40% less for the rest of this run.`,
+      question: `Not more income – more ${own.plural.toLowerCase()}. Worth it if you are going to keep buying them.`,
+      visual: `A crate of ${own.plural.toLowerCase()} waiting outside the office.` },
+    { key: 'work', seconds: 20, name: 'Every door on the books', emoji: '🏠', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.6,
+      blurb: `${where}: all of your work is 60% better.`, question: 'The work-side twin. Which side are you feeding?',
+      visual: 'The lights come on behind every door at once.' },
+    { key: 'rate2', seconds: 26, name: 'Paid what the work is worth', emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
+      blurb: `${where}: every visit is worth twice as much again.`, question: 'Doubles the value of everything a second time. Save for it.',
+      visual: 'The coins coming into the office get bigger again.' },
+    { key: 'mile', seconds: 34, name: 'Every tenth counts for more', emoji: '🎖️', kind: 'milestone', archetype: 'milestone', add: 0.25,
+      blurb: 'Every tenth of anything is worth a quarter more again.', question: 'Multiplies every tenth you have ever passed and every one still to come.',
+      visual: 'More bunting over the office than last time.' },
+    { key: 'work2', seconds: 43, name: 'The books keep filling', emoji: '📗', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.7,
+      blurb: `${where}: all of your work is 70% better.`, question: 'The work side’s second lift. You will not manage both and the rungs.',
+      visual: 'Another light behind every door on the street.' },
+    { key: 'broad', seconds: 51, name: 'A bit of everything', emoji: '🧩', kind: 'conditional', archetype: 'conditional', mult: 1.6,
+      share: (s) => Math.min(1, Object.values(s.buildings).filter((n) => n >= 25).length / (8 + Math.min(6, level))),
+      label: 'the more different things you own twenty-five of',
+      blurb: `Everything earns up to 60% more, in full once you own twenty-five each of ${8 + Math.min(6, level)} different things.`,
+      question: 'Pays for going broad rather than deep. Nothing else in the game asks for that.',
+      visual: 'A little of everything on the street at once.' },
+    { key: 'all2', seconds: 60, name: 'The whole patch lifts again', emoji: '🌟', kind: 'global', archetype: 'rate', mult: 1.8,
+      blurb: `${where}: everything you own earns 80% more again.`, question: 'The last thing on the shelf here, and the biggest.',
+      visual: 'Every light on the horizon burns a little brighter.' },
   ];
-  for (const r of rates) {
-    out.push({
-      id: `stage-${level}-${r.key}`, name: r.name, emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
-      ...at(r.share), icon: '💷', blurb: r.blurb, question: r.question,
-      visual: 'The coins coming into the office get bigger.',
-      unlock: earned(r.share),
-    });
-  }
-  out.push({
-    id: `stage-${level}-hands`, name: `${where} still knows your face`, emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
-    ...at(0.02), icon: '🤲', blurb: 'Your own visits earn another 1% of the team’s income every second.',
-    visual: 'Your own carer keeps walking the round with everybody else.',
-    question: 'Cheap, and it keeps your own tapping worth doing.',
-    unlock: earned(0.01),
-  });
-  out.push({
-    id: `stage-${level}-syn`, name: `${own.plural} everywhere you look`, emoji: own.emoji, kind: 'synergy', archetype: 'synergy',
-    from: own.id, to: own.side === 'team' ? '*team' : '*work', per: 0.006, cap: 2, ...at(0.04), icon: own.emoji,
-    blurb: `Every ${own.name.toLowerCase()} makes all of your ${own.side === 'team' ? 'team' : 'work'} 0.6% better, up to +200%.`,
-    question: `Grows with how many ${own.plural.toLowerCase()} you keep buying, and stops if you stop.`,
-    visual: `More ${own.plural.toLowerCase()} than anybody thought sensible.`,
-    unlock: earned(0.04),
-  });
-  out.push({
-    id: `stage-${level}-team`, name: `${where} trains everybody up`, emoji: '👥', kind: 'side', archetype: 'synergy',
-    side: 'team', flat: 0.6, ...at(0.06), icon: '👥',
-    blurb: 'Your whole team is 60% better.', question: 'Lifts every pair of hands you own at once.',
-    visual: 'Everybody on the street works a little quicker.',
-    unlock: earned(0.06),
-  });
-  out.push({
-    id: `stage-${level}-all1`, name: `${where} pulls together`, emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
-    ...at(0.10), icon: '✨', blurb: 'Everything you own earns 80% more.',
-    visual: 'The whole street lifts, and the office noticeboard fills up.',
-    question: 'Touches every single thing you own, whichever way you have played.',
-    unlock: earned(0.10),
-  });
-  out.push({
-    id: `stage-${level}-disc`, name: `${own.plural} by the dozen`, emoji: '📦', kind: 'discount', archetype: 'discount',
-    building: own.id, factor: 0.6, ...at(0.14), icon: '📦',
-    blurb: `${own.plural} cost 40% less, for the rest of this run.`,
-    question: `Not more income – more ${own.plural.toLowerCase()}. Worth it if you are going to keep buying them.`,
-    visual: `A crate of ${own.plural.toLowerCase()} waiting outside the office.`,
-    unlock: earned(0.14),
-  });
-  out.push({
-    id: `stage-${level}-work`, name: `${where} fills the books`, emoji: '🏠', kind: 'side', archetype: 'synergy',
-    side: 'work', flat: 0.6, ...at(0.20), icon: '🏠',
-    blurb: 'All of your work is 60% better.', question: 'The work-side twin. Which side are you feeding?',
-    visual: 'The lights come on behind every door at once.',
-    unlock: earned(0.20),
-  });
-  out.push({
-    id: `stage-${level}-mile`, name: `${where} marks every tenth`, emoji: '🎖️', kind: 'milestone', archetype: 'milestone',
-    add: 0.25, ...at(0.38), icon: '🎖️',
-    blurb: 'Every tenth of anything is worth a quarter more again.',
-    question: 'Multiplies every tenth you have ever passed and every one still to come.',
-    visual: 'More bunting over the office than last time.',
-    unlock: earned(0.38),
-  });
-  out.push({
-    id: `stage-${level}-broad`, name: `${where} has a bit of everything`, emoji: '🧩', kind: 'conditional', archetype: 'conditional', mult: 1.6,
-    share: (s) => Math.min(1, Object.values(s.buildings).filter((n) => n >= 10).length / 8),
-    label: 'the more different things you own ten of',
-    blurb: 'Everything earns up to 60% more, in full once you own ten each of eight different things.',
-    question: 'Pays for going broad rather than deep. Nothing else in the game asks for that.',
-    visual: 'A little of everything on the street at once.',
-    ...at(0.52), icon: '🧩',
-    unlock: earned(0.52),
-  });
-  out.push({
-    id: `stage-${level}-work2`, name: `${where} keeps asking for you`, emoji: '📗', kind: 'side', archetype: 'synergy',
-    side: 'work', flat: 0.7, ...at(0.45), icon: '📗',
-    blurb: 'All of your work is 70% better.', question: 'The work side’s second lift. You will not manage both and the rungs.',
-    visual: 'Another light behind every door on the street.',
-    unlock: earned(0.45),
-  });
-  out.push({
-    id: `stage-${level}-all2`, name: `${where} lifts all at once`, emoji: '🌟', kind: 'global', archetype: 'rate', mult: 1.8,
-    ...at(0.85), icon: '🌟', blurb: 'Everything you own earns 80% more again.',
-    visual: 'Every light on the horizon burns a little brighter.',
-    question: 'The last thing on the shelf here, and the biggest.',
-    unlock: earned(0.85),
+
+  const out = shelf.map((item, i) => {
+    const { key, seconds, ...rest } = item;
+    const along = 0.12 + (0.92 - 0.12) * (i / (shelf.length - 1));
+    return {
+      ...rest,
+      id: `stage-${level}-${key}`,
+      icon: rest.icon || rest.emoji,
+      costSeconds: seconds,
+      // How far the takings have to have climbed before this one is on the shelf.
+      unlock: (s) => Math.log10(1 + Math.max(0, s.runEarned)) >= Math.log10(1 + runTargetOf(s)) * along,
+    };
   });
 
   // Past the printed table, the two new rungs of the stage bring their own kit.
@@ -545,7 +516,7 @@ export function stageUpgrades(level) {
       FAR_KIT.forEach((name, i) => {
         out.push({
           id: `${b.id}-t${i + 1}`, name: `${name} ${first + r}`, emoji: b.emoji, kind: 'building', building: b.id,
-          ...at([0.006, 0.05, 0.2][i] * (r + 1)), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
+          costSeconds: [5, 18, 55][i] * (r + 1), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
           blurb: `${b.plural} are ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as good.`,
           visual: `${name} on every ${b.name.toLowerCase()}, counted on the horizon.`,
           question: `Worth it once you own a lot of ${b.plural.toLowerCase()}.`,

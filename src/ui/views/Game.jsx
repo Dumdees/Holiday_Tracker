@@ -121,6 +121,7 @@ export function Game() {
   const [floaters, setFloaters] = useState([]);
   const [buyQty, setBuyQty] = useState(1);
   const [showOld, setShowOld] = useState(false);
+  const [showAllUpgrades, setShowAllUpgrades] = useState(false);
   const [rightTab, setRightTab] = useState('grow');
   const [tickerIndex, setTickerIndex] = useState(() => Math.floor(Math.random() * 32));
   const [confetti, setConfetti] = useState(0);
@@ -233,7 +234,7 @@ export function Game() {
   const frenzy = activeEffects.some((e) => e.clickMult);
   const spawnBox = s.spawn ? sceneRef.current?.spawnPos() : null;
   const nextBadge = G.nextGoal(s, now);
-  const upgrades = G.upgradeShop(s, now, 12);
+  const upgrades = G.upgradeShop(s, now, showAllUpgrades ? 40 : 12);
   const firstRender = firstSeen.current.size === 0;
   for (const u of upgrades) if (!firstSeen.current.has(u.id)) firstSeen.current.set(u.id, firstRender ? 0 : now);
   // Worked out once for the whole shop: every row asks how much more it would bring in.
@@ -437,7 +438,7 @@ export function Game() {
         {/* ---------- Left: money in, and the team ---------- */}
         <div class="game-left">
           {mode === 'manual' ? (
-            <button type="button" class={`collect-btn ${s.invoices > 0 ? 'ready' : ''}`} onClick={onCollect} disabled={s.invoices <= 0} data-test="collect">
+            <button type="button" class={`collect-btn collect-first ${s.invoices > 0 ? 'ready' : ''}`} onClick={onCollect} disabled={s.invoices <= 0} data-test="collect">
               <span class="collect-label">💷 Collect payments</span>
               <span class="collect-amount">{fmtMoney(s.invoices)}</span>
             </button>
@@ -486,9 +487,14 @@ export function Game() {
                 </button>
               ))}
             </div>
+            {upgrades.total > upgrades.length || showAllUpgrades ? (
+              <button type="button" class="shop-more" onClick={() => setShowAllUpgrades((v) => !v)}>
+                {showAllUpgrades ? 'Just the best dozen' : `Show ${fmtNum(upgrades.total - upgrades.length)} more`}
+              </button>
+            ) : null}
           </Card>
 
-          <Card title="Shop" icon="briefcase" padded={false} subtitle="Whichever side is behind is worth more." actions={
+          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="Whichever side is behind is worth more." actions={
             <div class="qty-picker" role="group" aria-label="How many to buy">
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => setBuyQty(q)}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
@@ -537,13 +543,15 @@ export function Game() {
                 <span class="muted">{fmtMoney(outlook.earned)} of {fmtMoney(outlook.target)}</span>
                 <strong>{outlook.fraction >= 0.01 ? Math.floor(outlook.fraction * 100) : (outlook.fraction * 100).toFixed(1)}%</strong>
               </div>
-              {outlook.fraction < 1 ? (
+              {outlook.fraction >= 1 ? (
+                <p class="small mt expand-slow">You are well past what this stage asked for – hand over whenever you like.</p>
+              ) : (
                 <p class={`small mt ${outlook.seconds > 1200 ? 'expand-slow' : 'muted'}`}>
                   {Number.isFinite(outlook.seconds)
                     ? `About ${fmtSeconds(outlook.seconds)} at the rate you are earning now.${outlook.seconds > 1200 ? ' Something bigger is worth buying.' : ''}`
                     : 'Nothing is coming in yet – take somebody on.'}
                 </p>
-              ) : null}
+              )}
               <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
                 {G.canExpand(s) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
               </Button>

@@ -97,7 +97,7 @@ describe('what makes things better', () => {
     assert.ok(Math.abs(one / nine - 2) < 1e-9, 'the tenth carer doubles every carer');
     assert.equal(g.milestonesPassed(5000), MILESTONES.length + 1, 'they carry on past the table');
     assert.ok(g.nextMilestone(5000).at > 5000, 'and there is another one coming');
-    assert.equal(g.milestonesPassed(1e9), MILESTONES.length + g.MILESTONES_BEYOND, 'but only four of them');
+    assert.equal(g.milestonesPassed(1e9), MILESTONES.length + g.MILESTONES_BEYOND, 'but they do stop');
     assert.equal(g.milestoneFactor(s), 2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1'] }), 2.2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1', 'mile-2'] }), 2.5);
@@ -350,7 +350,7 @@ describe('handing over', () => {
     const mid = { ...g.newGame(T0), level: 3, runTarget: 5e9, runEarned: 1e9 };
     const lucky = { ...mid, effects: [{ id: 'x', until: T0 + 60000, prodMult: 7 }] };
     assert.equal(g.expandRequirement(lucky), g.expandRequirement(mid), 'a lucky spell never moves the finish line');
-    assert.ok(g.expandProgress({ ...mid, runEarned: 2e9 }) > g.expandProgress(mid), 'and the bar only goes forwards');
+    assert.ok(g.expandOutlook({ ...mid, runEarned: 2e9 }, T0).fraction > g.expandOutlook(mid, T0).fraction, 'and the bar only goes forwards');
     const gained = g.starsOnExpand(s);
     assert.equal(gained, g.starsForLifetime(2e6));
     assert.ok(gained >= 1 && gained <= 20, `a first hand-over should be worth a handful of stars, got ${gained}`);
@@ -549,7 +549,7 @@ describe('the rule that everything you buy changes the street', () => {
     for (const u of [...upgradesFor(LEVELS.length + 2), ...BRANCH_OPTIONS]) {
       assert.ok(u.visual && u.visual.length > 10, `${u.id} does not say what it changes`);
       assert.ok(u.name && u.emoji && u.blurb, `${u.id} is missing its words`);
-      assert.ok(typeof u.cost === 'number' || typeof u.costShare === 'number' || u.slot, `${u.id} has no price`);
+      assert.ok(typeof u.cost === 'number' || typeof u.costSeconds === 'number' || u.slot, `${u.id} has no price`);
       // Kit upgrades change the look of the rung they belong to; everything else pins an icon on
       // the office noticeboard. Anything covered by neither is a promise the street cannot keep.
       const kitOf = /^(.*)-t[123]$/.exec(u.id);
@@ -560,18 +560,26 @@ describe('the rule that everything you buy changes the street', () => {
     }
   });
 
-  test('every stage brings its own shelf, priced against what the run has to earn', () => {
+  test('every stage brings its own shelf, priced in seconds of what you are earning', () => {
     for (const level of [1, 4, 9, 12, 18]) {
       const shelf = upgradesFor(level).filter((u) => u.id.startsWith(`stage-${level}-`));
-      assert.ok(shelf.length >= 8, `stage ${level} has a shelf of its own`);
-      // The prices are shares of the run's own finish line, so they mean the same at every stage.
+      assert.equal(shelf.length, 12, `stage ${level} has a shelf of twelve`);
       const s = { ...board(), level, runTarget: 1e12 };
+      const income = g.steadyIncome(s);
       const costs = shelf.map((u) => g.upgradeCost(s, u.id));
-      assert.ok(Math.min(...costs) <= 1e12 * 0.02, 'the first is affordable within a minute or two');
-      assert.ok(Math.max(...costs) >= 1e12 * 0.4, 'and the last is worth saving most of the run for');
-      assert.ok(Math.max(...costs) <= 1e12, 'but never more than the run itself');
-      const richer = { ...s, runTarget: 1e18 };
-      assert.equal(g.upgradeCost(richer, shelf[0].id), g.upgradeCost(s, shelf[0].id) * 1e6, 'and they rise with the run');
+      assert.ok(Math.abs(Math.min(...costs) / income - 2) < 0.5, 'the first is a couple of seconds of takings');
+      assert.ok(Math.abs(Math.max(...costs) / income - 60) < 2, 'and the last is a minute of them');
+      // They appear a fixed way along the run, measured by how far the takings have climbed.
+      const along = (u) => {
+        for (let f = 0; f <= 1.0001; f += 0.02) {
+          const probe = { ...s, runEarned: Math.pow(10, Math.log10(1 + s.runTarget) * f) };
+          if (u.unlock(probe)) return f;
+        }
+        return 1;
+      };
+      const points = shelf.map(along);
+      for (let i = 1; i < points.length; i++) assert.ok(points[i] >= points[i - 1], 'they arrive in order');
+      assert.ok(points[0] <= 0.2 && points[points.length - 1] >= 0.85, 'spread across the whole run');
       for (const u of shelf) assert.ok(u.visual && u.name && u.blurb && u.icon, `${u.id} is fully written`);
     }
     const far = { ...board(), level: LEVELS.length + 3, buildings: { carer: 400, client: 400, 'beyond-1': 200, 'beyond-2': 60, 'beyond-3': 20, 'beyond-4': 5 } };

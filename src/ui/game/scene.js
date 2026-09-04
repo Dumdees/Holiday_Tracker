@@ -132,7 +132,8 @@ export function createScene(canvas, { onCoin } = {}) {
     const carers = state.buildings.carer || 0;
     world.teamSize = carers;
     // One figure for you, then a carer for each door we can draw.
-    const wanted = 1 + Math.min(drawnFor(carers, MAX_AGENTS - 1), MAX_AGENTS - 1);
+    // Never so many that the doorsteps disappear behind them: the doors are what you tap.
+    const wanted = 1 + Math.min(drawnFor(carers, MAX_AGENTS - 1), Math.max(2, world.houses.length - 2));
     while (world.agents.length < wanted) {
       const i = world.agents.length;
       const a = makeAgent(i, i === 0 ? world.starName : (names[(i - 1) % Math.max(1, names.length)] || `Carer ${i}`));
@@ -216,7 +217,7 @@ export function createScene(canvas, { onCoin } = {}) {
   function syncFolk() {
     const wanted = [];
     for (const id of STREET_FOLK) {
-      const n = drawnFor(world.counts[id] || 0, 5);
+      const n = drawnFor(world.counts[id] || 0, 3);
       for (let i = 0; i < n; i++) wanted.push(id);
     }
     while (world.folk.length > wanted.length) world.folk.pop();
@@ -645,7 +646,7 @@ export function createScene(canvas, { onCoin } = {}) {
 
   /** Coordinators, supervisors and nurses, so the people you pay for are people you can see. */
   function drawFolk(f) {
-    const y = pavementY() - 2, swing = Math.sin(f.phase) * 4;
+    const y = pavementY() + 10, swing = Math.sin(f.phase) * 4;   // nearer the road, clear of the doors
     const kit = { coordinator: { body: '#6a5acd', hat: '📋' }, supervisor: { body: '#e8b52a', hat: '🦺' }, nurse: { body: '#2A5EA8', hat: '🩺' } }[f.role] || { body: '#888' };
     const tier = world.tiers[f.role] || 0;
     ctx.save(); ctx.translate(f.x, y); ctx.scale(f.dir, 1);
@@ -858,7 +859,8 @@ export function createScene(canvas, { onCoin } = {}) {
     ctx.font = `34px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('💌', 0, 2); ctx.textBaseline = 'alphabetic';
     ctx.restore();
     ctx.fillStyle = '#fff'; ctx.font = `700 11px ${UI_FONT}`; ctx.textAlign = 'center'; const label = 'Thank-you card – click!'; const tw = ctx.measureText(label).width + 14;
-    ctx.beginPath(); ctx.roundRect(c.x - tw / 2, c.y + bob + 30, tw, 18, 9); ctx.fill(); ctx.fillStyle = '#8A5A0C'; ctx.fillText(label, c.x, c.y + bob + 43);
+    const lx = clamp(c.x, tw / 2 + 4, W - tw / 2 - 4);      // never off the edge of the street
+    ctx.beginPath(); ctx.roundRect(lx - tw / 2, c.y + bob + 30, tw, 18, 9); ctx.fill(); ctx.fillStyle = '#8A5A0C'; ctx.fillText(label, lx, c.y + bob + 43);
     const left = clamp((c.until - world.now) / 13000, 0, 1);
     ctx.fillStyle = '#E39A2E'; ctx.fillRect(c.x - 20, c.y + bob + 52, 40 * left, 3);
   }
