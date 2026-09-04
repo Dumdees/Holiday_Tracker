@@ -73,13 +73,18 @@ times the last and delivers four, so the cheap rungs stay worth buying long afte
 **Upgrades** (100, plus 9 branch options, plus an endless line) come in kinds the engine folds in
 separately: `building` (kit for one rung, ×2 at ten owned, ×2.5 at sixty, ×3 at three hundred),
 `synergy` (one thing lifts a whole side per unit owned, capped), `conditional` (a sliding share of
-its bonus, never an on/off cliff, and never diluted by anything you buy), `milestone` (raises the
+its bonus, never an on/off cliff, and never diluted by anything you buy; two of them pay for keeping
+the team ahead of the work and two for keeping the work ahead of the team, so you cannot hold both
+pairs at once and where you sit between the sides is a real decision — measured, the worst board
+policy is worth half the best), `milestone` (raises the
 every-tenth step to 2.2× then 2.5×), `value` (what a visit is worth), `click`/`clickpct` (your own
 visits, worth up to 8% of the whole business each), `collect` (office admin, direct debit), `offline`
 (the on-call phone), `discount` (cheaper of one thing), and quality upgrades that also raise the
 rating. Measured over an hour of play, every upgrade that earns anything moves income by at least 2%
-the moment it is offered. `upgradesFor(level)` adds three rungs of kit, a doubling of visit value, a
-click share and a ×1.8 for every far rung, so the shop never runs out. Three one-off `BRANCHES` per
+the moment it is offered. `stageUpgrades(level)` gives every stage from the village onwards its own
+shelf of eight, priced as shares of that stage's own figure (1% for the first, 55% for the last) and
+named after the stage, plus kit for the two new rungs past the printed table — so the shop has
+something worth buying 100% of the time, measured over a 150-minute session at two play styles. Three one-off `BRANCHES` per
 run — who you work for, how you grow, what you are known for — reset when you hand over, and each
 option in a slot is a different shape (a bonus, a discount, a flat rate) rather than a different
 number; the tests judge them on what half an hour of takings buys, not on the number on the tin.
@@ -90,10 +95,12 @@ multiplies all income. Never stored, never random, never punitive.
 
 **Handing over** (prestige) resets the run but keeps badges, Legacy Stars (`6 × log10(1 + lifetime /
 1e4)`, +3% each) and perks, and leaves a starting round (`startingKit`) so a new run is never dead. A
-hand-over needs the stage's figure or three times your best run ever, whichever is more. Every stage
+hand-over needs the stage's figure, three times your best run ever, or two and a half minutes at the
+rate you are earning now, whichever is most. The last of those rises with you, so it can only be met
+once the run has stopped doubling every few seconds. Every stage
 reached is worth ×1.6 for ever, and stages past the printed ten bring two new rungs each and cost 200
-times the last – so the measured curve is 8m, 4m, 2m, 1m30, then lengthening a little every stage:
-6m, 7m, 7m20, 8m, 8m40, 9m30, with no wall in it. Ten perks, and then an endless one that adds 30%
+times the last – so the measured curve is 8m, 5m30, 4m50, 6m, 7m, 8m20, then ten to
+thirteen minutes a stage and lengthening, with no wall in it. Ten perks, and then an endless one that adds 30%
 to everything and costs twice the last, so Stars always have somewhere to go.
 
 **Deciding what to buy** is legible without a wiki: `buildingOffer`/`upgradeOffer` return the exact
