@@ -475,8 +475,8 @@ export function createScene(canvas, { onCoin } = {}) {
    * The noticeboard hangs above the sign, never over the shopfront, and grows upwards as it fills.
    * Everything else that lives above the office (bunting, the payments bubble) sits above it.
    */
-  const noticeCols = 8;
-  function noticeRows() { return world.badges.length ? Math.ceil(world.badges.length / noticeCols) : 0; }
+  const noticeCols = () => Math.max(1, Math.min(8, world.badges.length));
+  function noticeRows() { return world.badges.length ? Math.ceil(world.badges.length / noticeCols()) : 0; }
   function noticeTop(base) { return base - 80 - (noticeRows() ? noticeRows() * 11 + 6 : 0); }
 
   /** Everything the office wears: the sign, the rating, the star board and the noticeboard. */
@@ -518,12 +518,12 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.owned.has('syn-academy-team')) { const bx = x + 78; ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.roundRect(bx, base - 20, 30, 14, 3); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(bx + 8, base - 5, 3.5, 0, TWO_PI); ctx.arc(bx + 22, base - 5, 3.5, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('TRAINING', bx + 15, base - 11); }
     // the office noticeboard: one small icon for every upgrade you have bought, above the sign
     if (world.badges.length) {
-      const rows = noticeRows(), top = noticeTop(base), bw = noticeCols * 12 + 6, bx = x - bw / 2 + 3;
+      const rows = noticeRows(), cols = noticeCols(), top = noticeTop(base), bw = cols * 12 + 6, bx = x - bw / 2 + 3;
       ctx.fillStyle = 'rgba(255,255,255,.72)';
       ctx.beginPath(); ctx.roundRect(bx - 3, top, bw, rows * 11 + 6, 3); ctx.fill();
       ctx.strokeStyle = 'rgba(120,90,70,.5)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.font = `9px ${EMOJI_FONT}`; ctx.textAlign = 'center';
-      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % noticeCols) * 12 + 4, top + 12 + Math.floor(i / noticeCols) * 11));
+      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % cols) * 12 + 4, top + 12 + Math.floor(i / cols) * 11));
       if (world.extraBadges) { ctx.font = `600 7px ${UI_FONT}`; ctx.fillStyle = '#3a2a24'; ctx.fillText(`+${world.extraBadges}`, bx + bw - 14, top + rows * 11 + 2); }
     }
     // a green tick over the door whenever a bonus is actually paying
