@@ -52,6 +52,22 @@ function noPaybackReason(u, share) {
   return 'no extra income just now';
 }
 
+/**
+ * The one line under the street in the first few minutes: what to do next, in order. It stops for
+ * good once there is a team and something bought, so it never nags an experienced player.
+ */
+function nextStep(s, shop) {
+  const carers = s.buildings.carer || 0;
+  const carer = shop.find((b) => b.id === 'carer');
+  if (s.clicks < 8) return '👆 Tap a door to do a visit yourself';
+  if (!carers && carer && !carer.affordable) return `👆 Keep tapping – a carer costs ${fmtMoney(carer.cost)}`;
+  if (!carers && carer) return '👥 You can afford a carer now – take one on in the shop below';
+  if (carers && s.invoices > 0 && G.collectionMode(s) === 'manual') return '💷 Collect the payments – the money is waiting at the office';
+  if (carers < 3) return '👥 More carers, more visits. Keep an eye on which side is behind';
+  if (!s.upgrades.length && carers >= 3) return '⚡ Something in Upgrades is worth having now';
+  return '';
+}
+
 /** "Priya, Morag and Callum" – a list of names the way a person would say it. */
 function listNames(names) {
   if (names.length <= 1) return names.join('');
@@ -223,6 +239,7 @@ export function Game() {
   const earning = G.productionPerSecond(s, now);
   const shop = G.unlockedBuildings(s).map((b) => G.buildingOffer(s, b.id, buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty, now, earning));
   const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
+  const hint = nextStep(s, shop);
   const pending = G.pendingBranch(s);
   const progress = G.expandProgress(s);
   const nextLocked = G.nextLockedBuilding(s);
@@ -367,7 +384,7 @@ export function Game() {
               {activeEffects.map((e) => <span key={e.id} class={`effect-chip effect-${e.id}`}>{e.emoji} {e.name} · {fmtSeconds((e.until - now) / 1000)}</span>)}
             </div>
           ) : null}
-          {s.clicks < 8 ? <div class="world-hint">👆 Tap a door to do a visit yourself</div> : null}
+          {hint ? <div class="world-hint">{hint}</div> : null}
           {confetti ? <Confetti key={confetti} /> : null}
           {floaters.map((f) => <span key={f.id} class={`floater ${f.cls}`} style={{ left: f.x + '%', top: f.y + '%' }}>{f.text}</span>)}
           {spawnBox ? (
