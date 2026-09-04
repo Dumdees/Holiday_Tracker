@@ -240,8 +240,8 @@ const CONDITIONALS = [
 
 /** The tenth of anything doubles it. These make that step bigger still. */
 const MILESTONE_UPS = [
-  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', factor: 2.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every tenth of anything is worth 2.2 times instead of twice.', question: 'Multiplies every milestone you have ever passed, and every one to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
-  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', factor: 2.5, cost: 2e10, archetype: 'milestone', blurb: 'Every tenth of anything is worth 2.5 times instead of 2.2.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
+  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every tenth of anything is worth 2.2 times instead of twice.', question: 'Multiplies every milestone you have ever passed, and every one to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
+  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every tenth of anything is worth 2.5 times instead of 2.2.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
 ];
 
 /** What a visit is worth: who is paying, and what you are trusted to do. */
@@ -299,8 +299,8 @@ export const BRANCHES = [
     slot: 'buyer', name: 'Who do you work for?', emoji: '🤝', level: 1,
     blurb: 'Most of your work is going to come from one place. Which?',
     options: [
-      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.45, blurb: 'Everything earns 45% more.', question: 'Flat, simple and never wrong.' },
-      { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.3, discount: 0.55, blurb: 'Everything earns 30% more, and taking on work costs 45% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
+      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.6, blurb: 'Everything earns 60% more.', question: 'Flat, simple and never wrong.' },
+      { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.45, discount: 0.45, blurb: 'Everything earns 45% more, and taking on work costs 55% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
       { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.35, per: 0.02, from: 'chc', cap: 1.6, blurb: 'Everything earns 35% more, plus 2% for every NHS-funded package, up to +160%.', question: 'Weakest now, strongest later – if you get to NHS work.' },
     ],
   },
@@ -308,18 +308,18 @@ export const BRANCHES = [
     slot: 'growth', name: 'How do you grow?', emoji: '🌱', level: 3,
     blurb: 'Everybody grows differently. What is your way?',
     options: [
-      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.1, per: 0.01, from: 'carer', cap: 0.95, blurb: 'Everything earns 10% more, plus 1% for every carer, up to +95%.', question: 'Grows with the team and nothing else. The biggest ceiling if you keep hiring.' },
-      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.85, discount: 0.4, blurb: 'Everything earns 85% more, and carers, key safes, cars and offices all cost 60% less.', question: 'Not a bonus but a discount: everything on the team side is a third cheaper, for ever.' },
-      { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.1, clickBoost: 3, blurb: 'Every visit is worth 110% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
+      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.25, per: 0.012, from: 'carer', cap: 1.3, blurb: 'Everything earns 25% more, plus 1.2% for every carer, up to +130%.', question: 'Grows with the team and nothing else. The biggest ceiling if you keep hiring.' },
+      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 2.1, discount: 0.3, blurb: 'Everything earns 110% more, and carers, key safes, cars and offices all cost 70% less.', question: 'Not a bonus but a discount: everything on the team side costs 60% less, for ever.' },
+      { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.4, clickBoost: 3, blurb: 'Every visit is worth 140% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
   },
   {
     slot: 'known', name: 'What are you known for?', emoji: '🏅', level: 5,
     blurb: 'Every good agency is known for something.',
     options: [
-      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.35, per: 0.0018, from: 'client', cap: 1.0, blurb: 'Everything earns 35% more, plus a little for everybody you look after, up to +100%.', question: 'Rewards a long client list and life story work.' },
-      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2.05, discount: 0.62, blurb: 'Everything earns 105% more, and taking on work costs 38% less.', question: 'Short, intensive, and people leave you better than they arrived.' },
-      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.35, per: 0.02, from: ['chc', 'nurse'], cap: 1.0, blurb: 'Everything earns 35% more, plus 2% for every NHS package and nurse-led team, up to +100%.', question: 'The hardest work, the highest ceiling.' },
+      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.5, per: 0.0025, from: 'client', cap: 1.6, blurb: 'Everything earns 50% more, plus a little for everybody you look after, up to +160%.', question: 'Rewards a long client list and life story work.' },
+      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2.2, discount: 0.56, blurb: 'Everything earns 120% more, and taking on work costs 44% less.', question: 'Short, intensive, and people leave you better than they arrived.' },
+      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.55, per: 0.022, from: ['chc', 'nurse'], cap: 1.3, blurb: 'Everything earns 55% more, plus 2.2% for every NHS package and nurse-led team, up to +130%.', question: 'The hardest work, the highest ceiling.' },
     ],
   },
 ];
@@ -390,7 +390,7 @@ const VISUALS = {
   'buyer-council': 'The office sign turns council green.',
   'buyer-nhs': 'The office sign turns NHS blue, with a clinical badge beside the door.',
   'grow-people': 'More carers on the street than you can count.',
-  'grow-kit': 'A kit crate by the office door, and everything for the team a third cheaper.',
+  'grow-kit': 'A kit crate by the office door, and everything for the team at well under half price.',
   'grow-rates': 'The coins coming in get bigger, and so does every visit you do yourself.',
   'known-dementia': 'A photograph in every window.',
   'known-reablement': 'A door opens and somebody waves you off, doing fine.',
@@ -443,11 +443,14 @@ export function stageUpgrades(level) {
   const earned = (share) => (s) => s.runEarned >= runTargetOf(s) * share * 0.3;
   const out = [];
 
+  // The rung this stage brings with it: what the stage's own synergy and discount are about.
+  const own = (level >= LEVELS.length
+    ? beyondBuilding((level - LEVELS.length + 1) * BEYOND_PER_LEVEL - 1)
+    : BUILDINGS.filter((b) => b.level === level).slice(-1)[0]) || BUILDINGS[0];
+
   const rates = [
     { key: 'rate1', share: 0.012, name: `${where} pays better`, blurb: 'Every visit is worth twice as much.', question: 'The first thing worth having here, and it is never wasted.' },
-    { key: 'rate2', share: 0.08, name: `${where} pays better again`, blurb: 'Every visit is worth twice as much again.', question: 'Doubles the value of everything a second time. Save for it.' },
-    { key: 'rate3', share: 0.30, name: `${where} pays properly at last`, blurb: 'Every visit is worth twice as much once more.', question: 'A third of everything this stage asks of you, and worth every penny.' },
-    { key: 'rate4', share: 0.62, name: `${where} pays what the work is worth`, blurb: 'Every visit is worth twice as much one final time.', question: 'The dearest thing on the shelf. Most of a run, for double everything.' },
+    { key: 'rate2', share: 0.28, name: `${where} pays what the work is worth`, blurb: 'Every visit is worth twice as much again.', question: 'Doubles the value of everything a second time. Save for it.' },
   ];
   for (const r of rates) {
     out.push({
@@ -458,20 +461,6 @@ export function stageUpgrades(level) {
     });
   }
   out.push({
-    id: `stage-${level}-team`, name: `${where} trains everybody up`, emoji: '👥', kind: 'side', archetype: 'synergy',
-    side: 'team', flat: 0.6, ...at(0.05), icon: '👥',
-    blurb: 'Your whole team is 60% better.', question: 'Lifts every pair of hands you own at once.',
-    visual: 'Everybody on the street works a little quicker.',
-    unlock: earned(0.04),
-  });
-  out.push({
-    id: `stage-${level}-work`, name: `${where} fills the books`, emoji: '🏠', kind: 'side', archetype: 'synergy',
-    side: 'work', flat: 0.6, ...at(0.28), icon: '🏠',
-    blurb: 'All of your work is 60% better.', question: 'The work-side twin. Which side are you feeding?',
-    visual: 'The lights come on behind every door at once.',
-    unlock: earned(0.25),
-  });
-  out.push({
     id: `stage-${level}-hands`, name: `${where} still knows your face`, emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
     ...at(0.02), icon: '🤲', blurb: 'Your own visits earn another 1% of the team’s income every second.',
     visual: 'Your own carer keeps walking the round with everybody else.',
@@ -479,18 +468,59 @@ export function stageUpgrades(level) {
     unlock: earned(0.01),
   });
   out.push({
-    id: `stage-${level}-all1`, name: `${where} pulls together`, emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
-    ...at(0.16), icon: '✨', blurb: 'Everything you own earns 80% more.',
-    visual: 'The whole street lifts, and the office noticeboard fills up.',
-    question: 'Touches every single thing you own, whichever way you have played.',
-    unlock: earned(0.05),
+    id: `stage-${level}-syn`, name: `${own.plural} everywhere you look`, emoji: own.emoji, kind: 'synergy', archetype: 'synergy',
+    from: own.id, to: own.side === 'team' ? '*team' : '*work', per: 0.006, cap: 2, ...at(0.04), icon: own.emoji,
+    blurb: `Every ${own.name.toLowerCase()} makes all of your ${own.side === 'team' ? 'team' : 'work'} 0.6% better, up to +200%.`,
+    question: `Grows with how many ${own.plural.toLowerCase()} you keep buying, and stops if you stop.`,
+    visual: `More ${own.plural.toLowerCase()} than anybody thought sensible.`,
+    unlock: earned(0.04),
   });
   out.push({
-    id: `stage-${level}-team2`, name: `${where} knows every doorstep`, emoji: '🚐', kind: 'side', archetype: 'synergy',
-    side: 'team', flat: 0.7, ...at(0.20), icon: '🚐',
-    blurb: 'Your whole team is 70% better.', question: 'The second lift for the team side, once the first has paid for itself.',
-    visual: 'Everybody on the street works quicker still.',
+    id: `stage-${level}-team`, name: `${where} trains everybody up`, emoji: '👥', kind: 'side', archetype: 'synergy',
+    side: 'team', flat: 0.6, ...at(0.06), icon: '👥',
+    blurb: 'Your whole team is 60% better.', question: 'Lifts every pair of hands you own at once.',
+    visual: 'Everybody on the street works a little quicker.',
+    unlock: earned(0.06),
+  });
+  out.push({
+    id: `stage-${level}-all1`, name: `${where} pulls together`, emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
+    ...at(0.10), icon: '✨', blurb: 'Everything you own earns 80% more.',
+    visual: 'The whole street lifts, and the office noticeboard fills up.',
+    question: 'Touches every single thing you own, whichever way you have played.',
+    unlock: earned(0.10),
+  });
+  out.push({
+    id: `stage-${level}-disc`, name: `${own.plural} by the dozen`, emoji: '📦', kind: 'discount', archetype: 'discount',
+    building: own.id, factor: 0.6, ...at(0.14), icon: '📦',
+    blurb: `${own.plural} cost 40% less, for the rest of this run.`,
+    question: `Not more income – more ${own.plural.toLowerCase()}. Worth it if you are going to keep buying them.`,
+    visual: `A crate of ${own.plural.toLowerCase()} waiting outside the office.`,
+    unlock: earned(0.14),
+  });
+  out.push({
+    id: `stage-${level}-work`, name: `${where} fills the books`, emoji: '🏠', kind: 'side', archetype: 'synergy',
+    side: 'work', flat: 0.6, ...at(0.20), icon: '🏠',
+    blurb: 'All of your work is 60% better.', question: 'The work-side twin. Which side are you feeding?',
+    visual: 'The lights come on behind every door at once.',
     unlock: earned(0.20),
+  });
+  out.push({
+    id: `stage-${level}-mile`, name: `${where} marks every tenth`, emoji: '🎖️', kind: 'milestone', archetype: 'milestone',
+    add: 0.25, ...at(0.38), icon: '🎖️',
+    blurb: 'Every tenth of anything is worth a quarter more again.',
+    question: 'Multiplies every tenth you have ever passed and every one still to come.',
+    visual: 'More bunting over the office than last time.',
+    unlock: earned(0.38),
+  });
+  out.push({
+    id: `stage-${level}-broad`, name: `${where} has a bit of everything`, emoji: '🧩', kind: 'conditional', archetype: 'conditional', mult: 1.6,
+    share: (s) => Math.min(1, Object.values(s.buildings).filter((n) => n >= 10).length / 8),
+    label: 'the more different things you own ten of',
+    blurb: 'Everything earns up to 60% more, in full once you own ten each of eight different things.',
+    question: 'Pays for going broad rather than deep. Nothing else in the game asks for that.',
+    visual: 'A little of everything on the street at once.',
+    ...at(0.52), icon: '🧩',
+    unlock: earned(0.52),
   });
   out.push({
     id: `stage-${level}-work2`, name: `${where} keeps asking for you`, emoji: '📗', kind: 'side', archetype: 'synergy',
@@ -504,7 +534,7 @@ export function stageUpgrades(level) {
     ...at(0.85), icon: '🌟', blurb: 'Everything you own earns 80% more again.',
     visual: 'Every light on the horizon burns a little brighter.',
     question: 'The last thing on the shelf here, and the biggest.',
-    unlock: earned(0.55),
+    unlock: earned(0.85),
   });
 
   // Past the printed table, the two new rungs of the stage bring their own kit.
@@ -514,7 +544,7 @@ export function stageUpgrades(level) {
       const b = beyondBuilding(first + r);
       FAR_KIT.forEach((name, i) => {
         out.push({
-          id: `${b.id}-t${i + 1}`, name: `${name} for the ${b.name.toLowerCase()}`, emoji: b.emoji, kind: 'building', building: b.id,
+          id: `${b.id}-t${i + 1}`, name: `${name} ${first + r}`, emoji: b.emoji, kind: 'building', building: b.id,
           ...at([0.006, 0.05, 0.2][i] * (r + 1)), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
           blurb: `${b.plural} are ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as good.`,
           visual: `${name} on every ${b.name.toLowerCase()}, counted on the horizon.`,

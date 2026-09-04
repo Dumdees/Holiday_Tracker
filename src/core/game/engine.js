@@ -30,8 +30,9 @@ const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
 const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
-const CLICK_SHARE_CAP = 0.15;     // one visit of your own is never worth more than this much of a second
-export const MILESTONES_BEYOND = 4;   // how many more doublings there are past the printed table
+/** One visit of your own is never worth more than this much of a second's takings. */
+export function clickShareCap(level) { return Math.min(0.45, 0.1 + 0.012 * level); }
+export const MILESTONES_BEYOND = 8;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
 export function newGame(now = Date.now()) {
@@ -47,7 +48,7 @@ export function newGame(now = Date.now()) {
     visits: 0,
     clicks: 0,
     collections: 0,
-    buildings: { client: 3 },   // three front doors to be going on with; you do the visits yourself at first
+    buildings: { client: 5 },   // a few front doors to be going on with; you do the visits yourself at first
     upgrades: [],
     branches: {},               // slot -> option id, chosen once per run
     achievements: [],
@@ -174,9 +175,9 @@ function ownedUpgrades(state) {
 
 /** How much a milestone is worth: every tenth doubles, or more once you have paid for it. */
 export function milestoneFactor(state) {
-  if (state.upgrades.includes('mile-2')) return 2.5;
-  if (state.upgrades.includes('mile-1')) return 2.2;
-  return 2;
+  let f = 2;
+  for (const u of ownedUpgrades(state)) if (u.kind === 'milestone') f += u.add || 0.2;
+  return Math.min(6, f);      // every tenth is worth this much, and it stops at six
 }
 
 /** How many milestones a count has passed, and what that is worth. */
@@ -320,6 +321,22 @@ export function productionPerSecond(state, now = Date.now()) {
   return m.visits * visitValue(state) * globalMultiplier(state, now, m);
 }
 
+/** How much of a second's takings your own visit is worth, after the cap for this stage. */
+export function clickShare(state) {
+  let pct = 0;
+  for (const u of ownedUpgrades(state)) {
+    if (u.kind === 'click') pct += u.pct || 0;
+    if (u.kind === 'clickpct') pct += u.pct || 0.01;
+  }
+  return Math.min(clickShareCap(state.level), pct);
+}
+
+/** What another share would really add, once the cap has had its say. */
+export function clickShareGain(state, u) {
+  const now_ = clickShare(state);
+  return Math.min(clickShareCap(state.level), now_ + (u.pct || 0.01)) - now_;
+}
+
 export function clickValue(state, now = Date.now()) {
   let v = visitValue(state);
   let pct = 0;
@@ -329,7 +346,7 @@ export function clickValue(state, now = Date.now()) {
     if (u.kind === 'clickpct') pct += u.pct || 0.01;
   }
   if (state.perks.includes('legend')) v *= 10;
-  let value = v * globalMultiplier(state, now) + Math.min(CLICK_SHARE_CAP, pct) * productionPerSecond(state, now);
+  let value = v * globalMultiplier(state, now) + Math.min(clickShareCap(state.level), pct) * productionPerSecond(state, now);
   for (const e of state.effects) if (e.clickMult && e.until > now) value *= e.clickMult;
   return value;
 }
@@ -451,7 +468,9 @@ export function upgradeOffer(state, u, now = Date.now(), income = null) {
   const cost = upgradeCost(state, u.id);
   if (income === null) income = productionPerSecond(state, now);
   const gain = upgradeGain(state, u.id, now, income);
-  return { ...u, cost, gain, income, payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
+  const offer = { ...u, cost, gain, income, payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
+  if (u.kind === 'clickpct' || u.kind === 'click') offer.clickAdd = clickShareGain(state, u);
+  return offer;
 }
 
 /** Every rung you can buy at this stage, including the endless ones past the starship. */
@@ -679,21 +698,30 @@ export function nextLevel(state) {
 }
 
 /** A run has to be worth this many seconds at the best rate the run before it reached... */
-export const RUN_SECONDS = 120;
-/** ...and this many times what the last run had to earn, which is what makes the stages lengthen. */
-export const RUN_BEAT = 400;
+export const RUN_SECONDS = 420;
+/** ...and this many times what the last run was asked for, so the stages lengthen a little each time. */
+export const RUN_BEAT = 6;
+/** ...and never more than this many times, however far a lucky run overshot. */
+export const RUN_BEAT_MAX = 200;
 /** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
 export const PRICE_CLIMB = 0.4;
 const FIRST_TARGET = 1.2e5;
 
 /**
- * What a run at `level` has to earn to be worth handing over: the stage's own figure, three times
- * the best run ever, or five minutes at the best rate the last run reached – whichever is most. It
- * is worked out once, when the run starts, and never moves again, so the bar only ever goes
- * forwards, a lucky rainbow cannot push the finish line away, and the shelf can be priced against it.
+ * What a run has to earn to be worth handing over: seven minutes at the best rate the last run
+ * reached, or six times what the last run was asked for, whichever is more – and the printed figure
+ * for the first stage, before there is a last run to go on. It is worked out once, when the run
+ * starts, and never moves again, so the bar only ever goes forwards, a lucky rainbow cannot push the
+ * finish line away, and the whole shop can be priced against it.
  */
 export function runTargetFor(level, lastPeak, lastTarget) {
-  return Math.max(levelInfo(level + 1).threshold, (lastTarget || 0) * RUN_BEAT, (lastPeak || 0) * RUN_SECONDS);
+  const first = lastTarget || lastPeak ? 0 : levelInfo(1).threshold;   // only the very first run
+  const byTarget = (lastTarget || 0) * RUN_BEAT;
+  const byPeak = (lastPeak || 0) * RUN_SECONDS;
+  // A run that overshoots hugely would otherwise set the next one an impossible figure, so the
+  // step up is held between six and sixty times what the last run was asked for.
+  const held = lastTarget ? Math.min(byPeak, lastTarget * RUN_BEAT_MAX) : byPeak;
+  return Math.max(first, byTarget, held);
 }
 
 /** Income a second with the temporary luck taken out: what the pacing is measured against. */
@@ -704,6 +732,20 @@ export function steadyIncome(state) {
 export function expandRequirement(state) {
   if (state.runTarget > 0) return state.runTarget;
   return runTargetFor(state.level, state.lastPeak, 0);   // a save from before this was kept
+}
+
+/** The plain fraction of the way there, and how long the rest looks like taking. */
+export function expandOutlook(state, now = Date.now()) {
+  const target = expandRequirement(state);
+  const earned = Math.max(0, state.runEarned);
+  const rate = productionPerSecond(state, now);
+  const left = Math.max(0, target - earned);
+  return {
+    target,
+    earned,
+    fraction: target > 0 ? Math.min(1, earned / target) : 0,
+    seconds: rate > 0 ? left / rate : Infinity,
+  };
 }
 
 export function expandProgress(state) {

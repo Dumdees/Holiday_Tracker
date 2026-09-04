@@ -98,7 +98,7 @@ export function createScene(canvas, { onCoin } = {}) {
 
   function layoutHouses() {
     const maxByWidth = Math.max(3, Math.floor((W - 180) / 58));
-    const count = clamp(Math.min(drawnFor(world.homes, 14), maxByWidth), 1, 14);
+    const count = clamp(Math.min(world.homes, 2 + drawnFor(world.homes, 12), maxByWidth), 1, 14);
     const left = 135, right = W - 26;
     const gap = (right - left) / count;
     const w = Math.min(56, gap * 0.82);

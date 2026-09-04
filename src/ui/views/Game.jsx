@@ -84,7 +84,7 @@ function gainPct(u) {
     return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : pct >= 0.05 ? `+${pct.toFixed(1)}%` : 'a trickle';
   }
   if (u.kind === 'discount') return `−${Math.round((1 - u.factor) * 100)}% to buy`;
-  if (u.kind === 'clickpct') return `+${Math.round((u.pct || 0.01) * 100)}% a tap`;
+  if (u.kind === 'clickpct') { const add = u.clickAdd || 0; return add > 0 ? `+${(add * 100).toFixed(add < 0.01 ? 1 : 0)}% a tap` : 'nothing more, you are at the limit'; }
   if (u.kind === 'click') return `×${u.mult || 2} a tap`;
   return '';
 }
@@ -246,7 +246,7 @@ export function Game() {
   const rows = showOld ? shop : shop.filter((b) => !outgrown.includes(b));
   const hint = nextStep(s, shop);
   const pending = G.pendingBranch(s);
-  const progress = G.expandProgress(s, now);
+  const outlook = G.expandOutlook(s, now);
   const nextLocked = G.nextLockedBuilding(s);
   const workShare = metrics.work + metrics.team > 0 ? (metrics.work / (metrics.work + metrics.team)) * 100 : 50;
   // The news only carries lines that make sense for the business you have actually built.
@@ -532,8 +532,18 @@ export function Game() {
           {rightTab === 'grow' ? (
             <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s, now) ? 'ready' : ''}`}>
               <p class="soft">Earn {fmtMoney(G.expandRequirement(s, now))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
-              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, progress * 100)}%` }} /></div>
-              <div class="row-between"><span class="muted">{fmtMoney(s.runEarned)} earned this run</span><strong>{Math.floor(progress * 100)}%</strong></div>
+              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.fraction * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.fraction * 100)}%` }} /></div>
+              <div class="row-between">
+                <span class="muted">{fmtMoney(outlook.earned)} of {fmtMoney(outlook.target)}</span>
+                <strong>{outlook.fraction >= 0.01 ? Math.floor(outlook.fraction * 100) : (outlook.fraction * 100).toFixed(1)}%</strong>
+              </div>
+              {outlook.fraction < 1 ? (
+                <p class={`small mt ${outlook.seconds > 1200 ? 'expand-slow' : 'muted'}`}>
+                  {Number.isFinite(outlook.seconds)
+                    ? `About ${fmtSeconds(outlook.seconds)} at the rate you are earning now.${outlook.seconds > 1200 ? ' Something bigger is worth buying.' : ''}`
+                    : 'Nothing is coming in yet – take somebody on.'}
+                </p>
+              ) : null}
               <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
                 {G.canExpand(s) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
               </Button>
