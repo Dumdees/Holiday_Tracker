@@ -404,61 +404,79 @@ export const UPGRADES_BY_ID = new Map([...UPGRADES, ...BRANCH_OPTIONS].map((u) =
  * rungs.
  */
 const STAGE_CACHE = new Map();
+/** What this run has to earn, as the shelf sees it. Kept here so the unlock rules can read it too. */
+const runTargetOf = (s) => (s.runTarget > 0 ? s.runTarget : levelInfo(s.level + 1).threshold);
 const FAR_KIT = ['Warm boxes', 'Quiet engines', 'Deep-space kettles'];
 
 export function stageUpgrades(level) {
   if (STAGE_CACHE.has(level)) return STAGE_CACHE.get(level);
   const info = levelInfo(level);
   const where = info.name;                    // always leads the name, so it reads right for every stage
-  const T = info.threshold;
-  const at = (share) => T * share;            // priced as a share of the stage's own figure
-  const earned = (share) => (s) => s.runEarned >= T * share * 0.35;
+  // Priced as shares of what this run has to earn, so the first is affordable within a minute of
+  // starting and the last is worth saving the whole run for, at every stage for ever.
+  const at = (share) => ({ costShare: share });
+  const earned = (share) => (s) => s.runEarned >= runTargetOf(s) * share * 0.3;
   const out = [];
 
   const rates = [
-    { key: 'rate1', share: 0.02, name: `${where} pays better`, blurb: 'Every visit is worth twice as much.', question: 'The first thing worth having here, and it is never wasted.' },
-    { key: 'rate2', share: 0.09, name: `${where} pays better again`, blurb: 'Every visit is worth twice as much again.', question: 'Doubles the value of everything a second time. Save for it.' },
-    { key: 'rate3', share: 0.30, name: `${where} pays properly at last`, blurb: 'Every visit is worth twice as much once more.', question: 'The big one. A third of everything this stage asks of you.' },
+    { key: 'rate1', share: 0.012, name: `${where} pays better`, blurb: 'Every visit is worth twice as much.', question: 'The first thing worth having here, and it is never wasted.' },
+    { key: 'rate2', share: 0.08, name: `${where} pays better again`, blurb: 'Every visit is worth twice as much again.', question: 'Doubles the value of everything a second time. Save for it.' },
+    { key: 'rate3', share: 0.30, name: `${where} pays properly at last`, blurb: 'Every visit is worth twice as much once more.', question: 'A third of everything this stage asks of you, and worth every penny.' },
+    { key: 'rate4', share: 0.62, name: `${where} pays what the work is worth`, blurb: 'Every visit is worth twice as much one final time.', question: 'The dearest thing on the shelf. Most of a run, for double everything.' },
   ];
   for (const r of rates) {
     out.push({
       id: `stage-${level}-${r.key}`, name: r.name, emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
-      cost: at(r.share), icon: '💷', blurb: r.blurb, question: r.question,
+      ...at(r.share), icon: '💷', blurb: r.blurb, question: r.question,
       visual: 'The coins coming into the office get bigger.',
       unlock: earned(r.share),
     });
   }
   out.push({
     id: `stage-${level}-team`, name: `${where} trains everybody up`, emoji: '👥', kind: 'side', archetype: 'synergy',
-    side: 'team', flat: 0.6, cost: at(0.04), icon: '👥',
+    side: 'team', flat: 0.6, ...at(0.05), icon: '👥',
     blurb: 'Your whole team is 60% better.', question: 'Lifts every pair of hands you own at once.',
     visual: 'Everybody on the street works a little quicker.',
     unlock: earned(0.04),
   });
   out.push({
     id: `stage-${level}-work`, name: `${where} fills the books`, emoji: '🏠', kind: 'side', archetype: 'synergy',
-    side: 'work', flat: 0.6, cost: at(0.25), icon: '🏠',
+    side: 'work', flat: 0.6, ...at(0.28), icon: '🏠',
     blurb: 'All of your work is 60% better.', question: 'The work-side twin. Which side are you feeding?',
     visual: 'The lights come on behind every door at once.',
     unlock: earned(0.25),
   });
   out.push({
     id: `stage-${level}-hands`, name: `${where} still knows your face`, emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
-    cost: at(0.01), icon: '🤲', blurb: 'Your own visits earn another 1% of the team’s income every second.',
+    ...at(0.02), icon: '🤲', blurb: 'Your own visits earn another 1% of the team’s income every second.',
     visual: 'Your own carer keeps walking the round with everybody else.',
     question: 'Cheap, and it keeps your own tapping worth doing.',
     unlock: earned(0.01),
   });
   out.push({
     id: `stage-${level}-all1`, name: `${where} pulls together`, emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
-    cost: at(0.05), icon: '✨', blurb: 'Everything you own earns 80% more.',
+    ...at(0.16), icon: '✨', blurb: 'Everything you own earns 80% more.',
     visual: 'The whole street lifts, and the office noticeboard fills up.',
     question: 'Touches every single thing you own, whichever way you have played.',
     unlock: earned(0.05),
   });
   out.push({
+    id: `stage-${level}-team2`, name: `${where} knows every doorstep`, emoji: '🚐', kind: 'side', archetype: 'synergy',
+    side: 'team', flat: 0.7, ...at(0.20), icon: '🚐',
+    blurb: 'Your whole team is 70% better.', question: 'The second lift for the team side, once the first has paid for itself.',
+    visual: 'Everybody on the street works quicker still.',
+    unlock: earned(0.20),
+  });
+  out.push({
+    id: `stage-${level}-work2`, name: `${where} keeps asking for you`, emoji: '📗', kind: 'side', archetype: 'synergy',
+    side: 'work', flat: 0.7, ...at(0.45), icon: '📗',
+    blurb: 'All of your work is 70% better.', question: 'The work side’s second lift. You will not manage both and the rungs.',
+    visual: 'Another light behind every door on the street.',
+    unlock: earned(0.45),
+  });
+  out.push({
     id: `stage-${level}-all2`, name: `${where} lifts all at once`, emoji: '🌟', kind: 'global', archetype: 'rate', mult: 1.8,
-    cost: at(0.55), icon: '🌟', blurb: 'Everything you own earns 80% more again.',
+    ...at(0.85), icon: '🌟', blurb: 'Everything you own earns 80% more again.',
     visual: 'Every light on the horizon burns a little brighter.',
     question: 'The last thing on the shelf here, and the biggest.',
     unlock: earned(0.55),
@@ -472,7 +490,7 @@ export function stageUpgrades(level) {
       FAR_KIT.forEach((name, i) => {
         out.push({
           id: `${b.id}-t${i + 1}`, name: `${name} for the ${b.name.toLowerCase()}`, emoji: b.emoji, kind: 'building', building: b.id,
-          cost: at([0.003, 0.03, 0.12][i] * (r + 1)), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
+          ...at([0.006, 0.05, 0.2][i] * (r + 1)), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
           blurb: `${b.plural} are ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as good.`,
           visual: `${name} on every ${b.name.toLowerCase()}, counted on the horizon.`,
           question: `Worth it once you own a lot of ${b.plural.toLowerCase()}.`,
@@ -485,12 +503,18 @@ export function stageUpgrades(level) {
   return out;
 }
 
-/** Everything buyable at a stage: the printed list, plus every stage shelf you have reached. */
+/**
+ * Everything buyable at a stage: the printed list, the shelf belonging to THIS stage, and the kit
+ * for every far rung you can buy. Only one shelf is ever open at a time – a run that could sweep up
+ * six stages' worth of shelves would multiply its own income by more than the stage ever asked for.
+ */
 export function upgradesFor(level) {
   const out = [...UPGRADES];
-  for (let l = 1; l <= level; l++) out.push(...stageUpgrades(l));
+  if (level >= 1) out.push(...stageUpgrades(level).filter((u) => !isFarKit(u)));
+  for (let l = LEVELS.length; l <= level; l++) out.push(...stageUpgrades(l).filter(isFarKit));
   return out;
 }
+const isFarKit = (u) => u.archetype === 'kit' && u.id.startsWith('beyond-');
 
 /** Look up any upgrade by id, including the endless ones that are worked out on demand. */
 export function upgradeById(id) {

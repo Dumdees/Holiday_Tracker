@@ -30,6 +30,7 @@ const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
 const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
+export const MILESTONES_BEYOND = 4;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
 export function newGame(now = Date.now()) {
@@ -64,6 +65,9 @@ export function newGame(now = Date.now()) {
     playedLate: false,
     adminTimer: 0,
     bestRun: 0,                 // the most any single run has earned, so each hand-over has to beat it
+    runPeak: 0,                 // the best steady rate this run has reached
+    lastPeak: 0,                // and the best the run before it reached
+    runTarget: runTargetFor(0, 0, 0),   // what this run has to earn, fixed when it started
     log: [],                    // newest first: { at, emoji, text }
   };
 }
@@ -176,9 +180,10 @@ export function milestoneFactor(state) {
 export function milestonesPassed(count) {
   let n = 0;
   for (const m of MILESTONES) if (count >= m) n++;
-  // Past the table, every time you double again counts as another one.
+  // Past the table, every time you double again counts as another one – but only four times over.
+  // Without that stop, owning ten thousand of something runs away with the whole game.
   const last = MILESTONES[MILESTONES.length - 1];
-  if (count > last) n += Math.floor(Math.log2(count / last));
+  if (count > last) n += Math.min(MILESTONES_BEYOND, Math.floor(Math.log2(count / last)));
   return n;
 }
 
@@ -186,7 +191,9 @@ export function milestonesPassed(count) {
 export function nextMilestone(count) {
   for (const m of MILESTONES) if (count < m) return { at: m, remaining: m - count };
   const last = MILESTONES[MILESTONES.length - 1];
-  const at = last * Math.pow(2, Math.floor(Math.log2(count / last)) + 1);
+  const passed = Math.floor(Math.log2(count / last));
+  if (passed >= MILESTONES_BEYOND) return null;      // they all stop eventually
+  const at = last * Math.pow(2, passed + 1);
   return { at, remaining: at - count };
 }
 
@@ -375,7 +382,16 @@ export function upgradeCost(state, id) {
   const def = upgradeById(id);
   if (!def) return Infinity;
   const f = state.perks.includes('playbook') ? 0.9 : 1;
-  return Math.ceil(def.cost * f);
+  // A stage's own shelf is priced as a share of what this run has to earn, so it is worth the same
+  // effort at every stage: a minute's takings for the first, most of the run for the last.
+  // A stage's own shelf is priced as a share of what this run has to earn. The printed list keeps its
+  // printed prices, lifted as the runs get bigger – otherwise the whole of it is pocket money by the
+  // third stage and every run afterwards is over in ninety seconds.
+  const target = expandRequirement(state);
+  const base = def.costShare
+    ? def.costShare * target
+    : def.cost * Math.pow(Math.max(1, target / FIRST_TARGET), PRICE_CLIMB);
+  return Math.ceil(base * f);
 }
 
 // ---------- What is worth buying ----------
@@ -644,33 +660,44 @@ export function nextLevel(state) {
   return levelInfo(state.level + 1);
 }
 
-/** A run has to be worth at least this many seconds at its own best rate before you can hand over. */
-export const RUN_SECONDS = 150;
+/** A run has to be worth this many seconds at the best rate the run before it reached... */
+export const RUN_SECONDS = 120;
+/** ...and this many times what the last run had to earn, which is what makes the stages lengthen. */
+export const RUN_BEAT = 400;
+/** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
+export const PRICE_CLIMB = 0.4;
+const FIRST_TARGET = 1.2e5;
 
 /**
- * What this run has to earn before you can hand the patch over: the stage's own figure, three times
- * your best run ever, or five minutes at the rate you are earning now – whichever is most. The last
- * one is what stops a big business handing the patch over eight times in two minutes: it rises with
- * you, so it can only be met once the run has stopped doubling every few seconds.
+ * What a run at `level` has to earn to be worth handing over: the stage's own figure, three times
+ * the best run ever, or five minutes at the best rate the last run reached – whichever is most. It
+ * is worked out once, when the run starts, and never moves again, so the bar only ever goes
+ * forwards, a lucky rainbow cannot push the finish line away, and the shelf can be priced against it.
  */
-export function expandRequirement(state, now = Date.now()) {
-  return Math.max(
-    nextLevel(state).threshold,
-    (state.bestRun || 0) * 3,
-    productionPerSecond(state, now) * RUN_SECONDS,
-  );
+export function runTargetFor(level, lastPeak, lastTarget) {
+  return Math.max(levelInfo(level + 1).threshold, (lastTarget || 0) * RUN_BEAT, (lastPeak || 0) * RUN_SECONDS);
 }
 
-export function expandProgress(state, now = Date.now()) {
-  const target = expandRequirement(state, now);
+/** Income a second with the temporary luck taken out: what the pacing is measured against. */
+export function steadyIncome(state) {
+  return productionPerSecond(state, Number.MAX_SAFE_INTEGER);
+}
+
+export function expandRequirement(state) {
+  if (state.runTarget > 0) return state.runTarget;
+  return runTargetFor(state.level, state.lastPeak, 0);   // a save from before this was kept
+}
+
+export function expandProgress(state) {
+  const target = expandRequirement(state);
   const floor = target / 100;
   const earned = Math.max(0, state.runEarned);
   if (earned <= floor) return (earned / floor) * 0.15;
   return Math.min(1, 0.15 + 0.85 * (Math.log(earned / floor) / Math.log(100)));
 }
 
-export function canExpand(state, now = Date.now()) {
-  return state.runEarned >= expandRequirement(state, now);
+export function canExpand(state) {
+  return state.runEarned >= expandRequirement(state);
 }
 
 export function starsOnExpand(state) {
@@ -691,15 +718,19 @@ function applyStartPerks(state) {
 
 /** Hand the patch over and start again bigger. Stars, perks and badges stay. */
 export function expand(state, now = Date.now()) {
-  if (!canExpand(state, now)) return null;
+  if (!canExpand(state)) return null;
   const gained = starsOnExpand(state);
+  const peak = Math.max(state.runPeak || 0, steadyIncome(state));
+  const bestRun = Math.max(state.bestRun || 0, state.runEarned);
+  const level = state.level + 1;
   const keep = {
     startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,
-    bestRun: Math.max(state.bestRun || 0, state.runEarned),
-    level: state.level + 1, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
+    bestRun, level, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
     perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet,
     cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
+    // The next run's finish line, worked out now and left alone until it is crossed.
+    lastPeak: peak, runPeak: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)),
   };
   const fresh = newGame(now);
   Object.assign(state, fresh, keep, { runStartedAt: now, lastSeen: now });
@@ -793,6 +824,8 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
   dt = Math.max(0, Math.min(dt, 5));
   const m = boardMetrics(state);
   const rate = m.visits * visitValue(state) * globalMultiplier(state, now, m);
+  const steady = m.visits * visitValue(state) * globalMultiplier(state, Number.MAX_SAFE_INTEGER, m);
+  if (steady > (state.runPeak || 0)) state.runPeak = steady;   // the run's own best rate, luck excluded
   state.visits += m.visits * dt;
   const mode = collectionMode(state);
   if (mode === 'instant') credit(state, rate * dt);

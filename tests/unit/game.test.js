@@ -86,13 +86,14 @@ describe('what makes things better', () => {
     assert.equal(g.milestonesPassed(10), 1);
     assert.equal(g.milestonesPassed(25), 2);
     assert.deepEqual(g.nextMilestone(7), { at: 10, remaining: 3 });
-    assert.ok(g.nextMilestone(1e9).at > 1e9, 'there is always another one coming');
+    assert.equal(g.nextMilestone(1e9), null, 'they run out eventually, so the rungs matter more than the pile');
     const s = board({ carer: 10, client: 40 });
     const one = g.buildingRate(s, 'carer');
     const nine = g.buildingRate({ ...s, buildings: { ...s.buildings, carer: 9 } }, 'carer');
     assert.ok(Math.abs(one / nine - 2) < 1e-9, 'the tenth carer doubles every carer');
     assert.equal(g.milestonesPassed(5000), MILESTONES.length + 1, 'they carry on past the table');
-    assert.ok(g.nextMilestone(5000).at > 5000, 'and there is always another one coming');
+    assert.ok(g.nextMilestone(5000).at > 5000, 'and there is another one coming');
+    assert.equal(g.milestonesPassed(1e9), MILESTONES.length + g.MILESTONES_BEYOND, 'but only four of them');
     assert.equal(g.milestoneFactor(s), 2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1'] }), 2.2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1', 'mile-2'] }), 2.5);
@@ -335,9 +336,15 @@ describe('handing over', () => {
     s.runEarned = 6e5;
     assert.ok(g.canExpand(s));
     assert.ok(g.expandRequirement(s) >= LEVELS[1].threshold);
-    // Once you have had a big run, the next one has to beat it properly – no handing over five times
-    // in a minute just because the stage figure is behind you.
-    assert.equal(g.expandRequirement({ ...s, level: 3, bestRun: 1e12 }), 3e12, 'three times your best run ever');
+    // The finish line is worked out when the run starts and never moves again, so the bar cannot go
+    // backwards and a lucky rainbow cannot push it away.
+    assert.equal(g.runTargetFor(3, 0, 1e12), 1e12 * g.RUN_BEAT, 'eight times your best run ever');
+    assert.equal(g.runTargetFor(3, 1e10, 0), 1e10 * g.RUN_SECONDS, 'or two minutes at the last run’s best rate');
+    assert.equal(g.runTargetFor(0, 0, 0), LEVELS[1].threshold, 'or the stage figure, at the very start');
+    const mid = { ...g.newGame(T0), level: 3, runTarget: 5e9, runEarned: 1e9 };
+    const lucky = { ...mid, effects: [{ id: 'x', until: T0 + 60000, prodMult: 7 }] };
+    assert.equal(g.expandRequirement(lucky), g.expandRequirement(mid), 'a lucky spell never moves the finish line');
+    assert.ok(g.expandProgress({ ...mid, runEarned: 2e9 }) > g.expandProgress(mid), 'and the bar only goes forwards');
     const gained = g.starsOnExpand(s);
     assert.equal(gained, g.starsForLifetime(2e6));
     assert.ok(gained >= 1 && gained <= 20, `a first hand-over should be worth a handful of stars, got ${gained}`);
@@ -536,7 +543,7 @@ describe('the rule that everything you buy changes the street', () => {
     for (const u of [...upgradesFor(LEVELS.length + 2), ...BRANCH_OPTIONS]) {
       assert.ok(u.visual && u.visual.length > 10, `${u.id} does not say what it changes`);
       assert.ok(u.name && u.emoji && u.blurb, `${u.id} is missing its words`);
-      assert.ok(typeof u.cost === 'number' || u.slot, `${u.id} has no price`);
+      assert.ok(typeof u.cost === 'number' || typeof u.costShare === 'number' || u.slot, `${u.id} has no price`);
       // Kit upgrades change the look of the rung they belong to; everything else pins an icon on
       // the office noticeboard. Anything covered by neither is a promise the street cannot keep.
       const kitOf = /^(.*)-t[123]$/.exec(u.id);
@@ -547,15 +554,18 @@ describe('the rule that everything you buy changes the street', () => {
     }
   });
 
-  test('every stage brings its own shelf, and it is priced against that stage', () => {
+  test('every stage brings its own shelf, priced against what the run has to earn', () => {
     for (const level of [1, 4, 9, 12, 18]) {
       const shelf = upgradesFor(level).filter((u) => u.id.startsWith(`stage-${level}-`));
       assert.ok(shelf.length >= 8, `stage ${level} has a shelf of its own`);
-      const threshold = levelInfo(level).threshold;
-      const cheapest = Math.min(...shelf.map((u) => u.cost));
-      const dearest = Math.max(...shelf.map((u) => u.cost));
-      assert.ok(cheapest >= threshold * 0.002 && cheapest <= threshold * 0.05, 'the first is affordable early in the stage');
-      assert.ok(dearest >= threshold * 0.2 && dearest <= threshold, 'and the last is something to save the run for');
+      // The prices are shares of the run's own finish line, so they mean the same at every stage.
+      const s = { ...board(), level, runTarget: 1e12 };
+      const costs = shelf.map((u) => g.upgradeCost(s, u.id));
+      assert.ok(Math.min(...costs) <= 1e12 * 0.02, 'the first is affordable within a minute or two');
+      assert.ok(Math.max(...costs) >= 1e12 * 0.4, 'and the last is worth saving most of the run for');
+      assert.ok(Math.max(...costs) <= 1e12, 'but never more than the run itself');
+      const richer = { ...s, runTarget: 1e18 };
+      assert.equal(g.upgradeCost(richer, shelf[0].id), g.upgradeCost(s, shelf[0].id) * 1e6, 'and they rise with the run');
       for (const u of shelf) assert.ok(u.visual && u.name && u.blurb && u.icon, `${u.id} is fully written`);
     }
     const far = { ...board(), level: LEVELS.length + 3, buildings: { carer: 400, client: 400, 'beyond-1': 200, 'beyond-2': 60, 'beyond-3': 20, 'beyond-4': 5 } };
