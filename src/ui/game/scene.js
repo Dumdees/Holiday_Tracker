@@ -68,7 +68,7 @@ export function createScene(canvas, { onCoin } = {}) {
     prismatic: null, card: null, buildings: {}, effects: [], mode: 'manual', invoices: 0, teamSize: 0,
     names: [], starName: 'Sam', t: 0, now: Date.now(), lastFrame: 0, synced: false,
     counts: {}, tiers: {}, owned: new Set(), rating: 0, sign: '#E5734A', coinSize: 6, folk: [], badges: [],
-    shake: 0, flashUntil: 0, expandFlash: 0, rocket: null, satelliteAngle: 0, rain: 0, rainCooldown: rand(60, 120),
+    refusedAt: -9, shake: 0, flashUntil: 0, expandFlash: 0, rocket: null, satelliteAngle: 0, rain: 0, rainCooldown: rand(60, 120), lit: 0, extraBadges: 0,
   };
   let raf = 0;
 
@@ -107,7 +107,7 @@ export function createScene(canvas, { onCoin } = {}) {
   }
 
   function makeAgent(i, name) {
-    return { id: i, name, colour: hueColour(i), skin: SKIN[i % SKIN.length], hair: HAIR[(i * 5) % HAIR.length], x: officeX() + rand(-12, 12), targetX: officeX(), state: 'idle', timer: rand(0.2, 2), speed: rand(34, 48), dir: 1, phase: rand(0, TWO_PI), house: -1, pop: 0, dash: 0, waiting: false };
+    return { id: i, name, colour: hueColour(i), skin: SKIN[i % SKIN.length], hair: HAIR[(i * 5) % HAIR.length], x: officeX() + 20 + i * 9, targetX: officeX() + 20 + i * 9, state: 'idle', timer: rand(0.2, 2), speed: rand(34, 48), dir: 1, phase: rand(0, TWO_PI), house: -1, pop: 0, dash: 0, waiting: false };
   }
 
   /** Keep the scene in step with the game state. Cheap; called every tick. */
@@ -150,9 +150,12 @@ export function createScene(canvas, { onCoin } = {}) {
       world.tiers[b.id] = n;
     }
     world.rating = ratingOf(state);
+    world.lit = ['cond-covered', 'cond-continuity', 'cond-tidy', 'cond-wellled'].filter((id) => world.owned.has(id) && conditionLit(id, state)).length;
     for (const [id, colour] of Object.entries(SIGN_COLOURS)) if (world.owned.has(id)) world.sign = colour;
     world.coinSize = 6 + Math.min(6, Math.log10(1 + valueOf(state)) * 3);
-    world.badges = [...world.owned].map((id) => UPGRADE_ICONS[id]).filter(Boolean).slice(0, 16);
+    const icons = [...world.owned].map((id) => UPGRADE_ICONS[id]).filter(Boolean);
+    world.badges = icons.slice(0, 24);
+    world.extraBadges = Math.max(0, icons.length - 24);
     syncFolk();
     world.effects = state.effects.filter((e) => e.until > now);
     world.mode = state.upgrades.includes('direct-debit') ? 'instant' : state.upgrades.includes('admin') ? 'admin' : 'manual';
@@ -174,6 +177,23 @@ export function createScene(canvas, { onCoin } = {}) {
     for (const [id, weight] of Object.entries(w)) score += (state.buildings[id] || 0) * weight;
     for (const id of world.owned) if (String(id).startsWith('qual-')) score += 6;
     return score >= 2000 ? 3 : score >= 120 ? 2 : score >= 6 ? 1 : 0;
+  }
+
+  /** Is a bonus you own actually paying right now? Mirrors the engine, for the tick over the door. */
+  function conditionLit(id, state) {
+    const work = sideOf(state, 'work'), team = sideOf(state, 'team');
+    if (id === 'cond-covered') return team >= work;
+    if (id === 'cond-continuity') return team >= work * 1.25;
+    if (id === 'cond-tidy') return (state.buildings.keysafe || 0) >= (state.buildings.client || 0) * 0.75;
+    if (id === 'cond-wellled') return world.rating >= 2;
+    return false;
+  }
+
+  /** A rough size for a side, good enough to decide what to draw. */
+  function sideOf(state, side) {
+    let total = 0;
+    for (const b of BUILDINGS) if (b.side === side) total += (state.buildings[b.id] || 0) * b.rate;
+    return total;
   }
 
   /** Roughly what a visit is worth, used only to draw bigger coins as you grow. */
@@ -226,7 +246,8 @@ export function createScene(canvas, { onCoin } = {}) {
   function refuse(index) {
     const h = world.houses[index]; if (!h) return;
     h.shake = 0.4;
-    if (world.t - (h.refusedAt || -9) > 1.2) { h.refusedAt = world.t; floatText('Just visited – give them a minute', h.x, pavementY() - 80); }
+    // one gentle reminder at a time, however many doors get tapped at once
+    if (world.t - (world.refusedAt || -9) > 1.6) { world.refusedAt = world.t; floatText('Just visited – give them a minute', h.x, pavementY() - 80); }
   }
 
   function playerVisit(cssX, cssY, hearts = 3, index = -1) {
@@ -305,7 +326,7 @@ export function createScene(canvas, { onCoin } = {}) {
         a.timer -= dt;
         if (a.timer <= 0) {
           if (a.house >= 0) { launchCoin(a.x, pavementY() - 34); if (world.houses[a.house]) world.houses[a.house].busy = -1; }
-          a.house = -1; a.targetX = officeX() + rand(-12, 12); a.state = 'walk';
+          a.house = -1; a.targetX = officeX() + 20 + a.id * 9 + rand(-4, 4); a.state = 'walk'; // spread out, not stacked on the step
         }
       }
     }
@@ -483,13 +504,39 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.owned.has('syn-academy-team')) { const bx = x + 78; ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.roundRect(bx, base - 20, 30, 14, 3); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(bx + 8, base - 5, 3.5, 0, TWO_PI); ctx.arc(bx + 22, base - 5, 3.5, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('TRAINING', bx + 15, base - 11); }
     // the office noticeboard: one small icon for every upgrade you have bought
     if (world.badges.length) {
-      const cols = 4, bx = x - 33, by = base - 50;
+      const cols = 6, bx = x - 34, by = base - 52;
       ctx.fillStyle = 'rgba(255,255,255,.65)';
       const rows = Math.ceil(world.badges.length / cols);
-      ctx.beginPath(); ctx.roundRect(bx - 3, by - 8, cols * 9 + 6, rows * 9 + 4, 3); ctx.fill();
-      ctx.font = `7px ${EMOJI_FONT}`; ctx.textAlign = 'center';
-      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % cols) * 9 + 3, by + Math.floor(i / cols) * 9));
+      ctx.beginPath(); ctx.roundRect(bx - 3, by - 8, cols * 12 + 6, rows * 11 + 6, 3); ctx.fill();
+      ctx.font = `9px ${EMOJI_FONT}`; ctx.textAlign = 'center';
+      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % cols) * 12 + 4, by + Math.floor(i / cols) * 11));
+      if (world.extraBadges) { ctx.font = `600 7px ${UI_FONT}`; ctx.fillStyle = '#3a2a24'; ctx.fillText(`+${world.extraBadges}`, bx + cols * 12 - 6, by + rows * 11 - 1); }
     }
+    // a green tick over the door whenever a bonus is actually paying
+    if (world.lit > 0) {
+      const ty = base - 108 + Math.sin(world.t * 2) * 2;
+      ctx.strokeStyle = 'rgba(60,170,90,.95)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - 7, ty); ctx.lineTo(x - 1, ty + 6); ctx.lineTo(x + 9, ty - 7); ctx.stroke();
+      if (world.lit > 1) { ctx.font = `600 8px ${UI_FONT}`; ctx.fillStyle = '#2f6b45'; ctx.textAlign = 'center'; ctx.fillText(`×${world.lit}`, x + 17, ty + 4); }
+    }
+    // a card reader in the window once the money arrives on its own
+    if (world.owned.has('direct-debit')) { ctx.fillStyle = '#2f3a46'; ctx.beginPath(); ctx.roundRect(x - 26, base - 30, 8, 11, 2); ctx.fill(); ctx.fillStyle = '#7fd4ff'; ctx.fillRect(x - 24.5, base - 28.5, 5, 4); }
+    // a green clock once the short calls are turned down
+    if (world.owned.has('qual-nomeds')) { ctx.fillStyle = '#2f6b45'; ctx.beginPath(); ctx.arc(x, base - 78, 5, 0, TWO_PI); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, base - 78); ctx.lineTo(x, base - 81); ctx.moveTo(x, base - 78); ctx.lineTo(x + 3, base - 78); ctx.stroke(); }
+    // everybody's name on the wall once the hours are guaranteed
+    if (world.owned.has('qual-hours')) { ctx.fillStyle = '#fff'; ctx.fillRect(x + 8, base - 46, 16, 12); ctx.strokeStyle = '#c9ced6'; ctx.lineWidth = 0.8; for (let r = 0; r < 4; r++) { ctx.beginPath(); ctx.moveTo(x + 9, base - 44 + r * 3); ctx.lineTo(x + 23, base - 44 + r * 3); ctx.stroke(); } }
+    // a neighbour leaning over the fence once word gets round
+    if (world.owned.has('disc-homes')) { const nx = x + 96, ny = base - 4; ctx.fillStyle = '#8b6b5a'; ctx.fillRect(nx - 14, ny - 14, 28, 3); ctx.fillStyle = '#9576b8'; ctx.beginPath(); ctx.roundRect(nx - 4, ny - 26, 8, 12, 3); ctx.fill(); ctx.fillStyle = '#F1C9A5'; ctx.beginPath(); ctx.arc(nx, ny - 30, 4.5, 0, TWO_PI); ctx.fill(); ctx.strokeStyle = '#9576b8'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(nx + 4, ny - 24); ctx.lineTo(nx + 9, ny - 31 + Math.sin(world.t * 6) * 3); ctx.stroke(); }
+    // a second floor once the branches are carrying everything
+    if (world.owned.has('syn-office-all')) { ctx.fillStyle = mix('#8a5a4a', '#FFB88C', day); ctx.fillRect(x - 30, base - 96, 60, 26); ctx.fillStyle = `rgba(255, 236, 170, ${1 - day * 0.5})`; ctx.fillRect(x - 22, base - 90, 12, 10); ctx.fillRect(x + 10, base - 90, 12, 10); }
+    // the council crest in the window
+    if (world.owned.has('syn-council-package') || world.owned.has('buyer-council')) { ctx.font = `12px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('🏛️', x - 21, base - 27); }
+    // what you are known for, on a flag over the door
+    const known = ['known-dementia', 'known-reablement', 'known-complex'].find((id) => world.owned.has(id));
+    if (known) { const flag = { 'known-dementia': '🧠', 'known-reablement': '🌤️', 'known-complex': '🧑‍⚕️' }[known]; ctx.font = `13px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText(flag, x + 34, base - 44); }
+    // how you grow, on the gatepost
+    const grow = ['grow-people', 'grow-kit', 'grow-rates'].find((id) => world.owned.has(id));
+    if (grow) { const g = { 'grow-people': '👥', 'grow-kit': '🧰', 'grow-rates': '📈' }[grow]; ctx.font = `12px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText(g, x - 44, base - 6); }
     // one window that never goes dark, once somebody carries the on-call phone
     if (world.owned.has('oncall')) { ctx.fillStyle = `rgba(255,236,170,${0.55 + 0.35 * Math.sin(world.t * 1.3)})`; ctx.fillRect(x + 14, base - 38, 14, 12); }
     drawHorizon(day);
@@ -503,25 +550,44 @@ export function createScene(canvas, { onCoin } = {}) {
     const space = th().space;
     const y = pavementY() + 2, hh = space ? h.w / 2 + 10 : (h.tall ? 58 : 46), w = h.w;
     if ((world.counts.keysafe || 0) > i) {
-      const kx = h.x + 11, ky = y - 26;
-      ctx.fillStyle = world.tiers.keysafe >= 2 ? '#8a8f99' : '#6b7078';
-      ctx.beginPath(); ctx.roundRect(kx, ky, 7, 9, 2); ctx.fill();
-      ctx.fillStyle = world.tiers.keysafe >= 1 ? '#ffd76a' : '#c9ced6'; ctx.fillRect(kx + 1.5, ky + 2, 4, 2.5);
+      const t = world.tiers.keysafe || 0, kx = h.x + 11, ky = y - 26;
+      ctx.fillStyle = ['#6b7078', '#8a8f99', '#a9b0ba', '#c9a227'][t];      // bigger, then brass
+      ctx.beginPath(); ctx.roundRect(kx, ky, 7 + t * 0.6, 9 + t * 0.6, 2); ctx.fill();
+      ctx.fillStyle = t >= 1 ? '#ffd76a' : '#c9ced6'; ctx.fillRect(kx + 1.5, ky + 2, 4, 2.5);
+      if (t >= 3) { ctx.fillStyle = `rgba(120,220,140,${0.5 + 0.5 * Math.sin(world.t * 3 + i)})`; ctx.beginPath(); ctx.arc(kx + 8, ky + 2, 1.6, 0, TWO_PI); ctx.fill(); }
     }
     if ((world.counts.package || 0) > i) {
-      ctx.fillStyle = '#e8ddc8'; ctx.beginPath(); ctx.roundRect(h.x - 17, y - 8, 8, 10, 1); ctx.fill();
-      ctx.fillStyle = '#c26a4a'; ctx.fillRect(h.x - 17, y - 8, 8, 2.5);
+      const t = world.tiers.package || 0;
+      ctx.fillStyle = ['#e8ddc8', '#e8ddc8', '#dfe7d2', '#d6e2ef'][t]; ctx.beginPath(); ctx.roundRect(h.x - 17, y - 8 - t, 8, 10 + t, 1); ctx.fill();
+      ctx.fillStyle = '#c26a4a'; ctx.fillRect(h.x - 17, y - 8 - t, 8, 2.5);
+      if (t >= 1) { ctx.strokeStyle = '#5a6cae'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(h.x - 15, y - 3); ctx.lineTo(h.x - 12, y - 3); ctx.stroke(); }
+      if (t >= 3) { ctx.fillStyle = '#E5A93B'; ctx.fillRect(h.x - 12, y - 9 - t, 3, 3); }
     }
     if ((world.counts.directpay || 0) > i) {
+      const t = world.tiers.directpay || 0;
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(h.x - w * 0.36, y - hh + 12, 8, 7, 1); ctx.fill();
-      ctx.strokeStyle = '#5a6cae'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(h.x - w * 0.34, y - hh + 17); ctx.lineTo(h.x - w * 0.30, y - hh + 15); ctx.stroke();
+      ctx.strokeStyle = ['#5a6cae', '#5a6cae', '#2f6b45', '#b06bff'][t]; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(h.x - w * 0.34, y - hh + 17); ctx.lineTo(h.x - w * 0.30, y - hh + 15); ctx.stroke();
+      if (t >= 2) { ctx.fillStyle = '#2f6b45'; ctx.fillRect(h.x - w * 0.36 + 9, y - hh + 13, 4, 5); }   // a standing order slip
+      if (t >= 3) { ctx.fillStyle = `rgba(176,107,255,${0.4 + 0.4 * Math.sin(world.t * 2 + i)})`; ctx.fillRect(h.x - w * 0.36, y - hh + 20, 8, 1.5); }
     }
     if ((world.counts.chc || 0) > i) {
-      ctx.strokeStyle = '#2A5EA8'; ctx.lineWidth = 2.5; ctx.strokeRect(h.x - 8, y - 22, 16, 22);
+      const t = world.tiers.chc || 0;
+      ctx.strokeStyle = ['#2A5EA8', '#2A5EA8', '#1f7a8c', '#0f9b8e'][t]; ctx.lineWidth = 2.5 + t * 0.5; ctx.strokeRect(h.x - 8, y - 22, 16, 22);
+      if (t >= 2) { ctx.fillStyle = '#fff'; ctx.fillRect(h.x - 1.5, y - 18, 3, 8); ctx.fillRect(h.x - 4, y - 15.5, 8, 3); }  // a little cross
     }
     if ((world.counts.tech || 0) > i) {
-      const on = 0.4 + 0.6 * Math.abs(Math.sin(world.t * 1.6 + i));
-      ctx.fillStyle = `rgba(90,200,255,${on})`; ctx.beginPath(); ctx.arc(h.x - 13, y - 27, 2.6, 0, TWO_PI); ctx.fill();
+      const t = world.tiers.tech || 0;
+      const on = 0.4 + 0.6 * Math.abs(Math.sin(world.t * (1.6 + t * 0.6) + i));
+      ctx.fillStyle = [`rgba(90,200,255,${on})`, `rgba(90,200,255,${on})`, `rgba(120,240,180,${on})`, `rgba(255,190,90,${on})`][t];
+      ctx.beginPath(); ctx.arc(h.x - 13, y - 27, 2.6 + t * 0.4, 0, TWO_PI); ctx.fill();
+      if (t >= 3) { ctx.strokeStyle = `rgba(255,190,90,${on * 0.6})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(h.x - 13, y - 27, 6, 0, TWO_PI); ctx.stroke(); }
+    }
+    if (world.owned.has('qual-plans')) {                                   // a care folder on the sideboard
+      ctx.fillStyle = '#3f7d52'; ctx.fillRect(h.x + w * 0.2, y - hh + 13, 4, 5);
+    }
+    if (world.owned.has('known-complex')) {                                // clinical blue where it is needed
+      ctx.strokeStyle = 'rgba(42,94,168,.75)'; ctx.lineWidth = 1.5; ctx.strokeRect(h.x - w * 0.38, y - hh + 9, w * 0.24, 13);
     }
     if (world.owned.has('syn-package-client')) {
       ctx.fillStyle = '#d9c9a8'; ctx.beginPath(); ctx.roundRect(h.x + 8, y - 6, 7, 6, 1); ctx.fill();
@@ -541,12 +607,16 @@ export function createScene(canvas, { onCoin } = {}) {
   function drawFolk(f) {
     const y = pavementY() - 2, swing = Math.sin(f.phase) * 4;
     const kit = { coordinator: { body: '#6a5acd', hat: '📋' }, supervisor: { body: '#e8b52a', hat: '🦺' }, nurse: { body: '#2A5EA8', hat: '🩺' } }[f.role] || { body: '#888' };
+    const tier = world.tiers[f.role] || 0;
     ctx.save(); ctx.translate(f.x, y); ctx.scale(f.dir, 1);
     ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.beginPath(); ctx.ellipse(0, 2, 9, 3, 0, 0, TWO_PI); ctx.fill();
     ctx.strokeStyle = '#3a2a24'; ctx.lineWidth = 3; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-3, -9); ctx.lineTo(-3 + swing, 0); ctx.moveTo(3, -9); ctx.lineTo(3 - swing, 0); ctx.stroke();
     ctx.fillStyle = kit.body; ctx.beginPath(); ctx.roundRect(-7, -25, 14, 18, 5); ctx.fill();
     if (f.role === 'supervisor') { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(-7, -19, 14, 3); }
+    if (tier >= 1) { ctx.fillStyle = '#fff'; ctx.fillRect(2, -22, 3, 4); }                       // an ID badge
+    if (tier >= 2) { ctx.fillStyle = '#3a4a6a'; ctx.beginPath(); ctx.roundRect(6, -18, 5, 7, 1); ctx.fill(); }  // a bag
+    if (tier >= 3) { ctx.fillStyle = '#E5A93B'; ctx.fillRect(-7, -25, 14, 2); }                  // a gold trim
     ctx.fillStyle = '#F1C9A5'; ctx.beginPath(); ctx.arc(0, -31, 6, 0, TWO_PI); ctx.fill();
     ctx.fillStyle = '#3B2A24'; ctx.beginPath(); ctx.arc(0, -33, 6, Math.PI, TWO_PI); ctx.fill();
     ctx.restore();
@@ -555,14 +625,15 @@ export function createScene(canvas, { onCoin } = {}) {
 
   /** The big things you own, on the horizon behind the street, with how many of each. */
   function drawHorizon(day) {
-    const owned = HORIZON.filter((id) => (world.counts[id] || 0) > 0);
+    const beyond = Object.keys(world.counts).filter((id) => id.startsWith('beyond-') && world.counts[id] > 0);
+    const owned = [...HORIZON, ...beyond].filter((id) => (world.counts[id] || 0) > 0);
     if (!owned.length) return;
     const shown = owned.slice(-9);
     const gy = pavementY() - 96;          // a skyline band well above the doors
     const left = 118, right = W - 20;
     const gap = Math.min(46, (right - left) / Math.max(1, shown.length));
     shown.forEach((id, i) => {
-      const b = BUILDINGS.find((x) => x.id === id);
+      const b = BUILDINGS.find((x) => x.id === id) || { emoji: Number(id.split('-')[1]) % 2 ? '🪐' : '✨' };
       const x = right - i * gap;
       if (x < left) return;
       const n = world.counts[id] || 0;
@@ -658,13 +729,18 @@ export function createScene(canvas, { onCoin } = {}) {
     ctx.restore();
     ctx.textAlign = 'center';
     if (isStar) {
+      if (world.owned.has('click-1')) { ctx.font = `11px ${EMOJI_FONT}`; ctx.fillText('☕', x - 11 * (a.dir || 1), y - 20); }
+      if (world.owned.has('click-2')) { ctx.fillStyle = '#fff'; ctx.fillRect(x + 2, y - 24, 5, 4); ctx.fillStyle = '#E5734A'; ctx.fillRect(x + 3, y - 23, 3, 2); }
+      if (world.owned.has('click-3') && Math.random() < 0.04) burst(x, y - 36, 'heart', 1);
+      if (world.owned.has('click-4')) { ctx.font = `10px ${EMOJI_FONT}`; ctx.fillText('👋', x + 13 * (a.dir || 1), y - 30); }
+      if (world.owned.has('click-5')) { ctx.font = `11px ${EMOJI_FONT}`; ctx.fillText('💐', x - 13 * (a.dir || 1), y - 4); }
       ctx.font = `700 11px ${UI_FONT}`; ctx.fillStyle = '#fff'; const tw = ctx.measureText(a.name).width + 10;
       ctx.beginPath(); ctx.roundRect(x - tw / 2, y + 6, tw, 15, 7); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.fillText(a.name, x, y + 17);
       ctx.font = `16px ${EMOJI_FONT}`; ctx.fillText(world.level >= 6 ? '👑' : world.level >= 3 ? '🎩' : '🧢', x + 8 * (a.dir || 1), y - 46 - bounce);
     }
     if (prismatic) {
       ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.1)'; ctx.font = `700 11px ${UI_FONT}`;
-      const label = `✨ Prismatic ${a.name} – click me!`; const tw = ctx.measureText(label).width + 14; const lx = clamp(x, tw / 2 + 4, W - tw / 2 - 4);
+      const label = `✨ ${a.name} is on a roll – say hello!`; const tw = ctx.measureText(label).width + 14; const lx = clamp(x, tw / 2 + 4, W - tw / 2 - 4);
       ctx.beginPath(); ctx.roundRect(lx - tw / 2, y - 68, tw, 18, 9); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#55397A'; ctx.fillText(label, lx, y - 55);
       const left = clamp((a.until - world.now) / 13000, 0, 1); ctx.fillStyle = '#b06bff'; ctx.fillRect(lx - 20, y - 48, 40 * left, 3);
     }

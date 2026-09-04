@@ -28,25 +28,25 @@ export const SIDES = {
  */
 export const BUILDINGS = [
   { id: 'carer', side: 'team', name: 'Carer', plural: 'Carers', emoji: '👩‍⚕️', baseCost: 15, rate: 0.8, level: 0, blurb: 'A kind pair of hands, a lanyard and a good pair of shoes.' , visual: 'A carer walks out of the office and starts a round.'},
-  { id: 'client', side: 'work', name: 'Someone to look after', plural: 'People you look after', emoji: '🏠', baseCost: 22, rate: 0.96, level: 0, blurb: 'A front door, a kettle and somebody pleased to see you.' , visual: 'Another front door on the street, with the light on.'},
-  { id: 'keysafe', side: 'team', name: 'Key safe', plural: 'Key safes', emoji: '🔑', baseCost: 140, rate: 4.8, level: 0, blurb: 'No more waiting on the step. The little box by the door.' , visual: 'A little key box goes up beside a door.'},
-  { id: 'package', side: 'work', name: 'Care package', plural: 'Care packages', emoji: '📋', baseCost: 900, rate: 24.64, level: 0, blurb: 'Agreed hours, written down, four calls a day.' , visual: 'A care folder appears on the doorstep.'},
-  { id: 'car', side: 'team', name: 'Care car', plural: 'Care cars', emoji: '🚗', baseCost: 5600, rate: 121.6, level: 1, blurb: 'Door to door in the rain, with a magnetic sign on the side.' , visual: 'A liveried car joins the road.'},
-  { id: 'directpay', side: 'work', name: 'Direct payment', plural: 'Direct payments', emoji: '💷', baseCost: 34000, rate: 592.0, level: 1, blurb: 'They hold the budget and they choose you.' , visual: 'A signed form in the window, and a nicer front garden.'},
-  { id: 'coordinator', side: 'team', name: 'Care coordinator', plural: 'Care coordinators', emoji: '🗂️', baseCost: 200000, rate: 2784.0, level: 2, blurb: 'Builds the rota, holds the on-call phone, knows everything.' , visual: 'Somebody at the office window with the whiteboard rota.'},
-  { id: 'council', side: 'work', name: 'Council contract', plural: 'Council contracts', emoji: '🏛️', baseCost: 1.2e6, rate: 13440.0, level: 2, blurb: 'On the approved list at last. Volume, and a lot of forms.' , visual: 'A council crest goes up on the office window.'},
-  { id: 'supervisor', side: 'team', name: 'Field supervisor', plural: 'Field supervisors', emoji: '🦺', baseCost: 7.5e6, rate: 66560.0, level: 3, blurb: 'Out on the patch, keeping the whole thing steady.' , visual: 'A supervisor in hi-vis walks the patch.'},
-  { id: 'discharge', side: 'work', name: 'Hospital discharge team', plural: 'Hospital discharge teams', emoji: '🏥', baseCost: 4.5e7, rate: 320000.0, level: 3, blurb: 'Home by teatime, with the heating on and the bed made.' , visual: 'An ambulance drops somebody home and waits while they settle.'},
-  { id: 'office', side: 'team', name: 'Branch office', plural: 'Branch offices', emoji: '🏢', baseCost: 2.8e8, rate: 1600000.0, level: 4, blurb: 'A registered manager, a whiteboard and a decent kettle.' , visual: 'A branch office rises on the horizon.'},
-  { id: 'framework', side: 'work', name: 'Framework place', plural: 'Framework places', emoji: '📜', baseCost: 1.7e9, rate: 7680000.0, level: 4, blurb: 'A named place on the county list. The work comes to you.' , visual: 'A county noticeboard on the horizon with your name on it.'},
-  { id: 'academy', side: 'team', name: 'Training academy', plural: 'Training academies', emoji: '🎓', baseCost: 1.05e10, rate: 38400000.0, level: 5, blurb: 'Where good carers are made, one hoist at a time.' , visual: 'A training academy, lit up late.'},
-  { id: 'chc', side: 'work', name: 'NHS-funded care', plural: 'NHS-funded packages', emoji: '🩺', baseCost: 6.5e10, rate: 188800000.0, level: 5, blurb: 'Continuing healthcare. The hardest work and the best rates.' , visual: 'NHS-blue trim around the doors you look after.'},
-  { id: 'nurse', side: 'team', name: 'Nurse-led team', plural: 'Nurse-led teams', emoji: '🧑‍⚕️', baseCost: 4e11, rate: 928000000.0, level: 6, blurb: 'Clinical leads who can do the things nobody else can.' , visual: 'A nurse in blue joins the round.'},
-  { id: 'group', side: 'work', name: 'Care group', plural: 'Care groups', emoji: '🏬', baseCost: 2.5e12, rate: 4640000000.0, level: 6, blurb: 'Other agencies ask to join you, and you say yes.' , visual: 'Another agency’s office joins your skyline.'},
-  { id: 'tech', side: 'team', name: 'Assistive tech team', plural: 'Assistive tech teams', emoji: '🤖', baseCost: 1.5e13, rate: 22400000000.0, level: 7, blurb: 'Sensors, pendants and a kettle that tells you all is well.' , visual: 'Sensor lights blink gently above the doors.'},
-  { id: 'world', side: 'work', name: 'Worldwide care', plural: 'Worldwide care networks', emoji: '🌐', baseCost: 9.4e13, rate: 112000000000.0, level: 7, blurb: 'Every country, every doorstep, the same warm hello.' , visual: 'A globe turns slowly over the rooftops.'},
-  { id: 'orbit', side: 'work', name: 'Orbit care station', plural: 'Orbit care stations', emoji: '🛰️', baseCost: 6e14, rate: 576000000000.0, level: 8, blurb: 'Someone has to check the kettle up there too.' , visual: 'A care station crosses the sky.'},
-  { id: 'starship', side: 'team', name: 'Care starship', plural: 'Care starships', emoji: '🚀', baseCost: 4e15, rate: 2880000000000.0, level: 9, blurb: 'Tea, dignity and a good chat, at any distance.' , visual: 'A starship lifts off from behind the houses.'},
+  { id: 'client', side: 'work', name: 'Someone to look after', plural: 'People you look after', emoji: '🏠', baseCost: 120, rate: 3.2, level: 0, blurb: 'A front door, a kettle and somebody pleased to see you.' , visual: 'Another front door on the street, with the light on.'},
+  { id: 'keysafe', side: 'team', name: 'Key safe', plural: 'Key safes', emoji: '🔑', baseCost: 960, rate: 12.8, level: 0, blurb: 'No more waiting on the step. The little box by the door.' , visual: 'A little key box goes up beside a door.'},
+  { id: 'package', side: 'work', name: 'Care package', plural: 'Care packages', emoji: '📋', baseCost: 7680, rate: 51.2, level: 0, blurb: 'Agreed hours, written down, four calls a day.' , visual: 'A care folder appears on the doorstep.'},
+  { id: 'car', side: 'team', name: 'Care car', plural: 'Care cars', emoji: '🚗', baseCost: 61440, rate: 204.8, level: 1, blurb: 'Door to door in the rain, with a magnetic sign on the side.' , visual: 'A liveried car joins the road.'},
+  { id: 'directpay', side: 'work', name: 'Direct payment', plural: 'Direct payments', emoji: '💷', baseCost: 491520, rate: 819.2, level: 1, blurb: 'They hold the budget and they choose you.' , visual: 'A signed form in the window, and a nicer front garden.'},
+  { id: 'coordinator', side: 'team', name: 'Care coordinator', plural: 'Care coordinators', emoji: '🗂️', baseCost: 3.93216e6, rate: 3276.8, level: 2, blurb: 'Builds the rota, holds the on-call phone, knows everything.' , visual: 'Somebody at the office window with the whiteboard rota.'},
+  { id: 'council', side: 'work', name: 'Council contract', plural: 'Council contracts', emoji: '🏛️', baseCost: 3.14573e7, rate: 13107.2, level: 2, blurb: 'On the approved list at last. Volume, and a lot of forms.' , visual: 'A council crest goes up on the office window.'},
+  { id: 'supervisor', side: 'team', name: 'Field supervisor', plural: 'Field supervisors', emoji: '🦺', baseCost: 2.51658e8, rate: 52428.8, level: 3, blurb: 'Out on the patch, keeping the whole thing steady.' , visual: 'A supervisor in hi-vis walks the patch.'},
+  { id: 'discharge', side: 'work', name: 'Hospital discharge team', plural: 'Hospital discharge teams', emoji: '🏥', baseCost: 2.01327e9, rate: 209715, level: 3, blurb: 'Home by teatime, with the heating on and the bed made.' , visual: 'An ambulance drops somebody home and waits while they settle.'},
+  { id: 'office', side: 'team', name: 'Branch office', plural: 'Branch offices', emoji: '🏢', baseCost: 1.61061e10, rate: 838861, level: 4, blurb: 'A registered manager, a whiteboard and a decent kettle.' , visual: 'A branch office rises on the horizon.'},
+  { id: 'framework', side: 'work', name: 'Framework place', plural: 'Framework places', emoji: '📜', baseCost: 1.28849e11, rate: 3.35544e6, level: 4, blurb: 'A named place on the county list. The work comes to you.' , visual: 'A county noticeboard on the horizon with your name on it.'},
+  { id: 'academy', side: 'team', name: 'Training academy', plural: 'Training academies', emoji: '🎓', baseCost: 1.03079e12, rate: 1.34218e7, level: 5, blurb: 'Where good carers are made, one hoist at a time.' , visual: 'A training academy, lit up late.'},
+  { id: 'chc', side: 'work', name: 'NHS-funded care', plural: 'NHS-funded packages', emoji: '🩺', baseCost: 8.24634e12, rate: 5.36871e7, level: 5, blurb: 'Continuing healthcare. The hardest work and the best rates.' , visual: 'NHS-blue trim around the doors you look after.'},
+  { id: 'nurse', side: 'team', name: 'Nurse-led team', plural: 'Nurse-led teams', emoji: '🧑‍⚕️', baseCost: 6.59707e13, rate: 2.14748e8, level: 6, blurb: 'Clinical leads who can do the things nobody else can.' , visual: 'A nurse in blue joins the round.'},
+  { id: 'group', side: 'work', name: 'Care group', plural: 'Care groups', emoji: '🏬', baseCost: 5.27766e14, rate: 8.58993e8, level: 6, blurb: 'Other agencies ask to join you, and you say yes.' , visual: 'Another agency’s office joins your skyline.'},
+  { id: 'tech', side: 'team', name: 'Assistive tech team', plural: 'Assistive tech teams', emoji: '🤖', baseCost: 4.22212e15, rate: 3.43597e9, level: 7, blurb: 'Sensors, pendants and a kettle that tells you all is well.' , visual: 'Sensor lights blink gently above the doors.'},
+  { id: 'world', side: 'work', name: 'Worldwide care', plural: 'Worldwide care networks', emoji: '🌐', baseCost: 3.3777e16, rate: 1.37439e10, level: 7, blurb: 'Every country, every doorstep, the same warm hello.' , visual: 'A globe turns slowly over the rooftops.'},
+  { id: 'orbit', side: 'work', name: 'Orbit care station', plural: 'Orbit care stations', emoji: '🛰️', baseCost: 2.70216e17, rate: 5.49756e10, level: 8, blurb: 'Someone has to check the kettle up there too.' , visual: 'A care station crosses the sky.'},
+  { id: 'starship', side: 'team', name: 'Care starship', plural: 'Care starships', emoji: '🚀', baseCost: 2.16173e18, rate: 2.19902e11, level: 9, blurb: 'Tea, dignity and a good chat, at any distance.' , visual: 'A starship lifts off from behind the houses.'},
 ];
 
 /**
@@ -60,7 +60,7 @@ export function beyondBuilding(level) {
   const name = `${BEYOND_NAMES[(n - 1) % BEYOND_NAMES.length]}${n > BEYOND_NAMES.length ? ` ${Math.ceil(n / BEYOND_NAMES.length)}` : ''}`;
   return {
     id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural: `${name}s`, emoji: n % 2 ? '🪐' : '✨',
-    baseCost: last.baseCost * Math.pow(9, n), rate: last.rate * Math.pow(7, n), level,
+    baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n), level,
     blurb: 'Further out than anyone has taken a hot meal, and still on time.',
     visual: 'Another light joins the ones on the horizon.',
   };
@@ -104,13 +104,13 @@ export const RATING_UPGRADE_POINTS = 6; // each quality upgrade owned
 /** Permanent perks bought with Legacy Stars. */
 export const PERKS = [
   { id: 'perk-admin', name: 'Head office', emoji: '🏛️', cost: 2, blurb: 'Every new run starts with the payments collected for you.' },
-  { id: 'alumni', name: 'Alumni network', emoji: '🎓', cost: 8, blurb: 'Start each run with 5 carers and 5 people to look after.' },
-  { id: 'magnet', name: 'Prismatic magnet', emoji: '🌈', cost: 15, blurb: 'Prismatic carers appear twice as often.' },
-  { id: 'cards', name: 'Card collector', emoji: '💌', cost: 20, blurb: 'Thank-you cards appear twice as often.' },
-  { id: 'playbook', name: 'Franchise playbook', emoji: '📘', cost: 40, blurb: 'Everything costs 10% less.' },
-  { id: 'nightshift', name: 'Night team', emoji: '🌙', cost: 60, blurb: 'Earn at full speed while the game is closed, instead of half.' },
-  { id: 'legend', name: 'Living legend', emoji: '🏆', cost: 120, blurb: 'Your own visits are ten times stronger.' },
-  { id: 'momentum', name: 'Momentum', emoji: '⚡', cost: 250, blurb: 'Start each run with 25 carers, 25 people to look after and 5 cars.' },
+  { id: 'alumni', name: 'Alumni network', emoji: '🎓', cost: 5, blurb: 'Start each run with 5 carers and 5 people to look after.' },
+  { id: 'magnet', name: 'Prismatic magnet', emoji: '🌈', cost: 9, blurb: 'Prismatic carers appear twice as often.' },
+  { id: 'cards', name: 'Card collector', emoji: '💌', cost: 12, blurb: 'Thank-you cards appear twice as often.' },
+  { id: 'playbook', name: 'Franchise playbook', emoji: '📘', cost: 18, blurb: 'Everything costs 10% less.' },
+  { id: 'nightshift', name: 'Night team', emoji: '🌙', cost: 26, blurb: 'Earn at full speed while the game is closed, instead of half.' },
+  { id: 'legend', name: 'Living legend', emoji: '🏆', cost: 38, blurb: 'Your own visits are ten times stronger.' },
+  { id: 'momentum', name: 'Momentum', emoji: '⚡', cost: 55, blurb: 'Start each run with 25 carers, 25 people to look after and 5 cars.' },
 ];
 
 // ---------- Upgrades ----------
@@ -176,14 +176,14 @@ const SYNERGIES = [
   { id: 'syn-super-team', name: 'Steady hands everywhere', emoji: '🦺', from: 'supervisor', to: '*team', per: 0.01, cap: 1.5, cost: 6e7, unlock: (s) => (s.buildings.supervisor || 0) >= 3, blurb: 'Every field supervisor makes the whole team 1% better, up to +150%.', question: 'Lifts every team rung at once – the first true stacking upgrade.' },
   { id: 'syn-office-all', name: 'A branch behind you', emoji: '🏢', from: 'office', to: '*', per: 0.008, cap: 1.2, cost: 2.4e9, unlock: (s) => (s.buildings.office || 0) >= 3, blurb: 'Every branch office makes everything 0.8% better, up to +120%.', question: 'Small per office, but it touches every single thing you own.' },
   { id: 'syn-academy-team', name: 'Everyone trained properly', emoji: '🎓', from: 'academy', to: '*team', per: 0.02, cap: 3, cost: 9e10, unlock: (s) => (s.buildings.academy || 0) >= 3, blurb: 'Every training academy makes the whole team 2% better, up to +300%.', question: 'The late-game team engine. Needs academies to be worth anything.' },
-  { id: 'syn-chc-nurse', name: 'Clinical confidence', emoji: '🩺', from: 'chc', to: 'nurse', per: 0.04, cap: 4, cost: 3.4e12, unlock: (s) => (s.buildings.chc || 0) >= 5, blurb: 'Every NHS-funded package makes every nurse-led team 4% better, up to +400%.', question: 'Ties the two hardest rungs together. Enormous if you have both.' },
+  { id: 'syn-chc-nurse', name: 'Clinical confidence', emoji: '🩺', from: 'chc', to: '*work', per: 0.02, cap: 3, cost: 3.4e12, unlock: (s) => (s.buildings.chc || 0) >= 5, blurb: 'Every NHS-funded package makes all of your work 2% better, up to +300%.', question: 'Lifts the whole work side at once, if you have gone down the NHS road.' },
 ];
 
 /** Bonuses that only apply while the board is in a certain state. Keep an eye on them. */
 const CONDITIONALS = [
   { id: 'cond-covered', name: 'Nobody is rushed', emoji: '🫶', mult: 1.3, cost: 12000, archetype: 'conditional', test: (s, m) => m.team >= m.work, label: 'while your team can cover the work', blurb: 'While your team is at least as big as the work, everything earns 30% more.', question: 'Rewards staffing ahead of the work – the opposite of chasing volume.', unlock: (s) => s.runEarned >= 6000 },
   { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.5, cost: 3e6, archetype: 'conditional', test: (s, m) => m.team >= m.work * 1.25, label: 'while your team is a quarter bigger than the work', blurb: 'While your team is 25% bigger than the work, everything earns 50% more.', question: 'Deliberate slack: expensive to hold, and the biggest steady bonus there is.', unlock: (s) => s.upgrades.includes('cond-covered') },
-  { id: 'cond-tidy', name: 'A tidy patch', emoji: '🔑', mult: 1.25, cost: 250000, archetype: 'conditional', test: (s) => (s.buildings.keysafe || 0) >= (s.buildings.client || 0), label: 'while every door has a key safe', blurb: 'While you have a key safe for everyone you look after, everything earns 25% more.', question: 'Makes key safes worth buying long after their own income has faded.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
+  { id: 'cond-tidy', name: 'A tidy patch', emoji: '🔑', mult: 1.25, cost: 250000, archetype: 'conditional', test: (s) => (s.buildings.keysafe || 0) >= (s.buildings.client || 0) * 0.75, label: 'while three doors in four have a key safe', blurb: 'While three doors in four have a key safe, everything earns 25% more.', question: 'Makes key safes worth buying long after their own income has faded.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
   { id: 'cond-wellled', name: 'Well led', emoji: '🌟', mult: 1.35, cost: 4e8, archetype: 'conditional', test: (s, m) => m.ratingIndex >= 2, label: 'while you are rated Outstanding', blurb: 'While your rating is Outstanding, everything earns 35% more.', question: 'Turns the rating from a nice badge into a reason to keep training people.', unlock: (s) => (s.buildings.academy || 0) >= 1 },
 ];
 

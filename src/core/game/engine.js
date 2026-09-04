@@ -24,6 +24,7 @@ const CARD_CHANCE_PER_SECOND = 1 / 70;
 export const HOUSE_COOLDOWN_MS = 900; // a door you have just knocked on needs a moment
 
 const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
+const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
 
@@ -273,6 +274,7 @@ export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state
     else if (u.kind === 'branch-scaling') mult *= u.mult * (1 + scalingBonus(state, u));
   }
   mult *= RATINGS[m.ratingIndex].mult;
+  mult *= Math.pow(STAGE_BONUS, state.level);   // every stage you have reached, for ever
   mult *= 1 + 0.01 * state.achievements.length;
   mult *= starBonus(state.starsEarned);
   mult *= 1 + 0.03 * (state.prismaticHires ? state.prismaticHires.length : 0);
@@ -439,11 +441,16 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
     if (p < best[b.side]) best[b.side] = p;
   }
   const ratio = m.team / m.work;
-  if (!Number.isFinite(best.work) && !Number.isFinite(best.team)) return { side: 'balanced', ratio, advice: 'Either side is worth about the same just now.' };
+  const state_ = ratio > 1.1 ? 'The team can cover the work.' : ratio < 0.9 ? 'There is more work than the team can cover.' : 'The two sides are level.';
+  const held = activeConditionals(state, m).filter((c) => c.on).map((c) => c.name);
+  const holding = held.length ? ` ${held[0]} is paying.` : '';
+  if (!Number.isFinite(best.work) && !Number.isFinite(best.team)) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
   const gap = best.team / best.work;
-  if (gap > 1.25) return { side: 'work', ratio, advice: 'The team has room to spare. Taking on more work goes furthest.' };
-  if (gap < 0.8) return { side: 'team', ratio, advice: 'More work than the team can cover. Another pair of hands goes furthest.' };
-  return { side: 'balanced', ratio, advice: 'Nicely balanced – either side is worth about the same.' };
+  const side = gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
+  const tip = side === 'work' ? ' Taking on more work is the best value right now.'
+    : side === 'team' ? ' Another pair of hands is the best value right now.'
+      : ' Either side is about the same value right now.';
+  return { side, ratio, advice: `${state_}${holding}${tip}` };
 }
 
 /** The little round you always keep when you hand over, so a new run is never dead. */
@@ -571,16 +578,25 @@ export function nextLevel(state) {
 }
 
 /** How far through this run, 0..1. Log-scaled so the bar keeps moving through the long middle. */
+/**
+ * What this run has to earn before you can hand the patch over: the stage's own figure, or a
+ * quarter of everything you have ever earned, whichever is more. The second half is what stops a
+ * big business handing over five times in a minute.
+ */
+export function expandRequirement(state) {
+  return Math.max(nextLevel(state).threshold, state.lifetimeEarned * 0.25);
+}
+
 export function expandProgress(state) {
-  const next = nextLevel(state);
-  const floor = next.threshold / 100;
+  const target = expandRequirement(state);
+  const floor = target / 100;
   const earned = Math.max(0, state.runEarned);
   if (earned <= floor) return (earned / floor) * 0.15;
   return Math.min(1, 0.15 + 0.85 * (Math.log(earned / floor) / Math.log(100)));
 }
 
 export function canExpand(state) {
-  return state.runEarned >= nextLevel(state).threshold;
+  return state.runEarned >= expandRequirement(state);
 }
 
 export function starsOnExpand(state) {

@@ -29,7 +29,7 @@ describe('the two sides', () => {
     g.buyBuilding(s, 'carer', 1);
     assert.ok(g.productionPerSecond(s, T0) > 0, 'one carer and one person is a working business');
     const m = g.boardMetrics(s);
-    assert.ok(Math.abs(m.work - 1.92) < 1e-9, 'two front doors');
+    assert.ok(Math.abs(m.work - 6.4) < 1e-9, 'two front doors');
     assert.ok(Math.abs(m.team - 0.8) < 1e-9, 'one carer');
     assert.ok(Math.abs(m.visits - (m.work + m.team + Math.sqrt(m.work * m.team)) / 3) < 1e-9, 'the two sides averaged, with a bonus for keeping them level');
     assert.equal(g.combineSides(0, 0), 0);
@@ -129,7 +129,7 @@ describe('prices and what is worth buying', () => {
     const cheap = { ...s, upgrades: ['disc-recruit'] };
     assert.equal(g.buildingCost(cheap, 'carer', 1), Math.ceil(15 * 0.85));
     const council = { ...s, buildings: {}, branches: { buyer: 'buyer-council' } };
-    assert.equal(g.buildingCost(council, 'client', 1), Math.ceil(22 * 0.75), 'council work makes the work side cheaper');
+    assert.equal(g.buildingCost(council, 'client', 1), Math.ceil(120 * 0.75), 'council work makes the work side cheaper');
     assert.equal(g.buildingCost(council, 'carer', 1), 15, 'but not the team side');
     const rich = { ...s, funds: 500 };
     const n = g.maxAffordable(rich, 'carer');
@@ -164,7 +164,8 @@ describe('prices and what is worth buying', () => {
   });
 
   test('there is more than one sensible thing to buy at once', () => {
-    for (const shape of [{ carer: 12, client: 12 }, { carer: 60, client: 55, keysafe: 20 }, { carer: 300, client: 280, keysafe: 120, car: 60, package: 40 }]) {
+    // Boards a real player actually reaches, not synthetic ones.
+    for (const shape of [{ carer: 12, client: 12 }, { carer: 60, client: 55, keysafe: 20 }, { carer: 90, client: 80, keysafe: 45, car: 18, package: 30 }]) {
       const s = { ...board(shape), buildings: shape, level: 2, funds: 1e9 };
       const paybacks = g.unlockedBuildings(s).map((b) => g.buildingOffer(s, b.id, 1, T0).payback).sort((a, b) => a - b);
       const close = paybacks.filter((p) => p <= paybacks[0] * 3).length;
@@ -221,12 +222,15 @@ describe('the big choices', () => {
 describe('handing over', () => {
   test('the run resets to a small round but the legacy stays', () => {
     const s = g.newGame(T0);
-    s.funds = 2e5; s.runEarned = 2e5; s.lifetimeEarned = 2e5;
+    s.funds = 2e5; s.runEarned = 2e5; s.lifetimeEarned = 2e6;
     s.buildings = { carer: 30, client: 30, keysafe: 10 };
     s.upgrades = ['carer-t1'];
+    assert.ok(!g.canExpand(s), 'a run has to be worth a real share of everything you have earned');
+    s.runEarned = 6e5;
     assert.ok(g.canExpand(s));
+    assert.ok(g.expandRequirement(s) >= LEVELS[1].threshold);
     const gained = g.starsOnExpand(s);
-    assert.equal(gained, g.starsForLifetime(2e5));
+    assert.equal(gained, g.starsForLifetime(2e6));
     assert.ok(gained >= 1 && gained <= 20, `a first hand-over should be worth a handful of stars, got ${gained}`);
     assert.ok(g.starsForLifetime(1e20) < 120, 'and the count can never run away');
     assert.ok(g.starBonus(0) === 1 && g.starBonus(50) > 1.5);
@@ -236,7 +240,7 @@ describe('handing over', () => {
     assert.deepEqual(s.upgrades, []);
     assert.deepEqual(s.buildings, g.startingKit(1), 'you keep a little round to start again with');
     assert.ok(g.productionPerSecond(s, T0 + 1000) > 0, 'a new run is never dead');
-    assert.equal(s.lifetimeEarned, 2e5);
+    assert.equal(s.lifetimeEarned, 2e6);
     assert.equal(s.starsEarned, gained);
     assert.ok(g.unlockedBuildings(s).some((b) => b.id === 'car'), 'cars unlock at the village');
     for (let i = 1; i < LEVELS.length; i++) assert.ok(LEVELS[i].threshold > LEVELS[i - 1].threshold);
@@ -247,7 +251,7 @@ describe('handing over', () => {
     const s = g.newGame(T0);
     s.starsEarned = 20;
     assert.ok(g.buyPerk(s, 'alumni'));
-    assert.equal(g.starsAvailable(s), 12);
+    assert.equal(g.starsAvailable(s), 20 - 5);
     assert.equal(s.buildings.carer, 5);
     assert.equal(s.buildings.client, 5);
     assert.ok(!g.buyPerk(s, 'alumni'), 'no buying it twice');

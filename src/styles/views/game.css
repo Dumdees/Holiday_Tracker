@@ -151,3 +151,5 @@ body.game-open .toast { min-height: 44px; padding: 8px 6px 8px 12px; font-size: 
 .next-goal { color: var(--ink-soft); }
 .cond-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .cond-list li.off { opacity: .65; }
+/* Never let a stack of messages hide a decision. */
+body.game-open .toast-host .toast:nth-child(n+4) { display: none; }

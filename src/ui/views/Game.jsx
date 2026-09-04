@@ -26,13 +26,21 @@ function initialsOf(name) {
   return String(name || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-/** How long something takes to pay for itself, in words. */
-function fmtPayback(seconds) {
+/**
+ * How long something takes to pay for itself, in words. The work side is phrased about the visits
+ * rather than the person: nobody in this game is an investment that pays back.
+ */
+function fmtPayback(seconds, side) {
+  const lead = side === 'work' ? 'the visits cover it in' : 'pays for itself in';
+  return fmtPaybackAs(seconds, lead);
+}
+
+function fmtPaybackAs(seconds, lead) {
   if (!Number.isFinite(seconds)) return null;
-  if (seconds < 90) return `pays for itself in ${Math.max(1, Math.round(seconds))} seconds`;
-  if (seconds < 5400) return `pays for itself in about ${Math.round(seconds / 60)} minutes`;
-  if (seconds < 60 * 3600) return `pays for itself in about ${Math.round(seconds / 3600)} hours`;
-  return 'takes a very long time to pay for itself';
+  if (seconds < 90) { const n = Math.max(1, Math.round(seconds)); return `${lead} ${n} second${n === 1 ? '' : 's'}`; }
+  if (seconds < 5400) return `${lead} about ${Math.round(seconds / 60)} minutes`;
+  if (seconds < 60 * 3600) return `${lead} about ${Math.round(seconds / 3600)} hours`;
+  return 'takes a very long time to come good';
 }
 
 /** Why something shows no payback time – never "saves a job" unless it really does. */
@@ -115,7 +123,7 @@ export function Game() {
         else if (badges.length > 1) toast(`🎉 ${badges.length} badges at once: ${badges.map((b) => b.name).join(', ')} – everything earns ${badges.length}% more`, { kind: 'success', duration: 6000 });
         if (badges.length) { setConfetti((c) => c + 1); sceneRef.current?.celebrate('achievement'); }
         for (const e of events) {
-          if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 A prismatic ${e.spawn.name} is walking down the street – catch them!`, { kind: 'info', duration: 6000 });
+          if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 ${e.spawn.name} is having a brilliant shift – go and say hello!`, { kind: 'info', duration: 6000 });
           if (e.kind === 'spawn' && e.spawn.type === 'card') toast('💌 A thank-you card is floating down – click it!', { kind: 'info', duration: 5000 });
         }
       });
@@ -331,7 +339,7 @@ export function Game() {
           {floaters.map((f) => <span key={f.id} class={`floater ${f.cls}`} style={{ left: f.x + '%', top: f.y + '%' }}>{f.text}</span>)}
           {spawnBox ? (
             <button type="button" class={`spawn-hit spawn-${spawnBox.type}`} style={{ left: spawnBox.x + 'px', top: spawnBox.y + 'px', width: spawnBox.r * 2 + 'px', height: spawnBox.r * 2 + 'px' }}
-              onClick={(e) => { e.stopPropagation(); onSpawnClick(); }} data-test="spawn" aria-label={s.spawn.type === 'prismatic' ? `Catch prismatic ${s.spawn.name}` : 'Open the thank-you card'} />
+              onClick={(e) => { e.stopPropagation(); onSpawnClick(); }} data-test="spawn" aria-label={s.spawn.type === 'prismatic' ? `Say hello to ${s.spawn.name}` : 'Open the thank-you card'} />
           ) : null}
         </div>
 
@@ -408,7 +416,7 @@ export function Game() {
             <div class="upgrade-row">
               {upgrades.map((u) => (
                 <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
-                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${fmtPayback(u.payback) || noPaybackReason(u, u.kind === 'conditional' && u.test(s, metrics))}`} data-test={`upgrade-${u.id}`}>
+                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' && u.test(s, metrics))}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
@@ -435,7 +443,7 @@ export function Game() {
                         {bestBuy && bestBuy.id === b.id ? <span class="best-chip">Best value</span> : null}
                       </span>
                       <span class="building-sub muted">
-                        {fmtPayback(b.payback) || 'earns nothing extra just now'}
+                        {fmtPayback(b.payback, b.side) || 'earns nothing extra just now'}
                         {b.milestone ? <span class="milestone-pip"> · {fmtNum(b.milestone.remaining)} more and every one is {b.milestoneFactor}× better</span> : null}
                       </span>
                     </span>
@@ -456,7 +464,7 @@ export function Game() {
 
           {rightTab === 'grow' ? (
             <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
-              <p class="soft">Earn {fmtMoney(next.threshold)} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
+              <p class="soft">Earn {fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, progress * 100)}%` }} /></div>
               <div class="row-between"><span class="muted">{fmtMoney(s.runEarned)} earned this run</span><strong>{Math.floor(progress * 100)}%</strong></div>
               <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
@@ -470,7 +478,7 @@ export function Game() {
           ) : null}
 
           {rightTab === 'stars' ? (
-            <Card title="Legacy Stars" icon="star" subtitle={`${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · everything ${fmtPercent(1 + 0.02 * s.starsEarned)} forever`}>
+            <Card title="Legacy Stars" icon="star" subtitle={`${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · everything ${fmtPercent(G.starBonus(s.starsEarned))} forever`}>
               <ul class="perk-list">
                 {G.perkList(s).map((p) => (
                   <li key={p.id} class={`perk ${p.owned ? 'owned' : p.affordable ? 'affordable' : ''}`}>
