@@ -121,7 +121,7 @@ export function Game() {
   const [floaters, setFloaters] = useState([]);
   const [buyQty, setBuyQty] = useState(1);
   const [rightTab, setRightTab] = useState('grow');
-  const [tickerIndex, setTickerIndex] = useState(() => Math.floor(Math.random() * TICKER.length));
+  const [tickerIndex, setTickerIndex] = useState(() => Math.floor(Math.random() * 32));
   const [confetti, setConfetti] = useState(0);
   const worldRef = useRef(null);
   const canvasRef = useRef(null);
@@ -142,7 +142,7 @@ export function Game() {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => setTickerIndex((i) => (i + 1 + Math.floor(Math.random() * 3)) % TICKER.length), 11000);
+    const id = setInterval(() => setTickerIndex((i) => i + 1 + Math.floor(Math.random() * 3)), 11000);
     return () => clearInterval(id);
   }, []);
 
@@ -244,7 +244,11 @@ export function Game() {
   const progress = G.expandProgress(s);
   const nextLocked = G.nextLockedBuilding(s);
   const workShare = metrics.work + metrics.team > 0 ? (metrics.work / (metrics.work + metrics.team)) * 100 : 50;
-  const tickerText = TICKER[tickerIndex].replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName).replace(/\{co\}/g, settings.value?.companyName || 'Monteith');
+  // The news only carries lines that make sense for the business you have actually built.
+  const lines = TICKER.filter((l) => typeof l === 'string' || l.when(s)).map((l) => (typeof l === 'string' ? l : l.text));
+  const tickerText = lines[tickerIndex % lines.length]
+    .replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName)
+    .replace(/\{co\}/g, settings.value?.companyName || 'Monteith');
 
   // Announce a big choice the first time it becomes available.
   if (pending && !seenBranch.current.has(pending.slot)) {
