@@ -123,8 +123,11 @@ export function loadGame(saved, now = Date.now()) {
     log: [...(from.log || [])].slice(0, 12),
   };
   state.version = SAVE_VERSION;
-  // A game saved before the finish line was kept starts its next run with one worked out now.
-  if (!(from.runTarget > 0)) state.runTarget = runTargetFor(state.level, state.lastPeak, 0);
+  // A game saved before the finish line was kept gets one worked out from how it is doing now,
+  // rather than the figure the very first run was asked for.
+  if (!(from.runTarget > 0)) {
+    state.runTarget = runTargetFor(state.level, Math.max(state.lastPeak || 0, steadyIncome(state)), 0);
+  }
   const offline = applyOffline(state, now);
   state.lastSeen = now;
   // Somebody who has been away half a day comes back to a card on the mat.
