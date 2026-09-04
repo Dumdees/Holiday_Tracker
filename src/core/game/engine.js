@@ -449,9 +449,18 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
   // Things that earn come first, then the ones that only save you a job, then anything that would
   // actually cost you – which is ranked last and says so on the tile.
   const rank = (u) => (u.gain > 0 ? u.payback : u.gain < 0 ? 1e12 : (u.cost / income) * 1.5 + 1e6);
+  // Anything that pays for itself in a couple of seconds is as good as free, and then the only
+  // question is which one is biggest – otherwise a late shop fills up with pennies that happen to
+  // pay back instantly and the useful ones are pushed off the shelf.
+  const free = (u) => u.gain > 0 && u.payback < 2;
   return availableUpgrades(state)
     .map((u) => upgradeOffer(state, u, now, earning))
-    .sort((a, b) => (rank(a) - rank(b)) || (a.cost - b.cost))
+    .sort((a, b) => {
+      const fa = free(a), fb = free(b);
+      if (fa && fb) return b.gain - a.gain;
+      if (fa !== fb) return fa ? -1 : 1;
+      return (rank(a) - rank(b)) || (a.cost - b.cost);
+    })
     .slice(0, limit);
 }
 

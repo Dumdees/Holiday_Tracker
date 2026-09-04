@@ -414,14 +414,14 @@ export function farUpgrades(n) {
     });
   });
   out.push({
-    id: `far-value-${n}`, name: `A fairer rate again`, emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
+    id: `far-value-${n}`, name: n === 1 ? 'A fairer rate again' : `A fairer rate again (${n})`, emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
     cost: b.baseCost * 40, icon: '💷', blurb: 'Every visit is worth twice as much.',
     visual: 'The coins coming into the office get bigger again.',
     question: 'A flat doubling of everything a visit is worth. Never a wasted pound.',
     unlock: (s) => (s.buildings[b.id] || 0) >= 5,
   });
   out.push({
-    id: `far-hands-${n}`, name: 'Still on the round', emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
+    id: `far-hands-${n}`, name: n === 1 ? 'Still on the round' : `Still on the round (${n})`, emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
     cost: b.baseCost * 12, icon: '🤲', blurb: 'Your own visits earn another 1% of the team’s income every second.',
     visual: 'Your own carer keeps walking the round with everybody else.',
     question: 'Keeps your own tapping worth doing however far out you go.',

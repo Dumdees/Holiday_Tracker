@@ -81,7 +81,7 @@ function listNames(names) {
 function gainPct(u) {
   if (u.gain > 0 && u.income > 0) {
     const pct = (u.gain / u.income) * 100;
-    return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : `+${pct.toFixed(1)}%`;
+    return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : pct >= 0.05 ? `+${pct.toFixed(1)}%` : 'a trickle';
   }
   if (u.kind === 'discount') return `−${Math.round((1 - u.factor) * 100)}% to buy`;
   if (u.kind === 'clickpct') return `+${Math.round((u.pct || 0.01) * 100)}% a tap`;

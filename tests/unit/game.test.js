@@ -186,8 +186,13 @@ describe('prices and what is worth buying', () => {
     const s = { ...board(), funds: 1e9, clicks: 200 };
     const shop = g.upgradeShop(s, T0, 12);
     assert.ok(shop.length > 3);
-    const earning = shop.filter((u) => Number.isFinite(u.payback));
-    for (let i = 1; i < earning.length; i++) assert.ok(earning[i].payback >= earning[i - 1].payback, 'the ones that earn are sorted by payback');
+    // Anything that pays for itself inside two seconds is as good as free, so those come first and
+    // are sorted by how big they are; everything else that earns is sorted by payback.
+    const free = shop.filter((u) => u.gain > 0 && u.payback < 2);
+    for (let i = 1; i < free.length; i++) assert.ok(free[i].gain <= free[i - 1].gain, 'the as-good-as-free ones are sorted biggest first');
+    assert.deepEqual(shop.slice(0, free.length).map((u) => u.id), free.map((u) => u.id), 'and they are at the front');
+    const earning = shop.filter((u) => Number.isFinite(u.payback) && !(u.gain > 0 && u.payback < 2));
+    for (let i = 1; i < earning.length; i++) assert.ok(earning[i].payback >= earning[i - 1].payback, 'the rest that earn are sorted by payback');
     assert.ok(shop.every((u) => u.visual), 'every upgrade says what it changes on the street');
     // Things that only save you a job still have to be findable.
     const early = { ...g.newGame(T0), funds: 500, runEarned: 200, clicks: 20 };
