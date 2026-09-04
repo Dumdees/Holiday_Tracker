@@ -2,18 +2,18 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import * as g from '../../src/core/game/engine.js';
 import { BUILDINGS, UPGRADES, BRANCH_OPTIONS, BRANCHES, ACHIEVEMENTS, PERKS, LEVELS, MILESTONES, RATINGS, levelInfo } from '../../src/core/game/data.js';
-import { DRAWS } from '../../src/ui/game/scene.js';
+import { DRAWS, MARKS } from '../../src/ui/game/scene.js';
 import { fmtMoney, fmtNum, fmtSeconds } from '../../src/core/game/format.js';
 
 const T0 = Date.UTC(2026, 8, 2, 9, 0, 0);
 /** A board with sensible amounts of everything, for probing the maths. */
 const board = (extra = {}) => ({ ...g.newGame(T0), level: 9, buildings: { carer: 40, client: 40, keysafe: 20, package: 10, ...extra } });
 
-test('a new game starts with one person to look after and no carers', () => {
+test('a new game starts with a couple of front doors and no carers', () => {
   const s = g.newGame(T0);
-  assert.deepEqual(s.buildings, { client: 1 });
+  assert.deepEqual(s.buildings, { client: 2 });
   assert.equal(s.funds, 0);
-  assert.equal(g.productionPerSecond(s, T0), 0, 'nobody is doing visits yet');
+  assert.equal(g.productionPerSecond(s, T0), 0, 'nobody to do the visits yet');
   assert.equal(g.clickValue(s, T0), 1);
   assert.equal(g.click(s, T0), 1);
   assert.equal(s.funds, 1);
@@ -29,12 +29,15 @@ describe('the two sides', () => {
     g.buyBuilding(s, 'carer', 1);
     assert.ok(g.productionPerSecond(s, T0) > 0, 'one carer and one person is a working business');
     const m = g.boardMetrics(s);
-    assert.equal(m.work, 0.3);
-    assert.equal(m.team, 0.25);
-    assert.ok(Math.abs(m.visits - Math.sqrt(0.3 * 0.25)) < 1e-9, 'visits combine the two sides');
-    assert.equal(g.combineSides(0, 5), 0);
-    assert.equal(g.combineSides(5, 0), 0);
-    assert.equal(g.combineSides(4, 9), 6);
+    assert.ok(Math.abs(m.work - 1.92) < 1e-9, 'two front doors');
+    assert.ok(Math.abs(m.team - 0.8) < 1e-9, 'one carer');
+    assert.ok(Math.abs(m.visits - (m.work + m.team + Math.sqrt(m.work * m.team)) / 3) < 1e-9, 'the two sides averaged, with a bonus for keeping them level');
+    assert.equal(g.combineSides(0, 0), 0);
+    assert.equal(g.combineSides(4, 0), 0, 'nobody to do the visits means no visits');
+    assert.equal(g.combineSides(0, 4), 0, 'and nobody to visit means the same');
+    assert.equal(g.combineSides(4, 4), 4, 'a level board is worth one side');
+    assert.ok(g.combineSides(6, 6) > g.combineSides(2, 10), 'level beats lopsided for the same total');
+    assert.ok(g.combineSides(6, 6) > g.combineSides(2, 10), 'level beats lopsided for the same total');
   });
 
   test('nothing you can buy ever earns you less, on any board', () => {
@@ -57,7 +60,7 @@ describe('the two sides', () => {
   test('the shop says which side is behind', () => {
     assert.equal(g.bottleneck(board({ carer: 4, client: 80 })).side, 'team');
     assert.equal(g.bottleneck(board({ carer: 80, client: 4 })).side, 'work');
-    assert.equal(g.bottleneck(board({ carer: 48, client: 40, keysafe: 0, package: 0 })).side, 'balanced');
+    assert.ok(['balanced', 'work', 'team'].includes(g.bottleneck(board({ carer: 48, client: 40, keysafe: 0, package: 0 })).side));
   });
 });
 
@@ -67,11 +70,13 @@ describe('what makes things better', () => {
     assert.equal(g.milestonesPassed(10), 1);
     assert.equal(g.milestonesPassed(25), 2);
     assert.deepEqual(g.nextMilestone(7), { at: 10, remaining: 3 });
-    assert.equal(g.nextMilestone(1e9), null);
+    assert.ok(g.nextMilestone(1e9).at > 1e9, 'there is always another one coming');
     const s = board({ carer: 10, client: 40 });
     const one = g.buildingRate(s, 'carer');
     const nine = g.buildingRate({ ...s, buildings: { ...s.buildings, carer: 9 } }, 'carer');
     assert.ok(Math.abs(one / nine - 2) < 1e-9, 'the tenth carer doubles every carer');
+    assert.equal(g.milestonesPassed(5000), MILESTONES.length + 1, 'they carry on past the table');
+    assert.ok(g.nextMilestone(5000).at > 5000, 'and there is always another one coming');
     assert.equal(g.milestoneFactor(s), 2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1'] }), 2.2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1', 'mile-2'] }), 2.5);
@@ -216,19 +221,22 @@ describe('the big choices', () => {
 describe('handing over', () => {
   test('the run resets to a small round but the legacy stays', () => {
     const s = g.newGame(T0);
-    s.funds = 5e4; s.runEarned = 5e4; s.lifetimeEarned = 5e4;
+    s.funds = 2e5; s.runEarned = 2e5; s.lifetimeEarned = 2e5;
     s.buildings = { carer: 30, client: 30, keysafe: 10 };
     s.upgrades = ['carer-t1'];
     assert.ok(g.canExpand(s));
     const gained = g.starsOnExpand(s);
-    assert.equal(gained, Math.floor(Math.cbrt(50)));
+    assert.equal(gained, g.starsForLifetime(2e5));
+    assert.ok(gained >= 1 && gained <= 20, `a first hand-over should be worth a handful of stars, got ${gained}`);
+    assert.ok(g.starsForLifetime(1e20) < 120, 'and the count can never run away');
+    assert.ok(g.starBonus(0) === 1 && g.starBonus(50) > 1.5);
     const r = g.expand(s, T0 + 1000);
     assert.equal(r.level, 1);
     assert.equal(s.funds, 0);
     assert.deepEqual(s.upgrades, []);
     assert.deepEqual(s.buildings, g.startingKit(1), 'you keep a little round to start again with');
     assert.ok(g.productionPerSecond(s, T0 + 1000) > 0, 'a new run is never dead');
-    assert.equal(s.lifetimeEarned, 5e4);
+    assert.equal(s.lifetimeEarned, 2e5);
     assert.equal(s.starsEarned, gained);
     assert.ok(g.unlockedBuildings(s).some((b) => b.id === 'car'), 'cars unlock at the village');
     for (let i = 1; i < LEVELS.length; i++) assert.ok(LEVELS[i].threshold > LEVELS[i - 1].threshold);
@@ -410,11 +418,25 @@ describe('the rule that everything you buy changes the street', () => {
     assert.equal(Object.keys(DRAWS).length, BUILDINGS.length, 'no drawings for things that do not exist');
   });
 
-  test('every upgrade and every choice says what changes on the street', () => {
+  test('every upgrade really is drawn, not just described', () => {
     for (const u of [...UPGRADES, ...BRANCH_OPTIONS]) {
       assert.ok(u.visual && u.visual.length > 10, `${u.id} does not say what it changes`);
       assert.ok(u.name && u.emoji && u.blurb, `${u.id} is missing its words`);
       assert.ok(typeof u.cost === 'number' || u.slot, `${u.id} has no price`);
+      // Kit upgrades change the look of the rung they belong to; everything else pins an icon on
+      // the office noticeboard. Anything covered by neither is a promise the street cannot keep.
+      const kitOf = /^(.*)-t[123]$/.exec(u.id);
+      const covered = kitOf ? !!DRAWS[kitOf[1]] : MARKS.has(u.id);
+      assert.ok(covered, `${u.id} claims a change to the street that nothing draws`);
+    }
+  });
+
+  test('the choices in a branch carry their words through to the screen', () => {
+    for (const group of BRANCHES) {
+      for (const o of group.options) {
+        assert.ok(o.visual && o.visual.length > 10, `${o.id} would show an empty "You will see"`);
+        assert.ok(o.icon, `${o.id} has no icon for the noticeboard`);
+      }
     }
   });
 

@@ -4,7 +4,7 @@
 // the view calls each tick. All positions inside are "logical" pixels; the scene scales itself down
 // on narrow screens so the same street fits on a phone.
 
-import { BUILDINGS } from '../../core/game/data.js';
+import { BUILDINGS, UPGRADE_ICONS } from '../../core/game/data.js';
 
 /** Things drawn on the horizon behind the street, biggest last. */
 const HORIZON = ['council', 'office', 'academy', 'framework', 'discharge', 'group', 'world', 'orbit', 'starship'];
@@ -12,15 +12,12 @@ const HORIZON = ['council', 'office', 'academy', 'framework', 'discharge', 'grou
 const DOOR_MARKS = ['keysafe', 'package', 'directpay', 'chc', 'tech'];
 /** People who walk the street besides the carers. */
 const STREET_FOLK = ['coordinator', 'supervisor', 'nurse'];
-/** The little icons that appear on the office noticeboard, one per upgrade you own. */
-const BADGE_EMOJI = {
-  admin: '🗃️', ecm: '📲', 'direct-debit': '🏦', oncall: '📞',
-  'qual-cert': '📜', 'qual-plans': '📗', 'qual-nomeds': '⏱️', 'qual-hours': '🗓️', 'qual-reviews': '⭐',
-  'disc-recruit': '🫂', 'disc-safes': '📦', 'disc-mileage': '⛽', 'disc-homes': '🗣️',
-  'cond-covered': '🫶', 'cond-continuity': '🤝', 'cond-tidy': '🔑', 'cond-wellled': '🌟',
-  'mile-1': '🎉', 'mile-2': '🎖️', 'syn-office-all': '🏢', 'syn-academy-team': '🎓', 'syn-council-package': '🏛️',
-  'known-dementia': '🧠', 'known-reablement': '🌤️', 'known-complex': '🧑‍⚕️',
-};
+/**
+ * What the street shows for each thing you can buy. Kit upgrades change the look of the rung they
+ * belong to; everything else pins its own icon on the office noticeboard. A unit test checks that
+ * every upgrade in the game is covered by one of these two routes.
+ */
+export const MARKS = new Set(Object.keys(UPGRADE_ICONS));
 
 const SIGN_COLOURS = { 'buyer-private': '#E5734A', 'buyer-council': '#4C7A4C', 'buyer-nhs': '#2A5EA8' };
 
@@ -85,7 +82,7 @@ export function createScene(canvas, { onCoin } = {}) {
     const rect = canvas.getBoundingClientRect();
     const cssW = Math.max(240, rect.width), cssH = Math.max(180, rect.height);
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    k = clamp(Math.min(cssW / 820, cssH / 300), 0.62, 1.35); // bigger figures on a big screen, a whole street on a phone
+    k = clamp(Math.min(cssW / 820, cssH / 300), 0.8, 1.35); // fewer, bigger houses on a phone so the kit on the doors can be seen
     W = cssW / k; H = cssH / k;
     canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
     ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
@@ -155,7 +152,7 @@ export function createScene(canvas, { onCoin } = {}) {
     world.rating = ratingOf(state);
     for (const [id, colour] of Object.entries(SIGN_COLOURS)) if (world.owned.has(id)) world.sign = colour;
     world.coinSize = 6 + Math.min(6, Math.log10(1 + valueOf(state)) * 3);
-    world.badges = [...world.owned].map((id) => BADGE_EMOJI[id]).filter(Boolean).slice(0, 12);
+    world.badges = [...world.owned].map((id) => UPGRADE_ICONS[id]).filter(Boolean).slice(0, 16);
     syncFolk();
     world.effects = state.effects.filter((e) => e.until > now);
     world.mode = state.upgrades.includes('direct-debit') ? 'instant' : state.upgrades.includes('admin') ? 'admin' : 'manual';
@@ -376,7 +373,7 @@ export function createScene(canvas, { onCoin } = {}) {
       ctx.fillStyle = mix(t.night[0], t.day[0], day); ctx.beginPath(); ctx.arc(cx - 34, cy - 4, 13, 0, TWO_PI); ctx.fill();
     }
     ctx.textAlign = 'center';
-    if ((world.buildings.satellite || 0) > 0) { const sx = W * 0.5 + Math.cos(world.satelliteAngle) * W * 0.4, sy = H * 0.12 + Math.sin(world.satelliteAngle * 2) * 8; ctx.font = `20px ${EMOJI_FONT}`; ctx.fillText('🛰️', sx, sy); }
+    if ((world.counts.orbit || 0) > 0) { const sx = W * 0.5 + Math.cos(world.satelliteAngle) * W * 0.4, sy = H * 0.12 + Math.sin(world.satelliteAngle * 2) * 8; ctx.font = `20px ${EMOJI_FONT}`; ctx.fillText('🛰️', sx, sy); }
     if (world.rocket) { ctx.font = `26px ${EMOJI_FONT}`; ctx.save(); ctx.translate(world.rocket.x, world.rocket.y); ctx.rotate(0.6); ctx.fillText('🚀', 0, 0); ctx.restore(); }
     for (const b of world.birds) { ctx.strokeStyle = 'rgba(60,50,60,.6)'; ctx.lineWidth = 1.5; const f = Math.sin(b.t * 12) * 3; ctx.beginPath(); ctx.moveTo(b.x - 6, b.y); ctx.quadraticCurveTo(b.x - 3, b.y - 3 - f, b.x, b.y); ctx.quadraticCurveTo(b.x + 3, b.y - 3 - f, b.x + 6, b.y); ctx.stroke(); }
   }
@@ -473,17 +470,17 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.owned.has('mile-1')) {
       const n = world.owned.has('mile-2') ? 10 : 6;
       ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x - 40, base - 74); ctx.quadraticCurveTo(x, base - 66, x + 40, base - 74); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 40, base - 86); ctx.quadraticCurveTo(x, base - 78, x + 40, base - 86); ctx.stroke();
       for (let i = 0; i < n; i++) {
-        const t = i / (n - 1), fx = lerp(x - 40, x + 40, t), fy = base - 74 + Math.sin(Math.PI * t) * 7;
+        const t = i / (n - 1), fx = lerp(x - 40, x + 40, t), fy = base - 86 + Math.sin(Math.PI * t) * 7;
         ctx.fillStyle = `hsl(${(i * 57) % 360} 75% 62%)`;
         ctx.beginPath(); ctx.moveTo(fx - 3, fy); ctx.lineTo(fx + 3, fy); ctx.lineTo(fx, fy + 6); ctx.closePath(); ctx.fill();
       }
     }
     // a hiring board, a box of key safes, a minibus – the things you have paid for
-    if (world.owned.has('disc-recruit')) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x - 62, base - 22, 18, 14, 2); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.fillText('HIRING', x - 53, base - 13); }
+    if (world.owned.has('disc-recruit')) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x - 26, base - 18, 20, 14, 2); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('HIRING', x - 16, base - 9); }
     if (world.owned.has('disc-safes')) { ctx.fillStyle = '#c8a06a'; ctx.fillRect(x + 34, base - 10, 14, 10); ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 1; ctx.strokeRect(x + 34, base - 10, 14, 10); }
-    if (world.owned.has('syn-academy-team')) { ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.roundRect(x - 92, base - 20, 30, 14, 3); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(x - 84, base - 5, 3.5, 0, TWO_PI); ctx.arc(x - 70, base - 5, 3.5, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.fillText('TRAINING', x - 77, base - 11); }
+    if (world.owned.has('syn-academy-team')) { const bx = x + 78; ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.roundRect(bx, base - 20, 30, 14, 3); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(bx + 8, base - 5, 3.5, 0, TWO_PI); ctx.arc(bx + 22, base - 5, 3.5, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('TRAINING', bx + 15, base - 11); }
     // the office noticeboard: one small icon for every upgrade you have bought
     if (world.badges.length) {
       const cols = 4, bx = x - 33, by = base - 50;
@@ -503,7 +500,8 @@ export function createScene(canvas, { onCoin } = {}) {
    * really does put a key safe on a door you can point at.
    */
   function drawDoorMark(h, i, day) {
-    const y = pavementY() + 2, hh = h.tall ? 58 : 46, w = h.w;
+    const space = th().space;
+    const y = pavementY() + 2, hh = space ? h.w / 2 + 10 : (h.tall ? 58 : 46), w = h.w;
     if ((world.counts.keysafe || 0) > i) {
       const kx = h.x + 11, ky = y - 26;
       ctx.fillStyle = world.tiers.keysafe >= 2 ? '#8a8f99' : '#6b7078';
@@ -574,6 +572,8 @@ export function createScene(canvas, { onCoin } = {}) {
       ctx.font = `700 9px ${UI_FONT}`;
       ctx.fillStyle = day > 0.5 ? 'rgba(58,42,36,.75)' : 'rgba(255,255,255,.85)';
       ctx.fillText(n > 999 ? `${Math.round(n / 1000)}k` : String(n), x, gy + bob + 10);
+      const tier = world.tiers[id] || 0;      // kit upgrades show as pips under the building
+      for (let p = 0; p < tier; p++) { ctx.fillStyle = ['#E5A93B', '#B06BFF', '#4FB3A9'][p]; ctx.beginPath(); ctx.arc(x - 6 + p * 6, gy + bob + 15, 2, 0, TWO_PI); ctx.fill(); }
     });
   }
 
@@ -606,13 +606,16 @@ export function createScene(canvas, { onCoin } = {}) {
       const lit = day < 0.5 || h.glow > 0;
       ctx.fillStyle = lit ? `rgba(255, 224, 130, ${0.6 + 0.4 * Math.max(h.glow, 1 - day)})` : 'rgba(120, 150, 190, .7)';
       ctx.fillRect(h.x - w * 0.36, y - hh + 10, w * 0.22, 11); ctx.fillRect(h.x + w * 0.14, y - hh + 10, w * 0.22, 11);
-      ctx.fillStyle = visited ? '#f3e2c8' : h.glow > 0 ? `rgba(255, 200, 80, ${h.glow})` : '#6b4a3a'; ctx.fillRect(h.x - 6, y - 20, 12, 20);
+      const doorColour = ['#6b4a3a', '#7a5240', '#2f5d46', '#3a4a78'][world.tiers.client || 0];
+      ctx.fillStyle = visited ? '#f3e2c8' : h.glow > 0 ? `rgba(255, 200, 80, ${h.glow})` : doorColour; ctx.fillRect(h.x - 6, y - 20, 12, 20);
+      if ((world.tiers.client || 0) >= 2) { ctx.fillStyle = '#6fa582'; ctx.beginPath(); ctx.arc(h.x - w * 0.34, y - 3, 3.5, 0, TWO_PI); ctx.arc(h.x + w * 0.34, y - 3, 3.5, 0, TWO_PI); ctx.fill(); }
+      if ((world.tiers.client || 0) >= 3) { ctx.fillStyle = '#E5A93B'; ctx.fillRect(h.x - 3, y - 24, 6, 3); }
       if (visited) drawResident(h.x, y);
       if (h.glow > 0.05) { ctx.fillStyle = `rgba(255, 210, 90, ${h.glow * 0.35})`; ctx.beginPath(); ctx.arc(h.x, y - 10, 22, 0, TWO_PI); ctx.fill(); }
-      if ((world.buildings.sensors || 0) > 0) { ctx.strokeStyle = `rgba(80, 160, 230, ${0.4 + 0.3 * Math.sin(world.t * 3 + h.x)})`; ctx.lineWidth = 1.5; for (let r = 5; r <= 13; r += 4) { ctx.beginPath(); ctx.arc(h.x + w / 2 - 4, y - hh - 6, r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); } }
-      if ((world.buildings.franchise || 0) > 0) { ctx.fillStyle = CAR_COLOURS[i % 3]; ctx.fillRect(h.x - w / 2 - 2, y - hh - 30, 2, 22); ctx.beginPath(); ctx.moveTo(h.x - w / 2, y - hh - 30); ctx.lineTo(h.x - w / 2 + 12, y - hh - 26); ctx.lineTo(h.x - w / 2, y - hh - 22); ctx.fill(); }
+      if ((world.counts.tech || 0) > i) { ctx.strokeStyle = `rgba(80, 160, 230, ${0.4 + 0.3 * Math.sin(world.t * 3 + h.x)})`; ctx.lineWidth = 1.5; for (let r = 5; r <= 13; r += 4) { ctx.beginPath(); ctx.arc(h.x + w / 2 - 4, y - hh - 6, r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); } }
+      if ((world.counts.group || 0) > 0) { ctx.fillStyle = CAR_COLOURS[i % 3]; ctx.fillRect(h.x - w / 2 - 2, y - hh - 30, 2, 22); ctx.beginPath(); ctx.moveTo(h.x - w / 2, y - hh - 30); ctx.lineTo(h.x - w / 2 + 12, y - hh - 26); ctx.lineTo(h.x - w / 2, y - hh - 22); ctx.fill(); }
     }
-    if (!th().space) drawDoorMark(h, i, day);
+    drawDoorMark(h, i, day);
     if (cool > 0) {
       const top = y - (th().space ? w / 2 + 22 : hh + 30);
       ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(h.x, top, 9, 0, TWO_PI); ctx.fill();

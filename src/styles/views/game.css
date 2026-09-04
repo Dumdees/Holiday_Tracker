@@ -32,7 +32,7 @@
 .ticker-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; color: var(--ink-soft); background: var(--paper); border-top: 1px solid var(--line); overflow: hidden; white-space: nowrap; }
 .ticker-text { animation: tickerIn .5s ease-out; overflow: hidden; text-overflow: ellipsis; }
 @keyframes tickerIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (max-width: 760px) { .world { height: 300px; } .world-frame { margin-left: -4px; margin-right: -4px; } .world-level { top: auto; bottom: 12px; right: 10px; font-size: 12px; max-width: 70%; } .world-hint { bottom: 50px; font-size: 13px; } .game-funds-main { font-size: 26px; } }
+@media (max-width: 760px) { .world { height: 340px; } .world-frame { margin-left: -4px; margin-right: -4px; } .world-level { top: auto; bottom: 12px; right: 10px; font-size: 12px; max-width: 70%; } .world-hint { bottom: 50px; font-size: 13px; } .game-funds-main { font-size: 26px; } }
 
 /* Collecting */
 .collect-btn { width: 100%; min-height: 64px; border-radius: var(--radius); border: 2px dashed var(--line-strong); background: var(--paper); cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; font: inherit; color: var(--ink-muted); transition: all .15s; }
@@ -149,3 +149,5 @@ body.game-open .toast { min-height: 44px; padding: 8px 6px 8px 12px; font-size: 
 .rating-card .rating-row { display: flex; align-items: center; gap: 10px; font-size: 17px; }
 .rating-card .rating-emoji { font-size: 26px; }
 .next-goal { color: var(--ink-soft); }
+.cond-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.cond-list li.off { opacity: .65; }

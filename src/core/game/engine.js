@@ -9,7 +9,7 @@
 // state. Everything below is derived from the state; nothing important is ever stored twice.
 
 import {
-  BUILDINGS, BUILDINGS_BY_ID, UPGRADES, UPGRADES_BY_ID, BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
+  BUILDINGS, BUILDINGS_BY_ID, beyondBuilding, UPGRADES, UPGRADES_BY_ID, BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
   ACHIEVEMENTS, PERKS, PRISMATIC_EFFECTS, CARD_EFFECTS, COST_GROWTH, MILESTONES, RATINGS,
   RATING_WEIGHTS, RATING_UPGRADE_POINTS, DAY_PARTS, levelInfo, FALLBACK_NAMES,
 } from './data.js';
@@ -21,9 +21,11 @@ const ADMIN_COLLECT_EVERY = 5;
 const SPAWN_LIFETIME = 13;
 const PRISMATIC_CHANCE_PER_SECOND = 1 / 210;
 const CARD_CHANCE_PER_SECOND = 1 / 70;
-export const HOUSE_COOLDOWN_MS = 1500; // a door you have just knocked on needs a moment
+export const HOUSE_COOLDOWN_MS = 900; // a door you have just knocked on needs a moment
 
 const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
+const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
+const COST_GROWTH_LATE = 1.04;
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
 export function newGame(now = Date.now()) {
@@ -39,7 +41,7 @@ export function newGame(now = Date.now()) {
     visits: 0,
     clicks: 0,
     collections: 0,
-    buildings: { client: 1 },   // one person to look after; you do their visits yourself at first
+    buildings: { client: 2 },   // two front doors to be going on with; you do the visits yourself at first
     upgrades: [],
     branches: {},               // slot -> option id, chosen once per run
     achievements: [],
@@ -161,18 +163,23 @@ export function milestoneFactor(state) {
 export function milestonesPassed(count) {
   let n = 0;
   for (const m of MILESTONES) if (count >= m) n++;
+  // Past the table, every time you double again counts as another one.
+  const last = MILESTONES[MILESTONES.length - 1];
+  if (count > last) n += Math.floor(Math.log2(count / last));
   return n;
 }
 
 /** The next milestone for a count: { at, remaining } or null when they are all passed. */
 export function nextMilestone(count) {
   for (const m of MILESTONES) if (count < m) return { at: m, remaining: m - count };
-  return null;
+  const last = MILESTONES[MILESTONES.length - 1];
+  const at = last * Math.pow(2, Math.floor(Math.log2(count / last)) + 1);
+  return { at, remaining: at - count };
 }
 
 /** What one of a thing delivers a second, after its own upgrades, milestones and synergies. */
 export function buildingRate(state, id) {
-  const b = BUILDINGS_BY_ID.get(id);
+  const b = buildingDef(state, id);
   if (!b || !b.rate) return 0;
   const count = state.buildings[id] || 0;
   let mult = Math.pow(milestoneFactor(state), milestonesPassed(count));
@@ -189,19 +196,24 @@ export function buildingRate(state, id) {
 /** Total visits a second wanted (work) or deliverable (team). */
 export function sideRate(state, side) {
   let total = 0;
-  for (const b of BUILDINGS) if (b.side === side) total += (state.buildings[b.id] || 0) * buildingRate(state, b.id);
+  for (const id of Object.keys(state.buildings)) {
+    const b = buildingDef(state, id);
+    if (b && b.side === side) total += (state.buildings[id] || 0) * buildingRate(state, id);
+  }
   return total;
 }
 
 /**
- * Put the two sides together. Visits are the square root of work times team, so:
- *  - both sides always help, and never make anything worse;
- *  - whichever side is behind is worth more per pound, which is the whole decision;
- *  - growing both together doubles the visits, which is what makes it run away.
+ * Put the two sides together: the two averaged, with a bonus for keeping them level. Written out,
+ * `(work + team + sqrt(work × team)) / 3`, which comes to exactly one side's worth when they match.
+ *  - an upgrade to one side is worth its full share of the total, so things do what they say;
+ *  - a level board is worth half as much again as a lopsided one, which is the standing decision;
+ *  - buying either side always earns more, never less, whatever the board looks like;
+ *  - and neither side alone delivers a single visit.
  */
 export function combineSides(work, team) {
-  if (work <= 0 || team <= 0) return 0;
-  return Math.sqrt(work * team);
+  if (work <= 0 || team <= 0) return 0;   // it takes both: somebody who wants a visit and somebody to do it
+  return (work + team + Math.sqrt(work * team)) / 3;
 }
 
 /** How well the service is judged to be run. Derived, never stored. */
@@ -262,7 +274,7 @@ export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state
   }
   mult *= RATINGS[m.ratingIndex].mult;
   mult *= 1 + 0.01 * state.achievements.length;
-  mult *= 1 + 0.02 * state.starsEarned;
+  mult *= starBonus(state.starsEarned);
   mult *= 1 + 0.03 * (state.prismaticHires ? state.prismaticHires.length : 0);
   for (const e of state.effects) if (e.prodMult && e.until > now) mult *= e.prodMult;
   return mult;
@@ -292,17 +304,24 @@ export function costDiscount(state, id) {
   let f = state.perks.includes('playbook') ? 0.9 : 1;
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'discount' && u.building === id) f *= u.factor;
-    if (u.kind === 'branch-council') { const b = BUILDINGS_BY_ID.get(id); if (b && b.side === 'work') f *= u.discount; }
+    if (u.kind === 'branch-council') { const b = buildingDef(state, id); if (b && b.side === 'work') f *= u.discount; }
   }
   return f;
 }
 
+/** What the nth one of something costs. Growth eases off past a thousand so prices stay real. */
+function unitCost(base, n) {
+  const steep = Math.min(n, COST_EASE_AT);
+  const rest = Math.max(0, n - COST_EASE_AT);
+  return base * Math.pow(COST_GROWTH, steep) * Math.pow(COST_GROWTH_LATE, rest);
+}
+
 export function buildingCost(state, id, qty = 1) {
-  const b = BUILDINGS_BY_ID.get(id);
+  const b = buildingDef(state, id);
   if (!b) return Infinity;
   const owned = state.buildings[id] || 0;
   let total = 0;
-  for (let i = 0; i < qty; i++) total += b.baseCost * Math.pow(COST_GROWTH, owned + i);
+  for (let i = 0; i < qty; i++) total += unitCost(b.baseCost, owned + i);
   return Math.ceil(total * costDiscount(state, id));
 }
 
@@ -349,7 +368,7 @@ export function paybackSeconds(cost, gain) {
 
 /** Everything about a shop row, worked out once for the view. */
 export function buildingOffer(state, id, qty = 1, now = Date.now()) {
-  const b = BUILDINGS_BY_ID.get(id);
+  const b = buildingDef(state, id);
   const count = state.buildings[id] || 0;
   const cost = buildingCost(state, id, qty);
   const gain = buildingGain(state, id, qty, now);
@@ -369,8 +388,19 @@ export function upgradeOffer(state, u, now = Date.now()) {
   return { ...u, cost, gain, payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
 }
 
+/** Every rung you can buy at this stage, including the endless ones past the starship. */
 export function unlockedBuildings(state) {
-  return BUILDINGS.filter((b) => b.level <= state.level);
+  const out = BUILDINGS.filter((b) => b.level <= state.level);
+  for (let level = 10; level <= state.level; level++) out.push(beyondBuilding(level));
+  return out;
+}
+
+/** Look a building up whether it is on the printed ladder or one of the endless ones. */
+function buildingDef(state, id) {
+  const known = BUILDINGS_BY_ID.get(id);
+  if (known) return known;
+  const n = /^beyond-(\d+)$/.exec(id);
+  return n ? beyondBuilding(Number(n[1]) + 9) : null;
 }
 
 /** The next thing that needs a bigger business, for a "coming soon" line. */
@@ -396,19 +426,29 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
     .slice(0, limit);
 }
 
-/** Which side of the business is holding you back, in words. */
-export function bottleneck(state, m = boardMetrics(state)) {
+/**
+ * Which side is worth buying, in words. Worked out from the same payback numbers the shop shows,
+ * so the advice and the Best value chip can never disagree.
+ */
+export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   if (m.work <= 0) return { side: 'work', ratio: 0, advice: 'Take somebody on – there is nobody to visit yet.' };
   if (m.team <= 0) return { side: 'team', ratio: 0, advice: 'You need a carer before anybody gets a visit.' };
+  const best = { work: Infinity, team: Infinity };
+  for (const b of unlockedBuildings(state)) {
+    const p = buildingOffer(state, b.id, 1, now).payback;
+    if (p < best[b.side]) best[b.side] = p;
+  }
   const ratio = m.team / m.work;
-  if (ratio < 0.85) return { side: 'team', ratio, advice: 'More work than the team can cover. Another pair of hands goes furthest.' };
-  if (ratio > 1.18) return { side: 'work', ratio, advice: 'The team has room to spare. Taking on more people goes furthest.' };
+  if (!Number.isFinite(best.work) && !Number.isFinite(best.team)) return { side: 'balanced', ratio, advice: 'Either side is worth about the same just now.' };
+  const gap = best.team / best.work;
+  if (gap > 1.25) return { side: 'work', ratio, advice: 'The team has room to spare. Taking on more work goes furthest.' };
+  if (gap < 0.8) return { side: 'team', ratio, advice: 'More work than the team can cover. Another pair of hands goes furthest.' };
   return { side: 'balanced', ratio, advice: 'Nicely balanced – either side is worth about the same.' };
 }
 
 /** The little round you always keep when you hand over, so a new run is never dead. */
 export function startingKit(level) {
-  const n = Math.min(30, 2 + level * 3);
+  const n = Math.min(20, 2 + level * 2);
   return { client: n, carer: n };
 }
 
@@ -459,7 +499,7 @@ export function collect(state) {
 }
 
 export function buyBuilding(state, id, qty = 1) {
-  const b = BUILDINGS_BY_ID.get(id);
+  const b = buildingDef(state, id);
   if (!b || b.level > state.level) return { bought: 0, spent: 0 };
   const n = qty === 'max' ? maxAffordable(state, id) : qty;
   if (n <= 0) return { bought: 0, spent: 0 };
@@ -508,8 +548,18 @@ export function pickBranch(state, slot, optionId) {
 
 // ---------- Legacy (handing over and starting again) ----------
 
+/**
+ * Legacy Stars from everything you have ever earned. The fourth root keeps the reward real without
+ * letting a fast run turn into billions of stars, and the bonus each one gives eases off after the
+ * first hundred so it can never run away.
+ */
 export function starsForLifetime(lifetimeEarned) {
-  return Math.floor(Math.cbrt(Math.max(0, lifetimeEarned) / 1e3));
+  return Math.floor(6 * Math.log10(1 + Math.max(0, lifetimeEarned) / 1e4));
+}
+
+/** What the stars are worth: 3% each, on a count that only ever grows slowly. */
+export function starBonus(stars) {
+  return 1 + 0.03 * Math.max(0, stars);
 }
 
 export function starsAvailable(state) {
@@ -699,6 +749,13 @@ export function achievementList(state) {
 
 export function perkList(state) {
   return PERKS.map((p) => ({ ...p, owned: state.perks.includes(p.id), affordable: starsAvailable(state) >= p.cost }));
+}
+
+/** The conditional bonuses you own, and whether each is switched on right now. */
+export function activeConditionals(state, m = boardMetrics(state)) {
+  return ownedUpgrades(state)
+    .filter((u) => u.kind === 'conditional')
+    .map((u) => ({ id: u.id, name: u.name, emoji: u.emoji, label: u.label, mult: u.mult, on: u.test(state, m) }));
 }
 
 /** Plain data for saving. */

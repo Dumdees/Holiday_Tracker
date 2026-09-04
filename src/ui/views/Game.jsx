@@ -31,7 +31,17 @@ function fmtPayback(seconds) {
   if (!Number.isFinite(seconds)) return null;
   if (seconds < 90) return `pays for itself in ${Math.max(1, Math.round(seconds))} seconds`;
   if (seconds < 5400) return `pays for itself in about ${Math.round(seconds / 60)} minutes`;
-  return `pays for itself in about ${Math.round(seconds / 3600)} hours`;
+  if (seconds < 60 * 3600) return `pays for itself in about ${Math.round(seconds / 3600)} hours`;
+  return 'takes a very long time to pay for itself';
+}
+
+/** Why something shows no payback time – never "saves a job" unless it really does. */
+function noPaybackReason(u, active) {
+  if (u.kind === 'conditional') return active ? 'no extra income just now' : `only pays ${u.label}`;
+  if (u.kind === 'click' || u.kind === 'clickpct') return 'makes your own visits worth more';
+  if (u.kind === 'discount') return 'makes them cheaper, not faster';
+  if (u.kind === 'collect' || u.kind === 'offline') return 'saves you a job';
+  return 'no extra income just now';
 }
 
 /** Restart a CSS animation on an element without going through state. */
@@ -243,7 +253,10 @@ export function Game() {
     if (!r.bought) return;
     sceneRef.current?.celebrate('buy');
     if (r.milestone) {
-      toast(`${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – every one of them is now ${offer.milestoneFactor} times better!`, { kind: 'success', duration: 6000 });
+      const line = offer.side === 'work'
+        ? `${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – a proper round now, and it all runs ${offer.milestoneFactor} times smoother.`
+        : `${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – they work ${offer.milestoneFactor} times better together.`;
+      toast(line, { kind: 'success', duration: 6000 });
       setConfetti((c) => c + 1);
       sceneRef.current?.celebrate('achievement');
     }
@@ -377,7 +390,12 @@ export function Game() {
           </Card>
 
           <Card title="How you are rated" icon="star" class="rating-card" subtitle={rating.blurb}>
-            <div class="rating-row"><span class="rating-emoji">{rating.emoji}</span><strong>{rating.name}</strong></div>
+              <div class="rating-row"><span class="rating-emoji">{rating.emoji}</span><strong>{rating.name}</strong></div>
+            {G.activeConditionals(s, metrics).length ? (
+              <ul class="cond-list">
+                {G.activeConditionals(s, metrics).map((c) => <li key={c.id} class={c.on ? 'on' : 'off'}>{c.on ? '✅' : '⚪'} {c.name} <span class="muted small">{c.on ? 'is paying now' : `pays ${c.label}`}</span></li>)}
+              </ul>
+            ) : null}
             {rating.next ? (
               <p class="muted small">Coordinators, supervisors, academies and the quality upgrades all count towards the next one. {fmtNum(rating.next.score - rating.score)} more to {rating.next.name}.</p>
             ) : <p class="muted small">There is nothing above this. Everybody knows it.</p>}
@@ -390,11 +408,11 @@ export function Game() {
             <div class="upgrade-row">
               {upgrades.map((u) => (
                 <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
-                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${fmtPayback(u.payback) || 'No extra income, but it saves you a job.'}`} data-test={`upgrade-${u.id}`}>
+                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${fmtPayback(u.payback) || noPaybackReason(u, u.kind === 'conditional' && u.test(s, metrics))}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
-                  <span class="upgrade-pay">{Number.isFinite(u.payback) ? fmtSeconds(u.payback) : 'saves a job'}</span>
+                  <span class="upgrade-pay">{Number.isFinite(u.payback) ? fmtSeconds(u.payback) : (u.kind === 'conditional' ? 'when it fits' : u.kind === 'discount' ? 'cheaper' : u.kind === 'click' || u.kind === 'clickpct' ? 'your visits' : 'saves a job')}</span>
                 </button>
               ))}
             </div>
