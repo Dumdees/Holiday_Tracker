@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import * as g from '../../src/core/game/engine.js';
-import { BUILDINGS, UPGRADES, BRANCH_OPTIONS, BRANCHES, ACHIEVEMENTS, PERKS, LEVELS, MILESTONES, RATINGS, levelInfo } from '../../src/core/game/data.js';
+import { BUILDINGS, UPGRADES, BRANCH_OPTIONS, BRANCHES, ACHIEVEMENTS, PERKS, LEVELS, MILESTONES, RATINGS, levelInfo, upgradesFor, upgradeIcon, beyondBuilding } from '../../src/core/game/data.js';
 import { DRAWS, MARKS } from '../../src/ui/game/scene.js';
 import { fmtMoney, fmtNum, fmtSeconds } from '../../src/core/game/format.js';
 
@@ -47,12 +47,28 @@ describe('the two sides', () => {
       { carer: 900, client: 120, keysafe: 400, car: 200, coordinator: 40, package: 60 },
       { carer: 1200, client: 1200, keysafe: 600, car: 300, coordinator: 120, supervisor: 60, office: 25, academy: 12, nurse: 6, framework: 40, chc: 12, group: 4, tech: 3, world: 2, orbit: 1, starship: 1, package: 200, directpay: 90, council: 30, discharge: 20 },
     ];
+    // Every bonus that slides with the shape of the board is held at once: this is the board where a
+    // purchase would be most likely to dilute something you are already being paid for.
+    const held = UPGRADES.filter((u) => u.archetype === 'conditional').map((u) => u.id);
+    const kit = UPGRADES.filter((u) => u.archetype === 'kit').slice(0, 14).map((u) => u.id);
     for (const shape of shapes) {
-      for (const b of BUILDINGS) {
-        const s = board(shape);
-        s.buildings = { ...shape };
-        const gain = g.buildingGain(s, b.id, 1, T0);
-        assert.ok(gain > 0, `buying a ${b.id} on ${JSON.stringify(shape)} should earn more, got ${gain}`);
+      for (const upgrades of [[], held, [...held, ...kit]]) {
+        for (const b of BUILDINGS) {
+          const s = board(shape);
+          s.buildings = { ...shape };
+          s.upgrades = [...upgrades];
+          const gain = g.buildingGain(s, b.id, 1, T0);
+          assert.ok(gain > 0, `buying a ${b.id} on ${JSON.stringify(shape)} with ${upgrades.length} bought should earn more, got ${gain}`);
+        }
+        for (const u of UPGRADES) {
+          if (upgrades.includes(u.id)) continue;
+          const s = board(shape);
+          s.buildings = { ...shape };
+          s.upgrades = [...upgrades];
+          if (u.unlock && !u.unlock(s)) continue;
+          const gain = g.upgradeGain(s, u.id, T0);
+          assert.ok(gain >= 0, `buying ${u.id} on ${JSON.stringify(shape)} should never earn less, got ${gain}`);
+        }
       }
     }
   });
@@ -86,18 +102,35 @@ describe('what makes things better', () => {
     const s = board();
     const plain = g.buildingRate(s, 'carer');
     assert.equal(g.buildingRate({ ...s, upgrades: ['carer-t1'] }, 'carer'), plain * 2);
-    const withSyn = g.buildingRate({ ...s, upgrades: ['syn-keysafe-carer'] }, 'carer');
-    assert.ok(Math.abs(withSyn / plain - (1 + 0.015 * 20)) < 1e-9, '20 key safes is +30% on carers');
-    const capped = g.buildingRate({ ...board({ keysafe: 5000 }), upgrades: ['syn-keysafe-carer'] }, 'carer');
-    assert.ok(Math.abs(capped / plain - 2.5) < 1e-9, 'the synergy stops at +150%');
+    const syn = UPGRADES.find((u) => u.id === 'syn-keysafe-carer');
+    const withSyn = g.buildingRate({ ...s, upgrades: [syn.id] }, 'carer');
+    assert.ok(Math.abs(withSyn / plain - (1 + syn.per * 20)) < 1e-9, 'twenty key safes lift the whole team by twenty times the per-safe figure');
+    const capped = g.buildingRate({ ...board({ keysafe: 5000 }), upgrades: [syn.id] }, 'carer');
+    assert.ok(Math.abs(capped / plain - (1 + syn.cap)) < 1e-9, 'and the synergy stops at its cap');
   });
 
-  test('conditional bonuses switch on and off with the board', () => {
-    const covered = { ...board({ carer: 200, client: 10 }), upgrades: ['cond-covered'] };
-    const stretched = { ...board({ carer: 10, client: 200 }), upgrades: ['cond-covered'] };
-    const ratio = g.globalMultiplier(covered, T0) / g.globalMultiplier({ ...covered, upgrades: [] }, T0);
-    assert.ok(Math.abs(ratio - 1.3) < 1e-9, 'it pays 30% while the team can cover the work');
-    assert.equal(g.globalMultiplier(stretched, T0), g.globalMultiplier({ ...stretched, upgrades: [] }, T0), 'and nothing when it cannot');
+  test('conditional bonuses slide with the board rather than snapping off', () => {
+    const covered = { ...board({ carer: 900, client: 10 }), upgrades: ['cond-covered'] };
+    const half = { ...board({ carer: 40, client: 40 }), upgrades: ['cond-covered'] };
+    const stretched = { ...board({ carer: 4, client: 300 }), upgrades: ['cond-covered'] };
+    const paying = (s) => g.globalMultiplier(s, T0) / g.globalMultiplier({ ...s, upgrades: [] }, T0);
+    assert.ok(Math.abs(paying(covered) - 1.3) < 1e-9, 'it pays all 30% while the team can cover the work');
+    assert.ok(paying(half) > 1 && paying(half) < 1.3, 'part of it pays while the team is catching up');
+    assert.ok(paying(stretched) > 1 && paying(stretched) < paying(half), 'and less again when the work has run away');
+    const shares = g.activeConditionals({ ...board({ carer: 40, client: 40 }), upgrades: ['cond-covered'] });
+    assert.equal(shares.length, 1);
+    assert.ok(shares[0].share > 0 && shares[0].share < 1, 'the card can say how much of it is paying');
+  });
+
+  test('a tidy patch counts the kit you have out, so it never falls when you take on more work', () => {
+    const kitted = { ...board(), upgrades: ['cond-tidy', 'carer-t1', 'client-t1', 'keysafe-t1'] };
+    const paying = (s) => g.globalMultiplier(s, T0) / g.globalMultiplier({ ...s, upgrades: s.upgrades.filter((id) => id !== 'cond-tidy') }, T0);
+    const before = paying(kitted);
+    assert.ok(before > 1 && before < 1.25, 'three bits of kit pay a quarter of it');
+    const busier = { ...kitted, buildings: { ...kitted.buildings, client: 400 } };
+    assert.ok(Math.abs(paying(busier) - before) < 1e-12, 'taking on four hundred more doors changes nothing about it');
+    const full = { ...kitted, upgrades: [...kitted.upgrades, ...UPGRADES.filter((u) => u.archetype === 'kit').slice(0, 12).map((u) => u.id)] };
+    assert.ok(Math.abs(paying(full) - 1.25) < 1e-9, 'twelve bits of kit pay all of it');
   });
 
   test('the rating is worked out from what you invest in, and never from luck', () => {
@@ -222,13 +255,16 @@ describe('the big choices', () => {
 describe('handing over', () => {
   test('the run resets to a small round but the legacy stays', () => {
     const s = g.newGame(T0);
-    s.funds = 2e5; s.runEarned = 2e5; s.lifetimeEarned = 2e6;
+    s.funds = 2e5; s.runEarned = 8e4; s.lifetimeEarned = 2e6;
     s.buildings = { carer: 30, client: 30, keysafe: 10 };
     s.upgrades = ['carer-t1'];
-    assert.ok(!g.canExpand(s), 'a run has to be worth a real share of everything you have earned');
+    assert.ok(!g.canExpand(s), 'the first hand-over waits for the stage figure');
     s.runEarned = 6e5;
     assert.ok(g.canExpand(s));
     assert.ok(g.expandRequirement(s) >= LEVELS[1].threshold);
+    // Once you have had a big run, the next one has to beat it properly – no handing over five times
+    // in a minute just because the stage figure is behind you.
+    assert.equal(g.expandRequirement({ ...s, level: 3, bestRun: 1e12 }), 3e12, 'three times your best run ever');
     const gained = g.starsOnExpand(s);
     assert.equal(gained, g.starsForLifetime(2e6));
     assert.ok(gained >= 1 && gained <= 20, `a first hand-over should be worth a handful of stars, got ${gained}`);
@@ -423,16 +459,33 @@ describe('the rule that everything you buy changes the street', () => {
   });
 
   test('every upgrade really is drawn, not just described', () => {
-    for (const u of [...UPGRADES, ...BRANCH_OPTIONS]) {
+    // Everything in the table, plus three stages' worth of the endless rungs past it.
+    for (const u of [...upgradesFor(LEVELS.length + 2), ...BRANCH_OPTIONS]) {
       assert.ok(u.visual && u.visual.length > 10, `${u.id} does not say what it changes`);
       assert.ok(u.name && u.emoji && u.blurb, `${u.id} is missing its words`);
       assert.ok(typeof u.cost === 'number' || u.slot, `${u.id} has no price`);
       // Kit upgrades change the look of the rung they belong to; everything else pins an icon on
       // the office noticeboard. Anything covered by neither is a promise the street cannot keep.
       const kitOf = /^(.*)-t[123]$/.exec(u.id);
-      const covered = kitOf ? !!DRAWS[kitOf[1]] : MARKS.has(u.id);
+      const covered = kitOf
+        ? !!DRAWS[kitOf[1]] || kitOf[1].startsWith('beyond-')   // the far rungs are counted on the horizon
+        : MARKS.has(u.id) || !!upgradeIcon(u.id);
       assert.ok(covered, `${u.id} claims a change to the street that nothing draws`);
     }
+  });
+
+  test('the shop never runs out, however far you go', () => {
+    const far = { ...board(), level: LEVELS.length + 3, buildings: { carer: 400, client: 400, 'beyond-1': 200, 'beyond-2': 60, 'beyond-3': 20, 'beyond-4': 5 } };
+    const ids = new Set(upgradesFor(far.level).map((u) => u.id));
+    for (const n of [1, 2, 3, 4]) {
+      assert.ok(ids.has(`beyond-${n}-t1`), `stage ${n} past the table brings its own kit`);
+      assert.ok(ids.has(`far-value-${n}`) && ids.has(`far-all-${n}`), `stage ${n} past the table brings its own bonuses`);
+    }
+    const shop = g.upgradeShop(far, T0);
+    assert.ok(shop.length >= 5, 'there is always a shelf full');
+    assert.ok(shop.some((u) => u.gain > 0), 'and at least one of them earns you more');
+    const b = beyondBuilding(LEVELS.length + 3);
+    assert.ok(b.baseCost > 0 && Number.isFinite(b.baseCost), 'the far rungs still have a price');
   });
 
   test('the choices in a branch carry their words through to the screen', () => {

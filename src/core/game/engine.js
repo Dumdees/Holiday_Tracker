@@ -9,7 +9,8 @@
 // state. Everything below is derived from the state; nothing important is ever stored twice.
 
 import {
-  BUILDINGS, BUILDINGS_BY_ID, beyondBuilding, UPGRADES, UPGRADES_BY_ID, BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
+  BUILDINGS, BUILDINGS_BY_ID, beyondBuilding, UPGRADES, UPGRADES_BY_ID, upgradesFor, upgradeById,
+  BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
   ACHIEVEMENTS, PERKS, PRISMATIC_EFFECTS, CARD_EFFECTS, COST_GROWTH, MILESTONES, RATINGS,
   RATING_WEIGHTS, RATING_UPGRADE_POINTS, DAY_PARTS, levelInfo, FALLBACK_NAMES,
 } from './data.js';
@@ -60,6 +61,7 @@ export function newGame(now = Date.now()) {
     offlineReturns: 0,
     playedLate: false,
     adminTimer: 0,
+    bestRun: 0,                 // the most any single run has earned, so each hand-over has to beat it
     log: [],                    // newest first: { at, emoji, text }
   };
 }
@@ -79,7 +81,7 @@ export function migrate(saved) {
     if (id && Number.isFinite(count) && count > 0) buildings[id] = (buildings[id] || 0) + Math.floor(count);
   }
   if (!buildings.client) buildings.client = 1;
-  const upgrades = (saved.upgrades || []).filter((id) => UPGRADES_BY_ID.has(id) && !BRANCH_OPTIONS.some((o) => o.id === id));
+  const upgrades = (saved.upgrades || []).filter((id) => !!upgradeById(id) && !BRANCH_OPTIONS.some((o) => o.id === id));
   const perks = (saved.perks || []).map((id) => (id === 'admin' ? 'perk-admin' : id)).filter((id) => PERKS.some((p) => p.id === id));
   return {
     ...saved,
@@ -148,8 +150,8 @@ export function collectionMode(state) {
 /** Everything you own, whether bought or chosen as a branch. */
 function ownedUpgrades(state) {
   const out = [];
-  for (const id of state.upgrades) { const u = UPGRADES_BY_ID.get(id); if (u) out.push(u); }
-  for (const id of Object.values(state.branches || {})) { const u = UPGRADES_BY_ID.get(id); if (u) out.push(u); }
+  for (const id of state.upgrades) { const u = upgradeById(id); if (u) out.push(u); }
+  for (const id of Object.values(state.branches || {})) { const u = upgradeById(id); if (u) out.push(u); }
   return out;
 }
 
@@ -256,6 +258,12 @@ export function visitValue(state) {
   return v;
 }
 
+/** How much of a sliding bonus is paying, 0 to 1. */
+export function conditionShare(u, state, m) {
+  const share = u.share ? u.share(state, m) : (u.test && u.test(state, m) ? 1 : 0);
+  return Math.max(0, Math.min(1, Number.isFinite(share) ? share : 0));
+}
+
 /** How much of the total a scaling branch is worth right now. */
 function scalingBonus(state, u) {
   const froms = Array.isArray(u.from) ? u.from : [u.from];
@@ -269,7 +277,7 @@ export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state
   let mult = 1;
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'global') mult *= u.mult;
-    else if (u.kind === 'conditional' && u.test(state, m)) mult *= u.mult;
+    else if (u.kind === 'conditional') mult *= 1 + (u.mult - 1) * conditionShare(u, state, m);
     else if (u.kind === 'branch-council') mult *= u.mult;
     else if (u.kind === 'branch-scaling') mult *= u.mult * (1 + scalingBonus(state, u));
   }
@@ -334,7 +342,7 @@ export function maxAffordable(state, id) {
 }
 
 export function upgradeCost(state, id) {
-  const def = UPGRADES_BY_ID.get(id);
+  const def = upgradeById(id);
   if (!def) return Infinity;
   const f = state.perks.includes('playbook') ? 0.9 : 1;
   return Math.ceil(def.cost * f);
@@ -352,14 +360,14 @@ function incomeWith(state, changes, now) {
 export function buildingGain(state, id, qty = 1, now = Date.now()) {
   const before = productionPerSecond(state, now);
   const after = incomeWith(state, { buildings: { ...state.buildings, [id]: (state.buildings[id] || 0) + qty } }, now);
-  return Math.max(0, after - before);
+  return after - before;
 }
 
 /** Extra income a second from owning an upgrade. */
 export function upgradeGain(state, id, now = Date.now()) {
   const before = productionPerSecond(state, now);
   const after = incomeWith(state, { upgrades: [...state.upgrades, id] }, now);
-  return Math.max(0, after - before);
+  return after - before;
 }
 
 /** Seconds for something to pay for itself. Infinity when it earns nothing extra. */
@@ -376,6 +384,7 @@ export function buildingOffer(state, id, qty = 1, now = Date.now()) {
   const gain = buildingGain(state, id, qty, now);
   return {
     ...b, count, cost, gain,
+    income: productionPerSecond(state, now),
     payback: paybackSeconds(cost, gain),
     each: buildingRate(state, id) * visitValue(state) * globalMultiplier(state, now),
     affordable: state.funds >= cost,
@@ -387,7 +396,7 @@ export function buildingOffer(state, id, qty = 1, now = Date.now()) {
 export function upgradeOffer(state, u, now = Date.now()) {
   const cost = upgradeCost(state, u.id);
   const gain = upgradeGain(state, u.id, now);
-  return { ...u, cost, gain, payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
+  return { ...u, cost, gain, income: productionPerSecond(state, now), payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
 }
 
 /** Every rung you can buy at this stage, including the endless ones past the starship. */
@@ -411,7 +420,7 @@ export function nextLockedBuilding(state) {
 }
 
 export function availableUpgrades(state) {
-  return UPGRADES.filter((u) => !state.upgrades.includes(u.id) && u.unlock(state));
+  return upgradesFor(state.level).filter((u) => !state.upgrades.includes(u.id) && u.unlock(state));
 }
 
 /**
@@ -421,7 +430,9 @@ export function availableUpgrades(state) {
  */
 export function upgradeShop(state, now = Date.now(), limit = 12) {
   const income = Math.max(productionPerSecond(state, now), 1e-9);
-  const rank = (u) => (Number.isFinite(u.payback) ? u.payback : (u.cost / income) * 1.5);
+  // Things that earn come first, then the ones that only save you a job, then anything that would
+  // actually cost you – which is ranked last and says so on the tile.
+  const rank = (u) => (u.gain > 0 ? u.payback : u.gain < 0 ? 1e12 : (u.cost / income) * 1.5 + 1e6);
   return availableUpgrades(state)
     .map((u) => upgradeOffer(state, u, now))
     .sort((a, b) => (rank(a) - rank(b)) || (a.cost - b.cost))
@@ -442,7 +453,7 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   }
   const ratio = m.team / m.work;
   const state_ = ratio > 1.1 ? 'The team can cover the work.' : ratio < 0.9 ? 'There is more work than the team can cover.' : 'The two sides are level.';
-  const held = activeConditionals(state, m).filter((c) => c.on).map((c) => c.name);
+  const held = activeConditionals(state, m).filter((c) => c.share >= 0.999).map((c) => c.name);
   const holding = held.length ? ` ${held[0]} is paying.` : '';
   if (!Number.isFinite(best.work) && !Number.isFinite(best.team)) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
   const gap = best.team / best.work;
@@ -483,6 +494,21 @@ export function readyHouse(state, count, now = Date.now()) {
   return -1;
 }
 
+/**
+ * The nearest door to `from` that is ready for a knock. Tapping the street should always find you
+ * somebody to visit, the way pressing the key does – so a tap near a door that has just been seen
+ * moves along to the next one instead of doing nothing.
+ */
+export function nearestReadyHouse(state, count, from = 0, now = Date.now()) {
+  if (houseCooldown(state, from, now) <= 0) return from;
+  for (let d = 1; d < count; d++) {
+    for (const i of [from - d, from + d]) {
+      if (i >= 0 && i < count && houseCooldown(state, i, now) <= 0) return i;
+    }
+  }
+  return from;
+}
+
 /** You do a visit yourself. */
 export function click(state, now = Date.now(), house = 0) {
   if (houseCooldown(state, house, now) > 0) return 0;
@@ -520,7 +546,7 @@ export function buyBuilding(state, id, qty = 1) {
 }
 
 export function buyUpgrade(state, id) {
-  const def = UPGRADES_BY_ID.get(id);
+  const def = upgradeById(id);
   if (!def || state.upgrades.includes(id) || !def.unlock || !def.unlock(state)) return false;
   const cost = upgradeCost(state, id);
   if (cost > state.funds) return false;
@@ -577,14 +603,13 @@ export function nextLevel(state) {
   return levelInfo(state.level + 1);
 }
 
-/** How far through this run, 0..1. Log-scaled so the bar keeps moving through the long middle. */
 /**
- * What this run has to earn before you can hand the patch over: the stage's own figure, or a
- * quarter of everything you have ever earned, whichever is more. The second half is what stops a
- * big business handing over five times in a minute.
+ * What this run has to earn before you can hand the patch over: the stage's own figure, or three
+ * times your best run ever, whichever is more. The second half is what stops a big business handing
+ * the patch over five times in a minute once the stages start coming quickly.
  */
 export function expandRequirement(state) {
-  return Math.max(nextLevel(state).threshold, state.lifetimeEarned * 0.25);
+  return Math.max(nextLevel(state).threshold, (state.bestRun || 0) * 3);
 }
 
 export function expandProgress(state) {
@@ -620,6 +645,7 @@ export function expand(state, now = Date.now()) {
   const gained = starsOnExpand(state);
   const keep = {
     startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,
+    bestRun: Math.max(state.bestRun || 0, state.runEarned),
     level: state.level + 1, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
     perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet,
     cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
@@ -771,7 +797,10 @@ export function perkList(state) {
 export function activeConditionals(state, m = boardMetrics(state)) {
   return ownedUpgrades(state)
     .filter((u) => u.kind === 'conditional')
-    .map((u) => ({ id: u.id, name: u.name, emoji: u.emoji, label: u.label, mult: u.mult, on: u.test(state, m) }));
+    .map((u) => {
+      const share = conditionShare(u, state, m);
+      return { id: u.id, name: u.name, emoji: u.emoji, label: u.label, mult: u.mult, share, on: share >= 0.999, paying: 1 + (u.mult - 1) * share };
+    });
 }
 
 /** Plain data for saving. */

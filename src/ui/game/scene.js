@@ -4,7 +4,7 @@
 // the view calls each tick. All positions inside are "logical" pixels; the scene scales itself down
 // on narrow screens so the same street fits on a phone.
 
-import { BUILDINGS, UPGRADE_ICONS } from '../../core/game/data.js';
+import { BUILDINGS, UPGRADE_ICONS, upgradeIcon } from '../../core/game/data.js';
 
 /** Things drawn on the horizon behind the street, biggest last. */
 const HORIZON = ['council', 'office', 'academy', 'framework', 'discharge', 'group', 'world', 'orbit', 'starship'];
@@ -144,16 +144,17 @@ export function createScene(canvas, { onCoin } = {}) {
     world.counts = state.buildings;
     world.owned = new Set([...(state.upgrades || []), ...Object.values(state.branches || {})]);
     world.tiers = {};
-    for (const b of BUILDINGS) {
+    const rungs = [...BUILDINGS.map((b) => b.id), ...Object.keys(state.buildings).filter((id) => id.startsWith('beyond-'))];
+    for (const id of rungs) {
       let n = 0;
-      for (let i = 1; i <= 3; i++) if (world.owned.has(`${b.id}-t${i}`)) n = i;
-      world.tiers[b.id] = n;
+      for (let i = 1; i <= 3; i++) if (world.owned.has(`${id}-t${i}`)) n = i;
+      world.tiers[id] = n;
     }
     world.rating = ratingOf(state);
     world.lit = ['cond-covered', 'cond-continuity', 'cond-tidy', 'cond-wellled'].filter((id) => world.owned.has(id) && conditionLit(id, state)).length;
     for (const [id, colour] of Object.entries(SIGN_COLOURS)) if (world.owned.has(id)) world.sign = colour;
     world.coinSize = 6 + Math.min(6, Math.log10(1 + valueOf(state)) * 3);
-    const icons = [...world.owned].map((id) => UPGRADE_ICONS[id]).filter(Boolean);
+    const icons = [...world.owned].map((id) => upgradeIcon(id)).filter(Boolean);
     world.badges = icons.slice(0, 24);
     world.extraBadges = Math.max(0, icons.length - 24);
     syncFolk();
@@ -566,14 +567,20 @@ export function createScene(canvas, { onCoin } = {}) {
     if ((world.counts.directpay || 0) > i) {
       const t = world.tiers.directpay || 0;
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(h.x - w * 0.36, y - hh + 12, 8, 7, 1); ctx.fill();
-      ctx.strokeStyle = ['#5a6cae', '#5a6cae', '#2f6b45', '#b06bff'][t]; ctx.lineWidth = 1;
+      ctx.strokeStyle = ['#8a8f99', '#5a6cae', '#2f6b45', '#b06bff'][t]; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(h.x - w * 0.34, y - hh + 17); ctx.lineTo(h.x - w * 0.30, y - hh + 15); ctx.stroke();
+      if (t >= 1) {                                                          // simple invoices: neat printed lines
+        ctx.strokeStyle = '#5a6cae'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(h.x - w * 0.35, y - hh + 13.5); ctx.lineTo(h.x - w * 0.29, y - hh + 13.5);
+        ctx.moveTo(h.x - w * 0.35, y - hh + 15.5); ctx.lineTo(h.x - w * 0.31, y - hh + 15.5); ctx.stroke();
+      }
       if (t >= 2) { ctx.fillStyle = '#2f6b45'; ctx.fillRect(h.x - w * 0.36 + 9, y - hh + 13, 4, 5); }   // a standing order slip
       if (t >= 3) { ctx.fillStyle = `rgba(176,107,255,${0.4 + 0.4 * Math.sin(world.t * 2 + i)})`; ctx.fillRect(h.x - w * 0.36, y - hh + 20, 8, 1.5); }
     }
     if ((world.counts.chc || 0) > i) {
       const t = world.tiers.chc || 0;
-      ctx.strokeStyle = ['#2A5EA8', '#2A5EA8', '#1f7a8c', '#0f9b8e'][t]; ctx.lineWidth = 2.5 + t * 0.5; ctx.strokeRect(h.x - 8, y - 22, 16, 22);
+      ctx.strokeStyle = ['#2A5EA8', '#3f86d6', '#1f7a8c', '#0f9b8e'][t]; ctx.lineWidth = 2.5 + t * 0.5; ctx.strokeRect(h.x - 8, y - 22, 16, 22);
+      if (t >= 1) { ctx.fillStyle = '#3f86d6'; ctx.fillRect(h.x - 8, y - 25.5, 16, 2.5); }   // complex care training: a blue header board
       if (t >= 2) { ctx.fillStyle = '#fff'; ctx.fillRect(h.x - 1.5, y - 18, 3, 8); ctx.fillRect(h.x - 4, y - 15.5, 8, 3); }  // a little cross
     }
     if ((world.counts.tech || 0) > i) {
@@ -581,6 +588,11 @@ export function createScene(canvas, { onCoin } = {}) {
       const on = 0.4 + 0.6 * Math.abs(Math.sin(world.t * (1.6 + t * 0.6) + i));
       ctx.fillStyle = [`rgba(90,200,255,${on})`, `rgba(90,200,255,${on})`, `rgba(120,240,180,${on})`, `rgba(255,190,90,${on})`][t];
       ctx.beginPath(); ctx.arc(h.x - 13, y - 27, 2.6 + t * 0.4, 0, TWO_PI); ctx.fill();
+      if (t >= 1) {                                                          // fall detectors: a pendant by the door
+        ctx.strokeStyle = `rgba(90,200,255,${on})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(h.x - 13, y - 24.5); ctx.lineTo(h.x - 13, y - 21); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(h.x - 13, y - 20, 1.6, 0, TWO_PI); ctx.fill();
+      }
       if (t >= 3) { ctx.strokeStyle = `rgba(255,190,90,${on * 0.6})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(h.x - 13, y - 27, 6, 0, TWO_PI); ctx.stroke(); }
     }
     if (world.owned.has('qual-plans')) {                                   // a care folder on the sideboard
@@ -628,18 +640,24 @@ export function createScene(canvas, { onCoin } = {}) {
     const beyond = Object.keys(world.counts).filter((id) => id.startsWith('beyond-') && world.counts[id] > 0);
     const owned = [...HORIZON, ...beyond].filter((id) => (world.counts[id] || 0) > 0);
     if (!owned.length) return;
-    const shown = owned.slice(-9);
-    const gy = pavementY() - 96;          // a skyline band well above the doors
+    // Everything you own goes on the skyline, in as many rows as it takes. Nothing is ever dropped:
+    // a building you paid for always has a light of its own up there.
     const left = 118, right = W - 20;
-    const gap = Math.min(46, (right - left) / Math.max(1, shown.length));
+    const perRow = Math.max(1, Math.floor((right - left) / 30));
+    const rows = Math.min(3, Math.ceil(owned.length / perRow));
+    const shown = owned.slice(-perRow * rows);
+    const inRow = Math.ceil(shown.length / rows);
+    const gap = Math.min(46, (right - left) / Math.max(1, inRow));
+    const gy = pavementY() - 96;          // a skyline band well above the doors
     shown.forEach((id, i) => {
       const b = BUILDINGS.find((x) => x.id === id) || { emoji: Number(id.split('-')[1]) % 2 ? '🪐' : '✨' };
-      const x = right - i * gap;
+      const row = rows - 1 - Math.floor(i / inRow);      // newest along the front row
+      const x = right - (i % inRow) * gap;
       if (x < left) return;
       const n = world.counts[id] || 0;
-      const bob = Math.sin(world.t * 0.6 + i) * 1.5;
-      ctx.font = `22px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.globalAlpha = 0.9; ctx.fillText(b.emoji, x, gy + bob); ctx.globalAlpha = 1;
+      const bob = Math.sin(world.t * 0.6 + i) * 1.5 - row * 30;
+      ctx.font = `${22 - row * 3}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.globalAlpha = 0.9 - row * 0.15; ctx.fillText(b.emoji, x, gy + bob); ctx.globalAlpha = 1;
       ctx.font = `700 9px ${UI_FONT}`;
       ctx.fillStyle = day > 0.5 ? 'rgba(58,42,36,.75)' : 'rgba(255,255,255,.85)';
       ctx.fillText(n > 999 ? `${Math.round(n / 1000)}k` : String(n), x, gy + bob + 10);
@@ -667,7 +685,12 @@ export function createScene(canvas, { onCoin } = {}) {
       const g = ctx.createRadialGradient(h.x - r * 0.3, y - r * 0.8, 2, h.x, y - r * 0.3, r); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, h.colour);
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, y, r, Math.PI, TWO_PI); ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = h.glow > 0 ? `rgba(255, 200, 80, ${0.5 + h.glow * 0.5})` : '#3a4a6a'; ctx.beginPath(); ctx.roundRect(h.x - 6, y - 18, 12, 18, [6, 6, 0, 0]); ctx.fill();
+      const podDoor = ['#3a4a6a', '#4a5c80', '#2f5d46', '#5a4a86'][world.tiers.client || 0];
+      ctx.fillStyle = h.glow > 0 ? `rgba(255, 200, 80, ${0.5 + h.glow * 0.5})` : podDoor; ctx.beginPath(); ctx.roundRect(h.x - 6, y - 18, 12, 18, [6, 6, 0, 0]); ctx.fill();
+      if ((world.tiers.client || 0) >= 1) { ctx.fillStyle = '#cfe6ff'; ctx.fillRect(h.x - 4, y - 16, 8, 1.5); }                 // care plans, pinned inside the hatch
+      if ((world.tiers.client || 0) >= 2) { ctx.fillStyle = '#6fa582'; ctx.beginPath(); ctx.arc(h.x - r * 0.55, y - 3, 3, 0, TWO_PI); ctx.arc(h.x + r * 0.55, y - 3, 3, 0, TWO_PI); ctx.fill(); }
+      if ((world.tiers.client || 0) >= 3) { ctx.fillStyle = '#E5A93B'; ctx.fillRect(h.x - 3, y - 22, 6, 3); }
+      if (visited) drawResident(h.x, y);
       ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(h.x, y - r); ctx.lineTo(h.x, y - r - 12); ctx.stroke();
       ctx.fillStyle = `rgba(255,80,80,${0.5 + 0.5 * Math.sin(world.t * 4 + h.x)})`; ctx.beginPath(); ctx.arc(h.x, y - r - 13, 2.5, 0, TWO_PI); ctx.fill();
     } else {
@@ -754,7 +777,19 @@ export function createScene(canvas, { onCoin } = {}) {
     ctx.fillStyle = 'rgba(200,230,255,.9)'; ctx.fillRect(-8, -14, 7, 6); ctx.fillRect(2, -14, 7, 6);
     ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(-12, 7, 4, 0, TWO_PI); ctx.arc(12, 7, 4, 0, TWO_PI); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = `700 7px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('CARE', 0, 2);
-    if (world.tiers.car >= 1) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-16, -6, 12, 5, 1); ctx.fill(); ctx.fillStyle = world.sign; ctx.font = `700 4px ${UI_FONT}`; ctx.fillText('MONTEITH', -10, -2.2); }
+    if (world.tiers.car >= 1) {                                   // sat nav: a lit screen on the dash
+      ctx.fillStyle = `rgba(120,220,180,${0.6 + 0.4 * Math.sin(world.t * 2 + c.x)})`;
+      ctx.beginPath(); ctx.roundRect(-3, -13.5, 5, 4, 1); ctx.fill();
+    }
+    if (world.tiers.car >= 2) {                                   // a magnetic door sign on the side
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-16, -6, 12, 5, 1); ctx.fill();
+      ctx.fillStyle = world.sign; ctx.font = `700 4px ${UI_FONT}`; ctx.fillText('MONTEITH', -10, -2.2);
+    }
+    if (world.tiers.car >= 3) {                                   // the electric fleet: green flash and a plug
+      ctx.fillStyle = 'rgba(110,220,160,.55)'; ctx.beginPath(); ctx.roundRect(-20, 2, 40, 4, 2); ctx.fill();
+      ctx.fillStyle = '#2f6b45'; ctx.beginPath(); ctx.roundRect(13, -5, 4, 5, 1); ctx.fill();
+      ctx.fillStyle = '#eafff2'; ctx.fillRect(14, -3.5, 2, 2);
+    }
     if (world.owned.has('disc-mileage')) { ctx.fillStyle = '#5ac8a0'; ctx.fillRect(4, -13, 4, 3); }
     if (day < 0.5) { ctx.fillStyle = `rgba(255, 240, 180, ${(0.5 - day) * 1.6})`; ctx.beginPath(); ctx.moveTo(20, -4); ctx.lineTo(48, -12); ctx.lineTo(48, 4); ctx.closePath(); ctx.fill(); }
     ctx.restore();

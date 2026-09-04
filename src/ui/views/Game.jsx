@@ -44,12 +44,26 @@ function fmtPaybackAs(seconds, lead) {
 }
 
 /** Why something shows no payback time – never "saves a job" unless it really does. */
-function noPaybackReason(u, active) {
-  if (u.kind === 'conditional') return active ? 'no extra income just now' : `only pays ${u.label}`;
+function noPaybackReason(u, share) {
+  if (u.kind === 'conditional') return share >= 0.999 ? 'no extra income just now' : `pays more ${u.label}`;
   if (u.kind === 'click' || u.kind === 'clickpct') return 'makes your own visits worth more';
   if (u.kind === 'discount') return 'makes them cheaper, not faster';
   if (u.kind === 'collect' || u.kind === 'offline') return 'saves you a job';
   return 'no extra income just now';
+}
+
+/** "+18%" – how much more would be coming in, for the face of a tile. Empty when it earns nothing. */
+function gainPct(u) {
+  if (!(u.gain > 0) || !(u.income > 0)) return '';
+  const pct = (u.gain / u.income) * 100;
+  return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : `+${pct.toFixed(1)}%`;
+}
+
+/** How much more you would earn, in plain words, for the top of a tooltip. */
+function gainLine(u) {
+  if (!(u.gain > 0) || !(u.income > 0)) return '';
+  const pct = (u.gain / u.income) * 100;
+  return `${pct >= 1 ? `+${Math.round(pct)}%` : `+${pct.toFixed(1)}%`} more coming in. `;
 }
 
 /** Restart a CSS animation on an element without going through state. */
@@ -213,7 +227,10 @@ export function Game() {
 
   function doVisit(x, y, rect, house = null) {
     const scene = sceneRef.current;
-    const index = house !== null ? house : (scene ? scene.houseAt(x) : 0);
+    const count = scene ? scene.houseCount() : 1;
+    // Tapping the street finds the nearest door that is ready, so a tap is never wasted. Only when
+    // every door on the street has just been seen does anybody get a "give them a minute".
+    const index = house !== null ? house : G.nearestReadyHouse(s, count, scene ? scene.houseAt(x) : 0, Date.now());
     const earned = mutate((st) => G.click(st, Date.now(), index));
     if (!earned) { scene?.refuse(index); return; }
     scene?.playerVisit(x, y, frenzy ? 6 : 3, index);
@@ -416,11 +433,11 @@ export function Game() {
             <div class="upgrade-row">
               {upgrades.map((u) => (
                 <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
-                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' && u.test(s, metrics))}`} data-test={`upgrade-${u.id}`}>
+                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${gainLine(u)}${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
-                  <span class="upgrade-pay">{Number.isFinite(u.payback) ? fmtSeconds(u.payback) : (u.kind === 'conditional' ? 'when it fits' : u.kind === 'discount' ? 'cheaper' : u.kind === 'click' || u.kind === 'clickpct' ? 'your visits' : 'saves a job')}</span>
+                  <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'when it fits' : u.kind === 'discount' ? 'cheaper' : u.kind === 'click' || u.kind === 'clickpct' ? 'your visits' : 'saves a job')}</span>
                 </button>
               ))}
             </div>

@@ -82,11 +82,12 @@ export const LEVELS = [
   { level: 9, name: 'Mars', emoji: '🔴', threshold: 3e23, tagline: 'Red planet. Warm hearts. Excellent biscuits.' },
 ];
 
-/** Stages beyond the table keep going forever, 100 times harder each time. */
+/** Stages beyond the table keep going forever, and each one is 200 times the last – the same
+ * step up as the stages in the table, so the pace never suddenly quickens at the end. */
 export function levelInfo(level) {
   if (level < LEVELS.length) return LEVELS[level];
   const n = level - LEVELS.length + 1;
-  return { level, name: `Star system ${n}`, emoji: '✨', threshold: LEVELS[LEVELS.length - 1].threshold * Math.pow(20, n), tagline: 'Further than anyone has ever brought a hot meal.' };
+  return { level, name: `Star system ${n}`, emoji: '✨', threshold: LEVELS[LEVELS.length - 1].threshold * Math.pow(200, n), tagline: 'Further than anyone has ever brought a hot meal.' };
 }
 
 /** How good the service is judged to be. Derived from what you invest in, never from luck. */
@@ -117,7 +118,7 @@ export const PERKS = [
 // Every upgrade has a `kind` the engine knows how to fold in, and a `question` – the one line that
 // says why you might buy this one before the others.
 
-const TIER_AT = [1, 20, 80];            // how many you must own for each tier to appear
+const TIER_AT = [1, 30, 150];           // how many you must own for each tier to appear
 const TIER_COST = [10, 250, 5000];      // times the building's base cost
 const TIER_WHERE = {
   carer: 'on every carer', client: 'at every door you look after', keysafe: 'on every key safe',
@@ -168,23 +169,29 @@ for (const b of BUILDINGS) {
 
 /** Synergies: one thing quietly making another thing better. Capped, so nothing runs away. */
 const SYNERGIES = [
-  { id: 'syn-keysafe-carer', name: 'Keys in the box', emoji: '🔑', from: 'keysafe', to: 'carer', per: 0.015, cap: 1.5, cost: 3000, unlock: (s) => (s.buildings.keysafe || 0) >= 5, blurb: 'Every key safe makes every carer 1.5% better, up to +150%.', question: 'Pays off if you keep fitting key safes – dead weight if you do not.' },
-  { id: 'syn-car-carer', name: 'Wheels under everyone', emoji: '🚗', from: 'car', to: 'carer', per: 0.02, cap: 2, cost: 90000, unlock: (s) => (s.buildings.car || 0) >= 5, blurb: 'Every care car makes every carer 2% better, up to +200%.', question: 'Turns a fleet into a workforce boost – only if the fleet keeps growing.' },
-  { id: 'syn-package-client', name: 'Everything written down', emoji: '📋', from: 'package', to: 'client', per: 0.02, cap: 2, cost: 40000, unlock: (s) => (s.buildings.package || 0) >= 5, blurb: 'Every care package makes every person you look after 2% better cared for, up to +200%.', question: 'The work-side twin of the key safe deal: which side are you growing?' },
-  { id: 'syn-coord-carer', name: 'Somebody holding the rota', emoji: '🗂️', from: 'coordinator', to: 'carer', per: 0.03, cap: 3, cost: 2.4e6, unlock: (s) => (s.buildings.coordinator || 0) >= 3, blurb: 'Every coordinator makes every carer 3% better, up to +300%.', question: 'The strongest carer boost in the game, if you can afford coordinators.' },
-  { id: 'syn-council-package', name: 'Volume from the council', emoji: '🏛️', from: 'council', to: 'package', per: 0.04, cap: 3, cost: 9e6, unlock: (s) => (s.buildings.council || 0) >= 3, blurb: 'Every council contract makes every care package 4% better, up to +300%.', question: 'Rewards going wide on contracts rather than deep on people.' },
+  { id: 'syn-keysafe-carer', name: 'Keys in the box', emoji: '🔑', from: 'keysafe', to: '*team', per: 0.012, cap: 1.5, cost: 3000, unlock: (s) => (s.buildings.keysafe || 0) >= 5, blurb: 'Every key safe makes the whole team 1.2% better, up to +150%.', question: 'Pays off if you keep fitting key safes – dead weight if you do not.' },
+  { id: 'syn-car-carer', name: 'Wheels under everyone', emoji: '🚗', from: 'car', to: '*team', per: 0.015, cap: 2, cost: 90000, unlock: (s) => (s.buildings.car || 0) >= 5, blurb: 'Every care car makes the whole team 1.5% better, up to +200%.', question: 'Turns a fleet into a workforce boost – only if the fleet keeps growing.' },
+  { id: 'syn-package-client', name: 'Everything written down', emoji: '📋', from: 'package', to: '*work', per: 0.015, cap: 2, cost: 40000, unlock: (s) => (s.buildings.package || 0) >= 5, blurb: 'Every care package makes all of your work 1.5% better, up to +200%.', question: 'The work-side twin of the key safe deal: which side are you growing?' },
+  { id: 'syn-coord-carer', name: 'Somebody holding the rota', emoji: '🗂️', from: 'coordinator', to: '*team', per: 0.025, cap: 3, cost: 2.4e6, unlock: (s) => (s.buildings.coordinator || 0) >= 3, blurb: 'Every coordinator makes the whole team 2.5% better, up to +300%.', question: 'The strongest team boost in the game, if you can afford coordinators.' },
+  { id: 'syn-council-package', name: 'Volume from the council', emoji: '🏛️', from: 'council', to: '*work', per: 0.03, cap: 3, cost: 9e6, unlock: (s) => (s.buildings.council || 0) >= 3, blurb: 'Every council contract makes all of your work 3% better, up to +300%.', question: 'Rewards going wide on contracts rather than deep on people.' },
   { id: 'syn-super-team', name: 'Steady hands everywhere', emoji: '🦺', from: 'supervisor', to: '*team', per: 0.01, cap: 1.5, cost: 6e7, unlock: (s) => (s.buildings.supervisor || 0) >= 3, blurb: 'Every field supervisor makes the whole team 1% better, up to +150%.', question: 'Lifts every team rung at once – the first true stacking upgrade.' },
   { id: 'syn-office-all', name: 'A branch behind you', emoji: '🏢', from: 'office', to: '*', per: 0.008, cap: 1.2, cost: 2.4e9, unlock: (s) => (s.buildings.office || 0) >= 3, blurb: 'Every branch office makes everything 0.8% better, up to +120%.', question: 'Small per office, but it touches every single thing you own.' },
   { id: 'syn-academy-team', name: 'Everyone trained properly', emoji: '🎓', from: 'academy', to: '*team', per: 0.02, cap: 3, cost: 9e10, unlock: (s) => (s.buildings.academy || 0) >= 3, blurb: 'Every training academy makes the whole team 2% better, up to +300%.', question: 'The late-game team engine. Needs academies to be worth anything.' },
   { id: 'syn-chc-nurse', name: 'Clinical confidence', emoji: '🩺', from: 'chc', to: '*work', per: 0.02, cap: 3, cost: 3.4e12, unlock: (s) => (s.buildings.chc || 0) >= 5, blurb: 'Every NHS-funded package makes all of your work 2% better, up to +300%.', question: 'Lifts the whole work side at once, if you have gone down the NHS road.' },
 ];
 
+/** How many bits of kit are out on the patch, and how many make the patch feel looked after. */
+export const KIT_FOR_TIDY = 12;
+const kitCount = (s) => s.upgrades.filter((id) => /-t\d+$/.test(id)).length;
+
 /** Bonuses that only apply while the board is in a certain state. Keep an eye on them. */
 const CONDITIONALS = [
-  { id: 'cond-covered', name: 'Nobody is rushed', emoji: '🫶', mult: 1.3, cost: 12000, archetype: 'conditional', test: (s, m) => m.team >= m.work, label: 'while your team can cover the work', blurb: 'While your team is at least as big as the work, everything earns 30% more.', question: 'Rewards staffing ahead of the work – the opposite of chasing volume.', unlock: (s) => s.runEarned >= 6000 },
-  { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.5, cost: 3e6, archetype: 'conditional', test: (s, m) => m.team >= m.work * 1.25, label: 'while your team is a quarter bigger than the work', blurb: 'While your team is 25% bigger than the work, everything earns 50% more.', question: 'Deliberate slack: expensive to hold, and the biggest steady bonus there is.', unlock: (s) => s.upgrades.includes('cond-covered') },
-  { id: 'cond-tidy', name: 'A tidy patch', emoji: '🔑', mult: 1.25, cost: 250000, archetype: 'conditional', test: (s) => (s.buildings.keysafe || 0) >= (s.buildings.client || 0) * 0.75, label: 'while three doors in four have a key safe', blurb: 'While three doors in four have a key safe, everything earns 25% more.', question: 'Makes key safes worth buying long after their own income has faded.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
-  { id: 'cond-wellled', name: 'Well led', emoji: '🌟', mult: 1.35, cost: 4e8, archetype: 'conditional', test: (s, m) => m.ratingIndex >= 2, label: 'while you are rated Outstanding', blurb: 'While your rating is Outstanding, everything earns 35% more.', question: 'Turns the rating from a nice badge into a reason to keep training people.', unlock: (s) => (s.buildings.academy || 0) >= 1 },
+  // `share` returns 0..1: how much of the bonus is paying. It slides rather than switching off, so
+  // taking on more work can never make you poorer, only dilute a bonus you were holding.
+  { id: 'cond-covered', name: 'Nobody is rushed', emoji: '🫶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / m.work)) : 1), label: 'the more of the work your team can cover', blurb: 'Everything earns up to 30% more, in full once your team can cover the work.', question: 'Rewards staffing ahead of the work – the opposite of chasing volume.', unlock: (s) => s.runEarned >= 6000 },
+  { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.4, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / (m.work * 1.25))) : 1), label: 'in full once your team is a quarter bigger than the work', blurb: 'Everything earns up to 40% more, in full once your team is 25% bigger than the work.', question: 'Deliberate slack: expensive to hold, and the biggest steady bonus there is.', unlock: (s) => s.upgrades.includes('cond-covered') },
+  { id: 'cond-tidy', name: 'A tidy patch', emoji: '🧰', mult: 1.25, cost: 250000, archetype: 'conditional', share: (s) => Math.min(1, kitCount(s) / KIT_FOR_TIDY), label: 'the more of your kit is out on the patch', blurb: 'Everything earns up to 25% more, in full once you have twelve bits of kit out on the patch.', question: 'Makes every small bit of kit count twice: once for its own rung, and once for the whole patch.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
+  { id: 'cond-wellled', name: 'Well led', emoji: '🌟', mult: 1.35, cost: 4e8, archetype: 'conditional', share: (s, m) => (m.ratingIndex >= 2 ? 1 : 0), label: 'while you are rated Outstanding', blurb: 'While your rating is Outstanding, everything earns 35% more.', question: 'Turns the rating from a nice badge into a reason to keep training people.', unlock: (s) => (s.buildings.academy || 0) >= 1 },
 ];
 
 /** The tenth of anything doubles it. These make that step bigger still. */
@@ -303,7 +310,7 @@ const VISUALS = {
   'syn-chc-nurse': 'Nurse-led visits, in NHS blue.',
   'cond-covered': 'A green tick over the office whenever it is switched on.',
   'cond-continuity': 'Carers keep going back to the same doors.',
-  'cond-tidy': 'A key safe on every single door.',
+  'cond-tidy': 'The green tick over the office counts your kit in.',
   'cond-wellled': 'The rating sticker in the office window glows.',
   'mile-1': 'Bunting goes up along the office.',
   'mile-2': 'More bunting, and a long-service banner.',
@@ -345,7 +352,7 @@ const VISUALS = {
 export const UPGRADE_ICONS = {
   'syn-keysafe-carer': '🔑', 'syn-car-carer': '🚗', 'syn-package-client': '📋', 'syn-coord-carer': '📱',
   'syn-council-package': '🏛️', 'syn-super-team': '🦺', 'syn-office-all': '🏢', 'syn-academy-team': '🎓', 'syn-chc-nurse': '🩺',
-  'cond-covered': '🫶', 'cond-continuity': '🤝', 'cond-tidy': '🔑', 'cond-wellled': '🌟',
+  'cond-covered': '🫶', 'cond-continuity': '🤝', 'cond-tidy': '🧰', 'cond-wellled': '🌟',
   'mile-1': '🎉', 'mile-2': '🎖️',
   'val-private': '💷', 'val-fair': '⚖️', 'val-specialist': '🧠', 'val-nhs': '🩺', 'val-reputation': '💖', 'val-national': '🏛️',
   'click-1': '☕', 'click-2': '🚶', 'click-3': '🤲', 'click-4': '🌟', 'click-5': '💐',
@@ -365,6 +372,68 @@ for (const u of [...UPGRADES, ...BRANCH_OPTIONS]) {
 }
 
 export const UPGRADES_BY_ID = new Map([...UPGRADES, ...BRANCH_OPTIONS].map((u) => [u.id, u]));
+
+/**
+ * The shop never runs out. Every stage past the table brings its own rung of kit, a better rate and
+ * a lift for everything, worked out from the same shape as the ones in the table – so however far
+ * you go there is always something worth saving up for.
+ */
+const FAR_KIT = ['Warm boxes', 'Quiet engines', 'Deep-space kettles'];
+const FAR_CACHE = new Map();
+export function farUpgrades(n) {
+  if (FAR_CACHE.has(n)) return FAR_CACHE.get(n);
+  const b = beyondBuilding(n + 9);
+  const out = [];
+  FAR_KIT.forEach((name, i) => {
+    out.push({
+      id: `${b.id}-t${i + 1}`, name: `${name} ${n}`, emoji: b.emoji, kind: 'building', building: b.id,
+      cost: b.baseCost * TIER_COST[i], archetype: 'kit', icon: b.emoji,
+      blurb: `${b.plural} are twice as good.`,
+      visual: `${name} on every ${b.name.toLowerCase()}, counted on the horizon.`,
+      question: `Doubles a rung you already own – worth it only if you own a lot of ${b.plural.toLowerCase()}.`,
+      unlock: (s) => (s.buildings[b.id] || 0) >= TIER_AT[i],
+    });
+  });
+  out.push({
+    id: `far-value-${n}`, name: `A fairer rate again`, emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
+    cost: b.baseCost * 40, icon: '💷', blurb: 'Every visit is worth twice as much.',
+    visual: 'The coins coming into the office get bigger again.',
+    question: 'A flat doubling of everything a visit is worth. Never a wasted pound.',
+    unlock: (s) => (s.buildings[b.id] || 0) >= 5,
+  });
+  out.push({
+    id: `far-all-${n}`, name: `${b.name}s, everywhere`, emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
+    cost: b.baseCost * 300, icon: '✨', blurb: 'Everything you own earns 80% more.',
+    visual: 'Another light joins the ones on the horizon, and the office noticeboard fills up.',
+    question: 'The biggest single number this far out, and it needs the rung underneath it.',
+    unlock: (s) => s.upgrades.includes(`far-value-${n}`),
+  });
+  FAR_CACHE.set(n, out);
+  return out;
+}
+
+/** Everything buyable at a stage: the table, plus the endless rungs past it. */
+export function upgradesFor(level) {
+  if (level < LEVELS.length) return UPGRADES;
+  const out = [...UPGRADES];
+  for (let n = 1; n <= level - LEVELS.length + 1; n++) out.push(...farUpgrades(n));
+  return out;
+}
+
+/** Look up any upgrade by id, including the endless ones that are worked out on demand. */
+export function upgradeById(id) {
+  const known = UPGRADES_BY_ID.get(id);
+  if (known) return known;
+  const far = /^beyond-(\d+)-t\d$|^far-(?:value|all)-(\d+)$/.exec(id);
+  if (!far) return undefined;
+  return farUpgrades(Number(far[1] || far[2])).find((u) => u.id === id);
+}
+
+/** The little icon an upgrade pins on the office noticeboard. */
+export function upgradeIcon(id) {
+  const u = upgradeById(id);
+  return UPGRADE_ICONS[id] || (u && u.icon) || null;
+}
 
 /** Achievements. Each one earned adds 1% to everything – the team's morale. */
 export const ACHIEVEMENTS = [
@@ -412,6 +481,17 @@ export const ACHIEVEMENTS = [
   { id: 'all-upgrades', name: 'Fully kitted', emoji: '🧰', blurb: 'Own 25 upgrades in one run.', test: (s) => s.upgrades.length >= 25 },
   { id: 'welcome-back', name: 'Welcome back', emoji: '🛏️', blurb: 'Come back to find the team has been busy.', test: (s) => s.offlineReturns >= 1 },
   { id: 'night-owl', name: 'Night owl', emoji: '🦉', blurb: 'Play after ten at night.', test: (s) => s.playedLate },
+  { id: 'team-500', name: 'Five hundred hands', emoji: '🖐️', blurb: 'Have 500 carers.', test: (s) => (s.buildings.carer || 0) >= 500 },
+  { id: 'street-1000', name: 'A thousand front doors', emoji: '🏙️', blurb: 'Look after 1,000 people.', test: (s) => (s.buildings.client || 0) >= 1000 },
+  { id: 'safes-500', name: 'Keys for everybody', emoji: '🗝️', blurb: 'Fit 500 key safes.', test: (s) => (s.buildings.keysafe || 0) >= 500 },
+  { id: 'kit-full', name: 'Everything upgraded', emoji: '🧰', blurb: 'Own 60 upgrades in one run.', test: (s) => s.upgrades.length >= 60 },
+  { id: 'earn-1qa', name: 'A quadrillion', emoji: '💫', blurb: 'Earn £1 quadrillion in one run.', test: (s) => s.runEarned >= 1e15 },
+  { id: 'earn-1sx', name: 'A sextillion', emoji: '🌠', blurb: 'Earn £1 sextillion in one run.', test: (s) => s.runEarned >= 1e21 },
+  { id: 'expand-9', name: 'Red planet', emoji: '🔴', blurb: 'Reach Mars.', test: (s) => s.level >= 9 },
+  { id: 'expand-12', name: 'Further still', emoji: '✨', blurb: 'Go three stages past Mars.', test: (s) => s.level >= 12 },
+  { id: 'stars-250', name: 'A whole sky', emoji: '🌌', blurb: 'Earn 250 Legacy Stars.', test: (s) => s.starsEarned >= 250 },
+  { id: 'perks-all', name: 'Every last perk', emoji: '🎁', blurb: 'Own every Legacy perk.', test: (s) => s.perks.length >= 8 },
+  { id: 'beyond', name: 'Past the starship', emoji: '🪐', blurb: 'Buy something past the care starship.', test: (s) => Object.keys(s.buildings).some((id) => id.startsWith('beyond-')) },
 ];
 export const ACHIEVEMENTS_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
 
