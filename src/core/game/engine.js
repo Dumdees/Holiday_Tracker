@@ -12,7 +12,7 @@ import {
   BUILDINGS, BUILDINGS_BY_ID, beyondBuilding, BEYOND_PER_LEVEL, UPGRADES, UPGRADES_BY_ID, upgradesFor, upgradeById,
   BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
   ACHIEVEMENTS, PERKS, PRISMATIC_EFFECTS, CARD_EFFECTS, COST_GROWTH, MILESTONES, RATINGS,
-  RATING_WEIGHTS, RATING_UPGRADE_POINTS, DAY_PARTS, levelInfo, FALLBACK_NAMES,
+  RATING_WEIGHTS, RATING_UPGRADE_POINTS, DAY_PARTS, levelInfo, FALLBACK_NAMES, legacyPerk,
 } from './data.js';
 
 import { fmtMoney } from './format.js';
@@ -227,6 +227,7 @@ export function ratingScore(state) {
   let score = 0;
   for (const [id, weight] of Object.entries(RATING_WEIGHTS)) score += (state.buildings[id] || 0) * weight;
   for (const u of ownedUpgrades(state)) if (u.quality) score += RATING_UPGRADE_POINTS;
+  if (state.perks && state.perks.includes('warmwelcome')) score += 6;   // a name people already know
   return score;
 }
 
@@ -288,6 +289,7 @@ export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state
   mult *= Math.pow(STAGE_BONUS, state.level);   // every stage you have reached, for ever
   mult *= 1 + 0.01 * state.achievements.length;
   mult *= starBonus(state.starsEarned);
+  mult *= Math.pow(1.3, legacyPerks(state));
   mult *= 1 + 0.03 * (state.prismaticHires ? state.prismaticHires.length : 0);
   for (const e of state.effects) if (e.prodMult && e.until > now) mult *= e.prodMult;
   return mult;
@@ -631,7 +633,8 @@ export function canExpand(state) {
 }
 
 export function starsOnExpand(state) {
-  return Math.max(0, starsForLifetime(state.lifetimeEarned) - state.starsEarned);
+  const share = state.perks && state.perks.includes('founders') ? 1.25 : 1;
+  return Math.max(0, Math.floor((starsForLifetime(state.lifetimeEarned) - state.starsEarned) * share));
 }
 
 /** Apply the starting bonuses from perks to a fresh run. */
@@ -666,8 +669,21 @@ export function expand(state, now = Date.now()) {
   return { gained, level: state.level, kit };
 }
 
+/** How many of the endless "the name goes further" perks are paid for. */
+function legacyPerks(state) {
+  return (state.perks || []).filter((id) => /^legacy-\d+$/.test(id)).length;
+}
+
+/** Any perk by id, including the endless ones worked out on demand. */
+export function perkById(id) {
+  const known = PERKS_BY_ID.get(id);
+  if (known) return known;
+  const m = /^legacy-(\d+)$/.exec(id);
+  return m ? legacyPerk(Number(m[1])) : undefined;
+}
+
 export function buyPerk(state, id) {
-  const def = PERKS_BY_ID.get(id);
+  const def = perkById(id);
   if (!def || state.perks.includes(id) || starsAvailable(state) < def.cost) return false;
   state.starsSpent += def.cost;
   state.perks.push(id);
@@ -768,7 +784,7 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
   if (hour >= 22 || hour < 5) state.playedLate = true;
   const after = boardMetrics(state);
   for (const a of ACHIEVEMENTS) {
-    if (!state.achievements.includes(a.id) && a.test(state, after)) {
+    if (!state.achievements.includes(a.id) && a.test(state, after, now)) {
       state.achievements.push(a.id);
       addLog(state, a.emoji, `Badge earned: ${a.name}`, now);
       events.push({ kind: 'achievement', achievement: a });
@@ -790,13 +806,14 @@ export function teamNames(state, names) {
   return out;
 }
 
-export function achievementList(state) {
+export function achievementList(state, now = Date.now()) {
   const m = boardMetrics(state);
-  return ACHIEVEMENTS.map((a) => ({ ...a, done: state.achievements.includes(a.id), close: !state.achievements.includes(a.id) && a.test(state, m) }));
+  return ACHIEVEMENTS.map((a) => ({ ...a, done: state.achievements.includes(a.id), close: !state.achievements.includes(a.id) && a.test(state, m, now) }));
 }
 
 export function perkList(state) {
-  return PERKS.map((p) => ({ ...p, owned: state.perks.includes(p.id), affordable: starsAvailable(state) >= p.cost }));
+  const next = legacyPerk(legacyPerks(state) + 1);      // only the next endless one is ever offered
+  return [...PERKS, next].map((p) => ({ ...p, owned: state.perks.includes(p.id), affordable: starsAvailable(state) >= p.cost }));
 }
 
 /** The conditional bonuses you own, and whether each is switched on right now. */

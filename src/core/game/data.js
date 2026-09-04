@@ -114,7 +114,21 @@ export const PERKS = [
   { id: 'nightshift', name: 'Night team', emoji: '🌙', cost: 26, blurb: 'Earn at full speed while the game is closed, instead of half.' },
   { id: 'legend', name: 'Living legend', emoji: '🏆', cost: 38, blurb: 'Your own visits are ten times stronger.' },
   { id: 'momentum', name: 'Momentum', emoji: '⚡', cost: 55, blurb: 'Start each run with 25 carers, 25 people to look after and 5 cars.' },
+  { id: 'warmwelcome', name: 'A name people know', emoji: '💛', cost: 80, blurb: 'Every new run starts already rated Good.' },
+  { id: 'founders', name: 'Founder’s share', emoji: '🕰️', cost: 120, blurb: 'Every hand-over is worth a quarter more Legacy Stars.' },
 ];
+
+/**
+ * And then it keeps going. Each one of these costs twice the last, so there is always something
+ * left to save Stars for, however many hand-overs you have behind you.
+ */
+export function legacyPerk(n) {
+  return {
+    id: `legacy-${n}`, emoji: '🌟', cost: 200 * Math.pow(2, n - 1), endless: true,
+    name: n === 1 ? 'The name goes further' : `The name goes further (${n})`,
+    blurb: 'Everything earns 30% more, for ever.',
+  };
+}
 
 // ---------- Upgrades ----------
 // Every upgrade has a `kind` the engine knows how to fold in, and a `question` – the one line that
@@ -501,7 +515,15 @@ export const ACHIEVEMENTS = [
   { id: 'expand-9', name: 'Red planet', emoji: '🔴', blurb: 'Reach Mars.', test: (s) => s.level >= 9 },
   { id: 'expand-12', name: 'Further still', emoji: '✨', blurb: 'Go three stages past Mars.', test: (s) => s.level >= 12 },
   { id: 'stars-250', name: 'A whole sky', emoji: '🌌', blurb: 'Earn 250 Legacy Stars.', test: (s) => s.starsEarned >= 250 },
-  { id: 'perks-all', name: 'Every last perk', emoji: '🎁', blurb: 'Own every Legacy perk.', test: (s) => s.perks.length >= 8 },
+  { id: 'perks-all', name: 'Every last perk', emoji: '🎁', blurb: 'Own all ten Legacy perks.', test: (s) => s.perks.filter((id) => !/^legacy-/.test(id)).length >= 10 },
+  { id: 'legacy-3', name: 'The name goes further', emoji: '🌟', blurb: 'Buy three of the endless Legacy perks.', test: (s) => s.perks.filter((id) => /^legacy-/.test(id)).length >= 3 },
+  { id: 'expand-16', name: 'Out past the last light', emoji: '🌌', blurb: 'Reach the seventh stage past Mars.', test: (s) => s.level >= 16 },
+  { id: 'expand-20', name: 'No end to it', emoji: '♾️', blurb: 'Reach the eleventh stage past Mars.', test: (s) => s.level >= 20 },
+  { id: 'earn-1no', name: 'A nonillion', emoji: '🪐', blurb: 'Earn £1 nonillion in one run.', test: (s) => s.runEarned >= 1e30 },
+  { id: 'clicks-25k', name: 'Still on the round', emoji: '🤲', blurb: 'Do 25,000 visits yourself.', test: (s) => s.clicks >= 25000 },
+  { id: 'far-kit', name: 'Kitted out past Mars', emoji: '✨', blurb: 'Buy kit for four of the far rungs.', test: (s) => s.upgrades.filter((id) => /^beyond-\d+-t/.test(id)).length >= 4 },
+  { id: 'stars-500', name: 'Half a thousand stars', emoji: '⭐', blurb: 'Earn 500 Legacy Stars.', test: (s) => s.starsEarned >= 500 },
+  { id: 'long-haul', name: 'Twelve hours in', emoji: '🕰️', blurb: 'Keep the same business going for twelve hours.', test: (s, m, now = Date.now()) => now - s.startedAt >= 12 * 3600e3 },
   { id: 'beyond', name: 'Past the starship', emoji: '🪐', blurb: 'Buy something past the care starship.', test: (s) => Object.keys(s.buildings).some((id) => id.startsWith('beyond-')) },
 ];
 export const ACHIEVEMENTS_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
