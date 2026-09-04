@@ -149,11 +149,19 @@ export function collectionMode(state) {
   return 'manual';
 }
 
-/** Everything you own, whether bought or chosen as a branch. */
+/**
+ * Everything you own, whether bought or chosen as a branch. The list is worked out many times a
+ * second, so the last answer is kept and handed back while the same things are owned.
+ */
+let ownedCache = { upgrades: null, branches: null, n: -1, list: [] };
 function ownedUpgrades(state) {
+  const branches = state.branches || null;
+  const n = state.upgrades.length + (branches ? Object.keys(branches).length : 0);
+  if (ownedCache.upgrades === state.upgrades && ownedCache.branches === branches && ownedCache.n === n) return ownedCache.list;
   const out = [];
   for (const id of state.upgrades) { const u = upgradeById(id); if (u) out.push(u); }
-  for (const id of Object.values(state.branches || {})) { const u = upgradeById(id); if (u) out.push(u); }
+  for (const id of Object.values(branches || {})) { const u = upgradeById(id); if (u) out.push(u); }
+  ownedCache = { upgrades: state.upgrades, branches, n, list: out };
   return out;
 }
 
