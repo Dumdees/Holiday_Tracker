@@ -269,6 +269,56 @@ describe('the big choices', () => {
   });
 });
 
+describe('doing the visits yourself', () => {
+  test('a tap always finds a door that is ready', () => {
+    const s = g.newGame(T0);
+    s.buildings = { client: 6, carer: 2 };
+    assert.equal(g.nearestReadyHouse(s, 6, 3, T0), 3, 'the door you tapped, when it is ready');
+    g.click(s, T0, 3);
+    assert.equal(g.nearestReadyHouse(s, 6, 3, T0 + 100), 2, 'the next one along when it is not');
+    g.click(s, T0, 2);
+    assert.equal(g.nearestReadyHouse(s, 6, 3, T0 + 100), 4, 'and the other side after that');
+    for (let i = 0; i < 6; i++) g.click(s, T0, i);
+    assert.equal(g.nearestReadyHouse(s, 6, 3, T0 + 100), 3, 'when the whole street has just been seen, the tap is refused where you tapped');
+  });
+
+  test('your own visits keep a share of the business, however big it gets', () => {
+    const rich = { ...board({ carer: 900, client: 900, keysafe: 400 }), upgrades: [] };
+    const plain = g.clickValue(rich, T0);
+    const withShare = g.clickValue({ ...rich, upgrades: ['click-3', 'click-5', 'click-6'] }, T0);
+    const income = g.productionPerSecond(rich, T0);
+    assert.ok(withShare - plain > income * 0.085, 'the three shares come to at least 8.5% of everything, per visit');
+    assert.ok(g.clickValue({ ...rich, branches: { growth: 'grow-rates' } }, T0) > plain * 3, 'and better rates trebles your own visits on top');
+  });
+});
+
+describe('legacy perks', () => {
+  test('there is always one more to save for, and each costs twice the last', () => {
+    const s = g.newGame(T0);
+    s.starsEarned = 1000;
+    const first = g.perkList(s).find((p) => p.id.startsWith('legacy-'));
+    assert.equal(first.id, 'legacy-1');
+    assert.equal(first.cost, 200);
+    assert.ok(g.buyPerk(s, 'legacy-1'));
+    const before = g.globalMultiplier({ ...board(), perks: [] }, T0);
+    const after = g.globalMultiplier({ ...board(), perks: ['legacy-1', 'legacy-2'] }, T0);
+    assert.ok(Math.abs(after / before - 1.69) < 1e-9, 'two of them is 30% twice over');
+    const next = g.perkList(s).find((p) => p.id.startsWith('legacy-') && !p.owned);
+    assert.equal(next.id, 'legacy-2');
+    assert.equal(next.cost, 400);
+    assert.equal(g.perkList(s).filter((p) => p.id.startsWith('legacy-') && !p.owned).length, 1, 'only ever the next one is offered');
+  });
+
+  test('a name people know starts a run rated Good, and a founder’s share is worth a quarter more', () => {
+    const fresh = { ...g.newGame(T0), perks: ['warmwelcome'] };
+    assert.equal(g.ratingIndex(fresh), 1, 'Good from the first minute');
+    const s = { ...g.newGame(T0), lifetimeEarned: 1e9 };
+    const plain = g.starsOnExpand(s);
+    const founder = g.starsOnExpand({ ...s, perks: ['founders'] });
+    assert.equal(founder, Math.floor(plain * 1.25));
+  });
+});
+
 describe('handing over', () => {
   test('the run resets to a small round but the legacy stays', () => {
     const s = g.newGame(T0);
