@@ -308,17 +308,17 @@ describe('doing the visits yourself', () => {
 describe('legacy perks', () => {
   test('there is always one more to save for, and each costs twice the last', () => {
     const s = g.newGame(T0);
-    s.starsEarned = 1000;
+    s.starsEarned = 2000;
     const first = g.perkList(s).find((p) => p.id.startsWith('legacy-'));
     assert.equal(first.id, 'legacy-1');
-    assert.equal(first.cost, 200);
+    assert.equal(first.cost, 350);
     assert.ok(g.buyPerk(s, 'legacy-1'));
     const before = g.globalMultiplier({ ...board(), perks: [] }, T0);
     const after = g.globalMultiplier({ ...board(), perks: ['legacy-1', 'legacy-2'] }, T0);
     assert.ok(Math.abs(after / before - 1.69) < 1e-9, 'two of them is 30% twice over');
     const next = g.perkList(s).find((p) => p.id.startsWith('legacy-') && !p.owned);
     assert.equal(next.id, 'legacy-2');
-    assert.equal(next.cost, 400);
+    assert.equal(next.cost, 700);
     assert.equal(g.perkList(s).filter((p) => p.id.startsWith('legacy-') && !p.owned).length, 1, 'only ever the next one is offered');
   });
 

@@ -36,7 +36,11 @@ export function fmtSeconds(s) {
   if (m < 60) return sec ? `${m}m ${sec}s` : `${m}m`;
   const h = Math.floor(m / 60), min = m % 60;
   if (h < 48) return min ? `${h}h ${min}m` : `${h}h`;
-  return `${Math.floor(h / 24)} days`;
+  const days = Math.floor(h / 24);
+  if (days < 400) return `${days} days`;
+  if (days < 4000) return `${Math.round(days / 30)} months`;
+  if (days < 4e6) return `${fmtNum(Math.round(days / 365))} years`;
+  return 'longer than anybody would wait';
 }
 
 export function fmtPercent(mult) {

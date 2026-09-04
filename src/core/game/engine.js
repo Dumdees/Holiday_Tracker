@@ -31,7 +31,7 @@ const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
 /** One visit of your own is never worth more than this much of a second's takings. */
-export function clickShareCap(level) { return Math.min(0.45, 0.1 + 0.012 * level); }
+export function clickShareCap(level) { return Math.min(0.6, 0.1 + 0.02 * level); }
 export const MILESTONES_BEYOND = 8;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
@@ -376,12 +376,22 @@ function unitCost(base, n) {
   return base * Math.pow(COST_GROWTH, steep) * Math.pow(COST_GROWTH_LATE, rest);
 }
 
+/**
+ * What a rung costs at this stage. The printed prices are for the very first run; every run after it
+ * is bigger, so they climb with it – otherwise the whole printed ladder is loose change by the
+ * fourth stage and every row in the shop says "pays for itself in one second".
+ */
+export function rungPrice(state, b) {
+  return b.baseCost * Math.pow(Math.max(1, expandRequirement(state) / FIRST_TARGET), RUNG_CLIMB);
+}
+
 export function buildingCost(state, id, qty = 1) {
   const b = buildingDef(state, id);
   if (!b) return Infinity;
   const owned = state.buildings[id] || 0;
+  const base = rungPrice(state, b);
   let total = 0;
-  for (let i = 0; i < qty; i++) total += unitCost(b.baseCost, owned + i);
+  for (let i = 0; i < qty; i++) total += unitCost(base, owned + i);
   return Math.ceil(total * costDiscount(state, id));
 }
 
@@ -396,9 +406,10 @@ function maxAffordableFor(state, id, funds) {
   if (!b) return 0;
   const owned = state.buildings[id] || 0;
   const discount = costDiscount(state, id);
+  const base = rungPrice(state, b);
   let n = 0, total = 0;
   while (n < 2000) {
-    const next = total + unitCost(b.baseCost, owned + n);
+    const next = total + unitCost(base, owned + n);
     if (!(Math.ceil(next * discount) <= funds)) break;
     total = next;
     n++;
@@ -453,8 +464,17 @@ export function upgradeGain(state, id, now = Date.now(), income = null) {
   const before = income === null ? productionPerSecond(state, now) : income;
   const def = upgradeById(id);
   if (def && def.kind === 'discount' && def.building) {
-    const extra = Math.max(1, Math.floor(Math.log(1 / def.factor) / Math.log(COST_GROWTH)));
-    return buildingGain(state, def.building, extra, now, before);
+    // A discount earns nothing by itself, so it is judged on what it adds to an armful: the money
+    // that would have bought ten of the rung buys several more once it is cheaper.
+    // A discount earns nothing by itself, so it is judged on what a minute's takings buys with it
+    // against what the same minute buys without. A discount on something a minute cannot reach is
+    // worth nothing today, however grand the rung.
+    const budget = before * 60;
+    const plain = maxAffordableFor(state, def.building, budget);
+    if (plain < 1) return 0;
+    const cheaper = maxAffordableFor({ ...state, upgrades: [...state.upgrades, id] }, def.building, budget);
+    if (cheaper <= plain) return 0;
+    return buildingGain(state, def.building, cheaper, now, before) - buildingGain(state, def.building, plain, now, before);
   }
   const after = incomeWith(state, { upgrades: [...state.upgrades, id] }, now);
   return after - before;
@@ -570,15 +590,18 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   // Name the bonus that is furthest from paying in full: that is the one the board is costing you.
   const live = activeConditionals(state, m);
   const behind = live.filter((c) => c.share < 0.98).sort((a, b) => a.share - b.share)[0];
-  const holding = behind
-    ? ` ${behind.name} would pay ${Math.round((1 - behind.share) * (behind.mult - 1) * 100)}% more ${behind.label}.`
-    : (live.length ? ` ${live[0].name} is paying in full.` : '');
-  if (!worth.work && !worth.team) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
   const gap = worth.work / Math.max(worth.team, 1e-9);
-  const side = gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
+  const side = (!worth.work && !worth.team) ? 'balanced' : gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
   const tip = side === 'work' ? ' A minute of takings buys more by taking work on.'
     : side === 'team' ? ' A minute of takings buys more by putting it into the team.'
       : ' A minute of takings is worth about the same on either side.';
+  // Only mention a bonus that pulls the same way as the advice, or the strip argues with itself.
+  const pulls = (c) => (/team|rushed|same carer|tidy|led/i.test(`${c.name} ${c.label}`) ? 'team' : 'work');
+  const agrees = behind && (side === 'balanced' || pulls(behind) === side) ? behind : null;
+  const holding = agrees
+    ? ` ${agrees.name} would pay ${Math.round((1 - agrees.share) * (agrees.mult - 1) * 100)}% more ${agrees.label}.`
+    : (live.some((c) => c.share >= 0.999) ? ` ${live.find((c) => c.share >= 0.999).name} is paying in full.` : '');
+  if (!worth.work && !worth.team) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
   return { side, ratio, advice: `${state_}${holding}${tip}` };
 }
 
@@ -729,6 +752,8 @@ export const RUN_BEAT = 6;
 export const RUN_BEAT_MAX = 200;
 /** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
 export const PRICE_CLIMB = 0.4;
+/** ...and how hard the rungs themselves climb. */
+export const RUNG_CLIMB = 0.6;
 const FIRST_TARGET = 1.2e5;
 
 /**
@@ -865,12 +890,14 @@ export function clickSpawn(state, now = Date.now(), rng = Math.random) {
   if (spawn.type === 'prismatic') {
     state.prismaticsMet += 1;
     effect = pickWeighted(PRISMATIC_EFFECTS, rng);
-    if (effect.id === 'care-burst') amount = Math.max(25, Math.min(prod * 900, Math.max(state.funds * 0.15, prod * 120)));
+    const early = (state.spawnsThisRun || 0) <= 2 && state.level === 0;   // the first two are gentle
+    if (effect.id === 'care-burst') amount = Math.max(25, Math.min(prod * (early ? 90 : 900), Math.max(state.funds * 0.15, prod * 120)));
     if (effect.id === 'lucky-hire') state.prismaticHires = [...(state.prismaticHires || []), spawn.name];
   } else {
     state.cardsOpened += 1;
     effect = pickWeighted(CARD_EFFECTS, rng);
-    if (effect.id === 'card-cash') amount = Math.max(10, Math.min(prod * (60 + Math.floor(rng() * 240)), Math.max(state.funds * 0.1, prod * 60)));
+    const early = (state.cardsOpened || 0) <= 1 && state.level === 0;
+    if (effect.id === 'card-cash') amount = Math.max(10, Math.min(prod * (early ? 45 : 60 + Math.floor(rng() * 240)), Math.max(state.funds * 0.1, prod * 60)));
   }
   if (amount > 0) credit(state, amount);
   if (effect.seconds) {

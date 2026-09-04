@@ -35,6 +35,7 @@ test('Care Empire: visit a door, take somebody on, and the shop says what is wor
     await page.waitForSelector('[data-test="clicker"]');
     assert.match(await page.locator('.game-funds-main').textContent(), /£60/);
 
+    await page.getByRole('button', { name: '×1', exact: true }).click();   // the shop starts on ten
     const carerRow = page.locator('[data-test="buy-carer"]');
     assert.match(await carerRow.textContent(), /pays for itself|earns nothing/, 'every row says when it pays for itself');
     await carerRow.click();

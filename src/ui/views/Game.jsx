@@ -81,6 +81,7 @@ function listNames(names) {
 function gainPct(u) {
   if (u.gain > 0 && u.income > 0) {
     const pct = (u.gain / u.income) * 100;
+    if (pct >= 100000) return 'a step change';
     return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : pct >= 0.05 ? `+${pct.toFixed(1)}%` : 'a trickle';
   }
   if (u.kind === 'discount') return `−${Math.round((1 - u.factor) * 100)}% to buy`;
@@ -119,7 +120,7 @@ function useCarerNames() {
 export function Game() {
   const names = useCarerNames();
   const [floaters, setFloaters] = useState([]);
-  const [buyQty, setBuyQty] = useState(1);
+  const [buyQty, setBuyQty] = useState(10);   // buying one at a time is a trap; ten is the sensible default
   const [showOld, setShowOld] = useState(false);
   const [showAllUpgrades, setShowAllUpgrades] = useState(false);
   const [rightTab, setRightTab] = useState('grow');
@@ -536,8 +537,8 @@ export function Game() {
           <Tabs tabs={[{ id: 'grow', label: 'Grow', icon: 'trending-up' }, { id: 'stars', label: 'Stars', icon: 'star', count: G.starsAvailable(s) || undefined }, { id: 'badges', label: 'Badges', icon: 'heart', count: s.achievements.length }, { id: 'stats', label: 'Stats', icon: 'chart' }]} value={rightTab} onChange={setRightTab} variant="segmented" ariaLabel="Game panels" />
 
           {rightTab === 'grow' ? (
-            <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s, now) ? 'ready' : ''}`}>
-              <p class="soft">Earn {fmtMoney(G.expandRequirement(s, now))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
+            <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
+              <p class="soft">Earn {fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.fraction * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.fraction * 100)}%` }} /></div>
               <div class="row-between">
                 <span class="muted">{fmtMoney(outlook.earned)} of {fmtMoney(outlook.target)}</span>
