@@ -351,9 +351,23 @@ export function buildingCost(state, id, qty = 1) {
   return Math.ceil(total * costDiscount(state, id));
 }
 
+/**
+ * How many you could buy right now, up to a sensible armful. The running total is carried along so
+ * this stays quick: working out the price from scratch for every number in turn is the difference
+ * between a thousand sums and a million on a big board.
+ */
 export function maxAffordable(state, id) {
-  let n = 0;
-  while (n < 2000 && buildingCost(state, id, n + 1) <= state.funds) n++;
+  const b = buildingDef(state, id);
+  if (!b) return 0;
+  const owned = state.buildings[id] || 0;
+  const discount = costDiscount(state, id);
+  let n = 0, total = 0;
+  while (n < 2000) {
+    const next = total + unitCost(b.baseCost, owned + n);
+    if (!(Math.ceil(next * discount) <= state.funds)) break;
+    total = next;
+    n++;
+  }
   return n;
 }
 
