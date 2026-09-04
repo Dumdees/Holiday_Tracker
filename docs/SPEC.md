@@ -62,30 +62,46 @@ A Cookie-Clicker-style idle game in the menu, kept entirely separate from holida
 direct payments, council contracts, hospital discharge teams, framework places, NHS-funded care, care
 groups, worldwide care, orbit stations). TEAM is how much you can deliver (carers, key safes, care
 cars, coordinators, field supervisors, branch offices, training academies, nurse-led teams, assistive
-tech, care starships). `visits/s = sqrt(work × team)`, so the side that is behind is worth more per
-pound (the shop says which, in a sentence) and buying either side always earns more, never less.
+tech, care starships). `visits/s = (work + team + sqrt(work × team)) / 3` – the two sides averaged
+with a bonus for keeping them level – so the side that is behind is worth more per pound (the shop
+says which, in a sentence) and buying either side always earns more, never less. A grid probe of
+19,000 purchases across 980 boards finds none that lowers income, and a unit test holds that line.
 Income = visits × visit value × global multiplier. Each purchase costs 15% more than the last; owning
-10/25/50/100/200/400… of something doubles what each one does.
+10/25/50/100/200/400… of something doubles what each one does. Each rung of the ladder costs eight
+times the last and delivers four, so the cheap rungs stay worth buying long after you have left them.
 
-**Upgrades** (99, plus 9 branch options) come in kinds the engine folds in separately: `building`
-(the plain ×2 baseline), `synergy` (one thing lifts another per unit owned, capped), `conditional`
-(applies only while the board is a certain shape), `milestone` (raises the every-tenth step to 2.2×
-then 2.5×), `value` (what a visit is worth), `click`/`clickpct`, `collect` (office admin, direct
-debit), `offline` (the on-call phone), `discount` (cheaper of one thing), and quality upgrades that
-also raise the rating. Three one-off `BRANCHES` per run — who you work for, how you grow, what you
-are known for — reset when you hand over.
+**Upgrades** (100, plus 9 branch options, plus an endless line) come in kinds the engine folds in
+separately: `building` (kit for one rung, ×2 at ten owned, ×2.5 at sixty, ×3 at three hundred),
+`synergy` (one thing lifts a whole side per unit owned, capped), `conditional` (a sliding share of
+its bonus, never an on/off cliff, and never diluted by anything you buy), `milestone` (raises the
+every-tenth step to 2.2× then 2.5×), `value` (what a visit is worth), `click`/`clickpct` (your own
+visits, worth up to 8% of the whole business each), `collect` (office admin, direct debit), `offline`
+(the on-call phone), `discount` (cheaper of one thing), and quality upgrades that also raise the
+rating. Measured over an hour of play, every upgrade that earns anything moves income by at least 2%
+the moment it is offered. `upgradesFor(level)` adds three rungs of kit, a doubling of visit value, a
+click share and a ×1.8 for every far rung, so the shop never runs out. Three one-off `BRANCHES` per
+run — who you work for, how you grow, what you are known for — reset when you hand over, and each
+option in a slot is a different shape (a bonus, a discount, a flat rate) rather than a different
+number; the tests judge them on what half an hour of takings buys, not on the number on the tin.
 
 **The rating** (`RATINGS`, Newly registered → Good → Outstanding → Outstanding on every question) is
 derived from coordinators, supervisors, academies, nurse-led teams, offices and quality upgrades, and
 multiplies all income. Never stored, never random, never punitive.
 
-**Handing over** (prestige) resets the run but keeps badges, Legacy Stars (cbrt(lifetime/1e3), +2%
-each) and perks, and leaves a starting round (`startingKit`) so a new run is never dead.
+**Handing over** (prestige) resets the run but keeps badges, Legacy Stars (`6 × log10(1 + lifetime /
+1e4)`, +3% each) and perks, and leaves a starting round (`startingKit`) so a new run is never dead. A
+hand-over needs the stage's figure or three times your best run ever, whichever is more. Every stage
+reached is worth ×1.6 for ever, and stages past the printed ten bring two new rungs each and cost 200
+times the last – so the measured curve is 8m, 4m, 2m, 1m30, then lengthening a little every stage:
+6m, 7m, 7m20, 8m, 8m40, 9m30, with no wall in it. Ten perks, and then an endless one that adds 30%
+to everything and costs twice the last, so Stars always have somewhere to go.
 
 **Deciding what to buy** is legible without a wiki: `buildingOffer`/`upgradeOffer` return the exact
-extra income and `paybackSeconds`, the shop prints "pays for itself in about a minute", the best row
-is chipped, and the milestone pip counts down to the next doubling. Upgrades that only save you a job
-are ranked by how long they take to afford so they never sink out of sight.
+extra income and `paybackSeconds`, the shop prints "pays for itself in about a minute", every upgrade
+tile carries one figure on its face ("+40%", "−20% to buy", "×3 a tap"), the best row is chipped, and
+the milestone pip counts down to the next doubling. Upgrades that only save you a job are ranked by
+how long they take to afford so they never sink out of sight. For the first couple of minutes one
+line under the street says what to do next, and then stops for good.
 
 **Nothing may be bought unless something changes on the street.** Every building and upgrade carries a
 `visual` string naming the change, `scene.js` exports a `DRAWS` table covering every building, and a
