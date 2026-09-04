@@ -53,11 +53,12 @@ open it, drag the `Monteith Holiday Manager` folder to your Desktop, and double-
   welcome.
 - **Shift patterns** – carers who work a repeating 2, 3 or 4 week pattern (alternate weekends, say)
   get a week-by-week pattern; holidays, clash warnings and the profile calendar follow the week that applies.
-- **Care Empire** – an optional tea-break game in the menu: an animated street where your carers
-  (named after the real team) walk to visits, residents wave and coins fly in. Tap a house to send your
-  star carer over, take on more client homes, hire, upgrade, and grow from one street to the whole
-  world and beyond. Completely
-  separate from the holiday records; hide it under Settings → General.
+- **Care Empire** – an optional tea-break game in the menu. Grow a home-care service from one front
+  door to the whole world: balance the work you take on against the team who deliver it, fit key
+  safes, buy cars, take on coordinators and supervisors, win council and NHS work, and earn your
+  rating. Everything you buy appears on an animated street, and the shop tells you in plain words
+  what pays for itself soonest. Completely separate from the holiday records; hide it under
+  Settings → General.
 
 ## What it looks like
 

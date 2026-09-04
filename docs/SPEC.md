@@ -54,28 +54,49 @@ jargon. British English. Dates like "Mon 3 Mar 2026". Money never appears. Days 
 
 ### Care Empire (optional game, `settings.gameEnabled`)
 A Cookie-Clicker-style idle game in the menu, kept entirely separate from holiday data (saved under
-`localStorage['mhm:game']`). Pure engine in `src/core/game/` (`data.js` content, `engine.js` maths,
-`format.js` numbers), screen in `src/ui/views/Game.jsx`, state in `src/ui/game/gameStore.js`.
-Loop: tap a client home to do a visit (each home then cools down for 1.5 s, `HOUSE_COOLDOWN_MS`) →
-payments pile up as invoices until collected by hand → buy client homes (you start with one; a home
-takes one carer at a time, so `workingCount('carer') = min(carers, homes)` and the rest wait) and
-carers (named after the real team), cars, rota apps, offices, academies, hubs, networks,
-sensors, franchises, satellites, lunar bases and starships (cost ×1.15 each) → upgrades unlock by
-ownership/clicks/earnings → office admin then direct debit automate collection → reaching a level
-threshold (`LEVELS`) lets you expand: the run resets, Legacy Stars (cbrt(lifetime/1e4)) are kept
-(+2% each) and spent on perks → higher levels unlock bigger buildings. Random spawns: prismatic
-carers (rainbow rush ×7, click frenzy ×77, care burst cash, permanent lucky hire +3%) and
-thank-you cards (cash or ×2). Achievements +1% each. Offline earnings at half speed (full with the
-Night shift perk), capped at 8 hours. News ticker and confetti for flavour.
-The street is an animated canvas (`src/ui/game/scene.js`, pure drawing, no game logic): houses
-laid out for the level, carers (named after the team, max 14 drawn) walking office → house → office
-with hearts on arrival and a coin flying to the funds display when they leave, residents waving in
-the doorway, care cars on the road, lamp posts and lit windows at night (4-minute day), showers,
-chimney smoke, birds, landmark buildings appearing as they are bought, domes and space suits from
-Orbit onwards, fireworks for achievements and expansions. Clicking anywhere on the street sends the
-star carer dashing to the nearest house (`playerVisit`). Prismatic carers walk across the street for
-their 13-second lifetime and cards float down; a transparent button (`data-test="spawn"`) tracks
-them for clicks and tests.
+`localStorage['mhm:game']`, save version 2, older saves migrated by `migrate()`). Pure engine in
+`src/core/game/` (`data.js` content, `engine.js` maths, `format.js` numbers), screen in
+`src/ui/views/Game.jsx`, animated street in `src/ui/game/scene.js`, state in `src/ui/game/gameStore.js`.
+
+**The economy is two sides.** WORK is how much care is wanted (people you look after, care packages,
+direct payments, council contracts, hospital discharge teams, framework places, NHS-funded care, care
+groups, worldwide care, orbit stations). TEAM is how much you can deliver (carers, key safes, care
+cars, coordinators, field supervisors, branch offices, training academies, nurse-led teams, assistive
+tech, care starships). `visits/s = sqrt(work × team)`, so the side that is behind is worth more per
+pound (the shop says which, in a sentence) and buying either side always earns more, never less.
+Income = visits × visit value × global multiplier. Each purchase costs 15% more than the last; owning
+10/25/50/100/200/400… of something doubles what each one does.
+
+**Upgrades** (99, plus 9 branch options) come in kinds the engine folds in separately: `building`
+(the plain ×2 baseline), `synergy` (one thing lifts another per unit owned, capped), `conditional`
+(applies only while the board is a certain shape), `milestone` (raises the every-tenth step to 2.2×
+then 2.5×), `value` (what a visit is worth), `click`/`clickpct`, `collect` (office admin, direct
+debit), `offline` (the on-call phone), `discount` (cheaper of one thing), and quality upgrades that
+also raise the rating. Three one-off `BRANCHES` per run — who you work for, how you grow, what you
+are known for — reset when you hand over.
+
+**The rating** (`RATINGS`, Newly registered → Good → Outstanding → Outstanding on every question) is
+derived from coordinators, supervisors, academies, nurse-led teams, offices and quality upgrades, and
+multiplies all income. Never stored, never random, never punitive.
+
+**Handing over** (prestige) resets the run but keeps badges, Legacy Stars (cbrt(lifetime/1e3), +2%
+each) and perks, and leaves a starting round (`startingKit`) so a new run is never dead.
+
+**Deciding what to buy** is legible without a wiki: `buildingOffer`/`upgradeOffer` return the exact
+extra income and `paybackSeconds`, the shop prints "pays for itself in about a minute", the best row
+is chipped, and the milestone pip counts down to the next doubling. Upgrades that only save you a job
+are ranked by how long they take to afford so they never sink out of sight.
+
+**Nothing may be bought unless something changes on the street.** Every building and upgrade carries a
+`visual` string naming the change, `scene.js` exports a `DRAWS` table covering every building, and a
+unit test fails if either is missing. Key safes appear on doors, care folders on steps, sensor lights
+above them, tablets in carers' hands, livery on the cars, coordinators and supervisors and nurses
+walking the patch, branches on the skyline, and the office wears its sign colour, rating sticker,
+star board, certificate, noticeboard and bunting.
+
+**Flavour rules**: warm plain British English; the joke is the printer, the rota, the kettle or the
+weather, never the person being looked after and never the carer; no compliance content (checks,
+supervisions, sickness) is ever attached to a real colleague's name.
 
 ## 3. Behaviour rules
 - **Holiday year**: starts on `settings.holidayYearStart` (default 1 April). Year key = start year,
