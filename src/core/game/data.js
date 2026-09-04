@@ -54,13 +54,15 @@ export const BUILDINGS = [
  * something new that is worth buying and the late game never runs out of road.
  */
 const BEYOND_NAMES = ['Ring station', 'Deep space round', 'Colony ward', 'Wandering hospice', 'Long-haul round', 'Home from home'];
-export function beyondBuilding(level) {
-  const n = level - 9;                       // the first extra rung appears at stage 10
+/** Two new rungs at every stage past the printed ladder, the same as the stages in the table. */
+export const BEYOND_PER_LEVEL = 2;
+export function beyondBuilding(n) {
   const last = BUILDINGS[BUILDINGS.length - 1];
   const name = `${BEYOND_NAMES[(n - 1) % BEYOND_NAMES.length]}${n > BEYOND_NAMES.length ? ` ${Math.ceil(n / BEYOND_NAMES.length)}` : ''}`;
   return {
     id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural: `${name}s`, emoji: n % 2 ? '🪐' : '✨',
-    baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n), level,
+    baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n),
+    level: 9 + Math.ceil(n / BEYOND_PER_LEVEL),
     blurb: 'Further out than anyone has taken a hot meal, and still on time.',
     visual: 'Another light joins the ones on the horizon.',
   };
@@ -216,7 +218,8 @@ const CLICKS = [
   { id: 'click-2', name: 'Your own little round', emoji: '🚶', kind: 'click', cost: 1200, blurb: 'Your own visits are worth twice as much.', question: 'Only worth it if you actually enjoy tapping doors.', unlock: (s) => s.clicks >= 50 },
   { id: 'click-3', name: 'Hands on', emoji: '🤲', kind: 'clickpct', cost: 30000, blurb: 'Your own visits also earn 1% of what the team makes every second.', question: 'Turns your tapping into a share of the whole business.', unlock: (s) => s.clicks >= 150 },
   { id: 'click-4', name: 'Everyone knows you', emoji: '🌟', kind: 'click', mult: 3, cost: 2e6, blurb: 'Your own visits are worth three times as much.', question: 'The last big one for hand visits.', unlock: (s) => s.clicks >= 400 },
-  { id: 'click-5', name: 'The founder still visits', emoji: '💐', kind: 'clickpct', cost: 4e8, blurb: 'Your own visits earn another 1% of the team’s income every second.', question: 'Late game: one tap can be worth minutes of income.', unlock: (s) => s.clicks >= 900 },
+  { id: 'click-5', name: 'The founder still visits', emoji: '💐', kind: 'clickpct', pct: 0.03, cost: 4e8, blurb: 'Your own visits earn another 3% of the team’s income every second.', question: 'Late game: a few taps a second is a real share of the business.', unlock: (s) => s.clicks >= 900 },
+  { id: 'click-6', name: 'They still ask for you', emoji: '💌', kind: 'clickpct', pct: 0.05, cost: 6e11, blurb: 'Your own visits earn another 5% of the team’s income every second.', question: 'Turns tapping doors into a strategy of its own, however big you get.', unlock: (s) => s.clicks >= 2500 },
 ];
 
 /** Things that do a job for you. */
@@ -263,18 +266,18 @@ export const BRANCHES = [
     slot: 'growth', name: 'How do you grow?', emoji: '🌱', level: 3,
     blurb: 'Everybody grows differently. What is your way?',
     options: [
-      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.1, per: 0.02, from: 'carer', cap: 2, blurb: 'Everything earns 10% more, plus 2% for every carer, up to +200%.', question: 'For players who buy carers by the hundred.' },
-      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-scaling', mult: 1.1, per: 0.03, from: ['keysafe', 'car'], cap: 2, blurb: 'Everything earns 10% more, plus 3% for every key safe and care car, up to +200%.', question: 'For players who fit a key safe on every door.' },
-      { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 1.8, blurb: 'Every visit is worth 80% more.', question: 'No conditions, no feeding, no thinking. Just more.' },
+      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.1, per: 0.015, from: 'carer', cap: 1.6, blurb: 'Everything earns 10% more, plus 1.5% for every carer, up to +160%.', question: 'Grows with the team and nothing else. The biggest ceiling if you keep hiring.' },
+      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.35, discount: 0.5, blurb: 'Everything earns 35% more, and carers, key safes, cars and offices all cost half as much.', question: 'Not a bonus but a discount: everything on the team side is a third cheaper, for ever.' },
+      { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 1.8, clickBoost: 3, blurb: 'Every visit is worth 80% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
   },
   {
     slot: 'known', name: 'What are you known for?', emoji: '🏅', level: 5,
     blurb: 'Every good agency is known for something.',
     options: [
-      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.25, per: 0.004, from: 'client', cap: 1.75, blurb: 'Everything earns 25% more, plus a little for everybody you look after, up to +175%.', question: 'Rewards a long client list and life story work.' },
-      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2, discount: 0.7, blurb: 'Everything earns twice as much, and work costs 30% less.', question: 'Short, intensive, and people leave you better than they arrived.' },
-      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.25, per: 0.06, from: ['chc', 'nurse'], cap: 1.75, blurb: 'Everything earns 25% more, plus 6% for every NHS package and nurse-led team, up to +175%.', question: 'The hardest work, the highest ceiling.' },
+      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.3, per: 0.002, from: 'client', cap: 1.2, blurb: 'Everything earns 30% more, plus a little for everybody you look after, up to +120%.', question: 'Rewards a long client list and life story work.' },
+      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 1.8, discount: 0.72, blurb: 'Everything earns 80% more, and taking on work costs 28% less.', question: 'Short, intensive, and people leave you better than they arrived.' },
+      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.3, per: 0.035, from: ['chc', 'nurse'], cap: 1.4, blurb: 'Everything earns 30% more, plus 3.5% for every NHS package and nurse-led team, up to +140%.', question: 'The hardest work, the highest ceiling.' },
     ],
   },
 ];
@@ -325,6 +328,7 @@ const VISUALS = {
   'click-3': 'Your visits leave a trail of hearts.',
   'click-4': 'Everybody waves at you first.',
   'click-5': 'Flowers on the doorstep wherever you have been.',
+  'click-6': 'A card in the window of every door you visit yourself.',
   admin: 'The pile of invoices outside the office disappears.',
   ecm: 'A green tick pops over each door as the carer arrives.',
   'direct-debit': 'A card reader sign in the office window.',
@@ -338,12 +342,12 @@ const VISUALS = {
   'qual-nomeds': 'The clock above the office door turns green.',
   'qual-hours': 'A rota on the wall with everybody’s name on it.',
   'qual-reviews': 'A star board goes up outside the office.',
-  'buyer-private': 'The office sign turns Monteith peach.',
+  'buyer-private': 'The office sign turns Monteith peach, and a price list goes up in the window.',
   'buyer-council': 'The office sign turns council green.',
-  'buyer-nhs': 'The office sign turns NHS blue.',
+  'buyer-nhs': 'The office sign turns NHS blue, with a clinical badge beside the door.',
   'grow-people': 'More carers on the street than you can count.',
-  'grow-kit': 'Kit everywhere: safes, cars, tablets.',
-  'grow-rates': 'The coins coming in get bigger.',
+  'grow-kit': 'A kit crate by the office door, and everything for the team a third cheaper.',
+  'grow-rates': 'The coins coming in get bigger, and so does every visit you do yourself.',
   'known-dementia': 'A photograph in every window.',
   'known-reablement': 'A door opens and somebody waves you off, doing fine.',
   'known-complex': 'Clinical blue on the doors that need it.',
@@ -355,7 +359,7 @@ export const UPGRADE_ICONS = {
   'cond-covered': '🫶', 'cond-continuity': '🤝', 'cond-tidy': '🧰', 'cond-wellled': '🌟',
   'mile-1': '🎉', 'mile-2': '🎖️',
   'val-private': '💷', 'val-fair': '⚖️', 'val-specialist': '🧠', 'val-nhs': '🩺', 'val-reputation': '💖', 'val-national': '🏛️',
-  'click-1': '☕', 'click-2': '🚶', 'click-3': '🤲', 'click-4': '🌟', 'click-5': '💐',
+  'click-1': '☕', 'click-2': '🚶', 'click-3': '🤲', 'click-4': '🌟', 'click-5': '💐', 'click-6': '💌',
   admin: '🗃️', ecm: '📲', 'direct-debit': '🏦', oncall: '📞',
   'disc-recruit': '🫂', 'disc-safes': '📦', 'disc-mileage': '⛽', 'disc-homes': '🗣️',
   'qual-cert': '📜', 'qual-plans': '📗', 'qual-nomeds': '⏱️', 'qual-hours': '🗓️', 'qual-reviews': '⭐',
@@ -382,7 +386,7 @@ const FAR_KIT = ['Warm boxes', 'Quiet engines', 'Deep-space kettles'];
 const FAR_CACHE = new Map();
 export function farUpgrades(n) {
   if (FAR_CACHE.has(n)) return FAR_CACHE.get(n);
-  const b = beyondBuilding(n + 9);
+  const b = beyondBuilding(n);
   const out = [];
   FAR_KIT.forEach((name, i) => {
     out.push({
@@ -402,6 +406,13 @@ export function farUpgrades(n) {
     unlock: (s) => (s.buildings[b.id] || 0) >= 5,
   });
   out.push({
+    id: `far-hands-${n}`, name: 'Still on the round', emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
+    cost: b.baseCost * 12, icon: '🤲', blurb: 'Your own visits earn another 1% of the team’s income every second.',
+    visual: 'Your own carer keeps walking the round with everybody else.',
+    question: 'Keeps your own tapping worth doing however far out you go.',
+    unlock: (s) => (s.buildings[b.id] || 0) >= 20,
+  });
+  out.push({
     id: `far-all-${n}`, name: `${b.name}s, everywhere`, emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
     cost: b.baseCost * 300, icon: '✨', blurb: 'Everything you own earns 80% more.',
     visual: 'Another light joins the ones on the horizon, and the office noticeboard fills up.',
@@ -416,7 +427,7 @@ export function farUpgrades(n) {
 export function upgradesFor(level) {
   if (level < LEVELS.length) return UPGRADES;
   const out = [...UPGRADES];
-  for (let n = 1; n <= level - LEVELS.length + 1; n++) out.push(...farUpgrades(n));
+  for (let n = 1; n <= (level - LEVELS.length + 1) * BEYOND_PER_LEVEL; n++) out.push(...farUpgrades(n));
   return out;
 }
 
@@ -424,7 +435,7 @@ export function upgradesFor(level) {
 export function upgradeById(id) {
   const known = UPGRADES_BY_ID.get(id);
   if (known) return known;
-  const far = /^beyond-(\d+)-t\d$|^far-(?:value|all)-(\d+)$/.exec(id);
+  const far = /^beyond-(\d+)-t\d$|^far-(?:value|all|hands)-(\d+)$/.exec(id);
   if (!far) return undefined;
   return farUpgrades(Number(far[1] || far[2])).find((u) => u.id === id);
 }

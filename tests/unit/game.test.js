@@ -224,7 +224,24 @@ describe('the big choices', () => {
   });
 
   test('no option is the right answer on every board', () => {
-    // Which one wins has to depend on how you have played, or it is not a choice.
+    // Which one wins has to depend on how you have played, or it is not a choice. Options are judged
+    // on what the next half hour of takings buys you, not on the number on the tin – a choice that
+    // makes everything cheaper is worth exactly as much as one that makes everything earn more.
+    const spend = (base, slot, id) => {
+      const s = { ...base, branches: { [slot]: id }, buildings: { ...base.buildings } };
+      s.funds = g.productionPerSecond(s, T0) * 1800;
+      for (let i = 0; i < 500; i++) {
+        const inc = g.productionPerSecond(s, T0);
+        let pick = null;
+        for (const b of g.unlockedBuildings(s)) {
+          const o = g.buildingOffer(s, b.id, 1, T0, inc);
+          if (o.affordable && o.gain > 0 && (!pick || o.payback < pick.payback)) pick = { id: b.id, payback: o.payback };
+        }
+        if (!pick) break;
+        g.buyBuilding(s, pick.id, 1);
+      }
+      return g.productionPerSecond(s, T0);
+    };
     const boards = [
       board({ carer: 25, client: 22, keysafe: 8, car: 4 }),
       board({ carer: 500, client: 460, keysafe: 300, car: 140, chc: 2, nurse: 1 }),
@@ -233,7 +250,7 @@ describe('the big choices', () => {
     for (const group of BRANCHES) {
       const winners = new Set();
       for (const base of boards) {
-        const scored = group.options.map((o) => ({ id: o.id, income: g.productionPerSecond({ ...base, branches: { [group.slot]: o.id } }, T0) }));
+        const scored = group.options.map((o) => ({ id: o.id, income: spend(base, group.slot, o.id) }));
         scored.sort((a, b) => b.income - a.income);
         winners.add(scored[0].id);
         const spread = scored[0].income / scored[scored.length - 1].income;
@@ -478,13 +495,13 @@ describe('the rule that everything you buy changes the street', () => {
     const far = { ...board(), level: LEVELS.length + 3, buildings: { carer: 400, client: 400, 'beyond-1': 200, 'beyond-2': 60, 'beyond-3': 20, 'beyond-4': 5 } };
     const ids = new Set(upgradesFor(far.level).map((u) => u.id));
     for (const n of [1, 2, 3, 4]) {
-      assert.ok(ids.has(`beyond-${n}-t1`), `stage ${n} past the table brings its own kit`);
-      assert.ok(ids.has(`far-value-${n}`) && ids.has(`far-all-${n}`), `stage ${n} past the table brings its own bonuses`);
+      assert.ok(ids.has(`beyond-${n}-t1`), `far rung ${n} brings its own kit`);
+      assert.ok(ids.has(`far-value-${n}`) && ids.has(`far-all-${n}`), `far rung ${n} brings its own bonuses`);
     }
     const shop = g.upgradeShop(far, T0);
     assert.ok(shop.length >= 5, 'there is always a shelf full');
     assert.ok(shop.some((u) => u.gain > 0), 'and at least one of them earns you more');
-    const b = beyondBuilding(LEVELS.length + 3);
+    const b = beyondBuilding(6);
     assert.ok(b.baseCost > 0 && Number.isFinite(b.baseCost), 'the far rungs still have a price');
   });
 

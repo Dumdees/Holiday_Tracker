@@ -26,6 +26,8 @@ export function fmtRate(n) {
 }
 
 export function fmtSeconds(s) {
+  if (!Number.isFinite(s)) return '∞';
+  if (s > 0 && s < 1) return 'under a second';      // never "0s" for something that does pay off
   s = Math.max(0, Math.round(s));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60), sec = s % 60;

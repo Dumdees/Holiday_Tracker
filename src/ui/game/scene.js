@@ -75,6 +75,8 @@ export function createScene(canvas, { onCoin } = {}) {
   const pavementY = () => H * 0.70;
   const roadY = () => H * 0.82;
   const officeX = () => 62;
+  /** Where carer number i stands when there is nothing to do: along the street, not in a huddle. */
+  const spreadX = (i) => officeX() + 40 + ((i + 0.5) / MAX_AGENTS) * (W - officeX() - 90) + rand(-6, 6);
   const hudTarget = () => ({ x: 74 / k, y: 30 / k }); // where coins fly: under the funds display
   const th = () => theme(world.level);
 
@@ -107,7 +109,8 @@ export function createScene(canvas, { onCoin } = {}) {
   }
 
   function makeAgent(i, name) {
-    return { id: i, name, colour: hueColour(i), skin: SKIN[i % SKIN.length], hair: HAIR[(i * 5) % HAIR.length], x: officeX() + 20 + i * 9, targetX: officeX() + 20 + i * 9, state: 'idle', timer: rand(0.2, 2), speed: rand(34, 48), dir: 1, phase: rand(0, TWO_PI), house: -1, pop: 0, dash: 0, waiting: false };
+    const spread = spreadX(i);
+    return { id: i, name, colour: hueColour(i), skin: SKIN[i % SKIN.length], hair: HAIR[(i * 5) % HAIR.length], x: spread, targetX: spread, state: 'idle', timer: rand(0.2, 2), speed: rand(34, 48), dir: 1, phase: rand(0, TWO_PI), house: -1, pop: 0, dash: 0, waiting: false };
   }
 
   /** Keep the scene in step with the game state. Cheap; called every tick. */
@@ -119,7 +122,7 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.level !== state.level) {
       world.level = state.level; layoutHouses();
       for (const h of world.houses) h.pop = 0;
-      for (const a of world.agents) { a.x = officeX() + rand(-12, 12); a.house = -1; a.state = 'idle'; a.timer = rand(0.1, 1.2); }
+      for (const a of world.agents) { a.x = spreadX(a.id); a.house = -1; a.state = 'idle'; a.timer = rand(0.1, 1.2); }
     }
     const carers = state.buildings.carer || 0;
     world.teamSize = carers;
@@ -327,7 +330,7 @@ export function createScene(canvas, { onCoin } = {}) {
         a.timer -= dt;
         if (a.timer <= 0) {
           if (a.house >= 0) { launchCoin(a.x, pavementY() - 34); if (world.houses[a.house]) world.houses[a.house].busy = -1; }
-          a.house = -1; a.targetX = officeX() + 20 + a.id * 9 + rand(-4, 4); a.state = 'walk'; // spread out, not stacked on the step
+          a.house = -1; a.targetX = spreadX(a.id); a.state = 'walk'; // back along the street, not stacked on the step
         }
       }
     }
@@ -461,11 +464,20 @@ export function createScene(canvas, { onCoin } = {}) {
       for (let i = 0; i < n; i++) { ctx.fillStyle = '#F5C542'; ctx.beginPath(); ctx.ellipse(x + 30 + (i % 4) * 7, base - 3 - Math.floor(i / 4) * 5, 5, 2.5, 0, 0, TWO_PI); ctx.fill(); ctx.strokeStyle = '#c99a1e'; ctx.stroke(); }
       const bob = Math.sin(world.t * 4) * 3;
       ctx.font = `700 11px ${UI_FONT}`; ctx.fillStyle = '#fff'; const label = '💷 Payments to collect'; const tw = ctx.measureText(label).width + 14;
-      ctx.beginPath(); ctx.roundRect(x + 12 - tw / 2, base - 100 + bob, tw, 18, 9); ctx.fill(); ctx.fillStyle = '#2f6b45'; ctx.fillText(label, x + 12, base - 87 + bob);
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x + 8, base - 82 + bob); ctx.lineTo(x + 16, base - 82 + bob); ctx.lineTo(x + 12, base - 76 + bob); ctx.fill();
+      const top = Math.min(base - 100, noticeTop(base) - 24);
+      ctx.beginPath(); ctx.roundRect(x + 12 - tw / 2, top + bob, tw, 18, 9); ctx.fill(); ctx.fillStyle = '#2f6b45'; ctx.fillText(label, x + 12, top + 13 + bob);
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x + 8, top + 18 + bob); ctx.lineTo(x + 16, top + 18 + bob); ctx.lineTo(x + 12, top + 24 + bob); ctx.fill();
     }
     drawOfficeExtras(day, x, base);
   }
+
+  /**
+   * The noticeboard hangs above the sign, never over the shopfront, and grows upwards as it fills.
+   * Everything else that lives above the office (bunting, the payments bubble) sits above it.
+   */
+  const noticeCols = 8;
+  function noticeRows() { return world.badges.length ? Math.ceil(world.badges.length / noticeCols) : 0; }
+  function noticeTop(base) { return base - 80 - (noticeRows() ? noticeRows() * 11 + 6 : 0); }
 
   /** Everything the office wears: the sign, the rating, the star board and the noticeboard. */
   function drawOfficeExtras(day, x, base) {
@@ -492,9 +504,10 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.owned.has('mile-1')) {
       const n = world.owned.has('mile-2') ? 10 : 6;
       ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x - 40, base - 86); ctx.quadraticCurveTo(x, base - 78, x + 40, base - 86); ctx.stroke();
+      const by0 = noticeTop(base) - 8;
+      ctx.beginPath(); ctx.moveTo(x - 40, by0); ctx.quadraticCurveTo(x, by0 + 8, x + 40, by0); ctx.stroke();
       for (let i = 0; i < n; i++) {
-        const t = i / (n - 1), fx = lerp(x - 40, x + 40, t), fy = base - 86 + Math.sin(Math.PI * t) * 7;
+        const t = i / (n - 1), fx = lerp(x - 40, x + 40, t), fy = by0 + Math.sin(Math.PI * t) * 7;
         ctx.fillStyle = `hsl(${(i * 57) % 360} 75% 62%)`;
         ctx.beginPath(); ctx.moveTo(fx - 3, fy); ctx.lineTo(fx + 3, fy); ctx.lineTo(fx, fy + 6); ctx.closePath(); ctx.fill();
       }
@@ -503,15 +516,15 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.owned.has('disc-recruit')) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x - 26, base - 18, 20, 14, 2); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('HIRING', x - 16, base - 9); }
     if (world.owned.has('disc-safes')) { ctx.fillStyle = '#c8a06a'; ctx.fillRect(x + 34, base - 10, 14, 10); ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 1; ctx.strokeRect(x + 34, base - 10, 14, 10); }
     if (world.owned.has('syn-academy-team')) { const bx = x + 78; ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.roundRect(bx, base - 20, 30, 14, 3); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(bx + 8, base - 5, 3.5, 0, TWO_PI); ctx.arc(bx + 22, base - 5, 3.5, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('TRAINING', bx + 15, base - 11); }
-    // the office noticeboard: one small icon for every upgrade you have bought
+    // the office noticeboard: one small icon for every upgrade you have bought, above the sign
     if (world.badges.length) {
-      const cols = 6, bx = x - 34, by = base - 52;
-      ctx.fillStyle = 'rgba(255,255,255,.65)';
-      const rows = Math.ceil(world.badges.length / cols);
-      ctx.beginPath(); ctx.roundRect(bx - 3, by - 8, cols * 12 + 6, rows * 11 + 6, 3); ctx.fill();
+      const rows = noticeRows(), top = noticeTop(base), bw = noticeCols * 12 + 6, bx = x - bw / 2 + 3;
+      ctx.fillStyle = 'rgba(255,255,255,.72)';
+      ctx.beginPath(); ctx.roundRect(bx - 3, top, bw, rows * 11 + 6, 3); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,90,70,.5)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.font = `9px ${EMOJI_FONT}`; ctx.textAlign = 'center';
-      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % cols) * 12 + 4, by + Math.floor(i / cols) * 11));
-      if (world.extraBadges) { ctx.font = `600 7px ${UI_FONT}`; ctx.fillStyle = '#3a2a24'; ctx.fillText(`+${world.extraBadges}`, bx + cols * 12 - 6, by + rows * 11 - 1); }
+      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % noticeCols) * 12 + 4, top + 12 + Math.floor(i / noticeCols) * 11));
+      if (world.extraBadges) { ctx.font = `600 7px ${UI_FONT}`; ctx.fillStyle = '#3a2a24'; ctx.fillText(`+${world.extraBadges}`, bx + bw - 14, top + rows * 11 + 2); }
     }
     // a green tick over the door whenever a bonus is actually paying
     if (world.lit > 0) {
@@ -532,6 +545,16 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.owned.has('syn-office-all')) { ctx.fillStyle = mix('#8a5a4a', '#FFB88C', day); ctx.fillRect(x - 30, base - 96, 60, 26); ctx.fillStyle = `rgba(255, 236, 170, ${1 - day * 0.5})`; ctx.fillRect(x - 22, base - 90, 12, 10); ctx.fillRect(x + 10, base - 90, 12, 10); }
     // the council crest in the window
     if (world.owned.has('syn-council-package') || world.owned.has('buyer-council')) { ctx.font = `12px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('🏛️', x - 21, base - 27); }
+    // whoever you work for leaves their own mark on the office, not just the colour of the sign
+    if (world.owned.has('buyer-private')) {                                  // a price list in the window
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x - 26, base - 30, 9, 12, 1); ctx.fill();
+      ctx.strokeStyle = '#E5734A'; ctx.lineWidth = 0.8;
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(x - 24, base - 26 + i * 3); ctx.lineTo(x - 19, base - 26 + i * 3); ctx.stroke(); }
+    }
+    if (world.owned.has('buyer-nhs')) {                                      // the clinical badge by the door
+      ctx.fillStyle = '#2A5EA8'; ctx.beginPath(); ctx.roundRect(x - 27, base - 30, 12, 8, 4); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = `700 5px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('NHS', x - 21, base - 24.5);
+    }
     // what you are known for, on a flag over the door
     const known = ['known-dementia', 'known-reablement', 'known-complex'].find((id) => world.owned.has(id));
     if (known) { const flag = { 'known-dementia': '🧠', 'known-reablement': '🌤️', 'known-complex': '🧑‍⚕️' }[known]; ctx.font = `13px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText(flag, x + 34, base - 44); }
@@ -757,6 +780,7 @@ export function createScene(canvas, { onCoin } = {}) {
       if (world.owned.has('click-3') && Math.random() < 0.04) burst(x, y - 36, 'heart', 1);
       if (world.owned.has('click-4')) { ctx.font = `10px ${EMOJI_FONT}`; ctx.fillText('👋', x + 13 * (a.dir || 1), y - 30); }
       if (world.owned.has('click-5')) { ctx.font = `11px ${EMOJI_FONT}`; ctx.fillText('💐', x - 13 * (a.dir || 1), y - 4); }
+      if (world.owned.has('click-6')) { ctx.font = `10px ${EMOJI_FONT}`; ctx.fillText('💌', x + 11 * (a.dir || 1), y - 12); }
       ctx.font = `700 11px ${UI_FONT}`; ctx.fillStyle = '#fff'; const tw = ctx.measureText(a.name).width + 10;
       ctx.beginPath(); ctx.roundRect(x - tw / 2, y + 6, tw, 15, 7); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.fillText(a.name, x, y + 17);
       ctx.font = `16px ${EMOJI_FONT}`; ctx.fillText(world.level >= 6 ? '👑' : world.level >= 3 ? '🎩' : '🧢', x + 8 * (a.dir || 1), y - 46 - bounce);

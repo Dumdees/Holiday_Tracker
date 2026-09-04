@@ -52,6 +52,12 @@ function noPaybackReason(u, share) {
   return 'no extra income just now';
 }
 
+/** "Priya, Morag and Callum" – a list of names the way a person would say it. */
+function listNames(names) {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** "+18%" – how much more would be coming in, for the face of a tile. Empty when it earns nothing. */
 function gainPct(u) {
   if (!(u.gain > 0) || !(u.income > 0)) return '';
@@ -205,7 +211,9 @@ export function Game() {
   const upgrades = G.upgradeShop(s, now, 12);
   const firstRender = firstSeen.current.size === 0;
   for (const u of upgrades) if (!firstSeen.current.has(u.id)) firstSeen.current.set(u.id, firstRender ? 0 : now);
-  const shop = G.unlockedBuildings(s).map((b) => G.buildingOffer(s, b.id, buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty, now));
+  // Worked out once for the whole shop: every row asks how much more it would bring in.
+  const earning = G.productionPerSecond(s, now);
+  const shop = G.unlockedBuildings(s).map((b) => G.buildingOffer(s, b.id, buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty, now, earning));
   const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
   const pending = G.pendingBranch(s);
   const progress = G.expandProgress(s);
@@ -310,7 +318,7 @@ export function Game() {
     const kit = G.startingKit(s.level + 1);
     const ok = await confirm({
       title: `Hand over and grow to ${next.name.toLowerCase()} ${next.emoji}?`,
-      message: `Your people, your kit and your money start again – but you keep every badge, gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 2% to everything, forever) and begin with ${kit.carer} carers and ${kit.client} people to look after. Bigger things unlock at the next stage.`,
+      message: `Your people, your kit and your money start again – but you keep every badge, gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 3% to everything, for ever) and begin with ${kit.carer} carers and ${kit.client} people to look after. Bigger things unlock at the next stage.`,
       confirmLabel: `Hand over`, icon: 'trending-up',
     });
     if (!ok) return;
@@ -405,12 +413,15 @@ export function Game() {
             <div class="collect-auto"><span>🏦 Payments arrive the moment the visit is done</span></div>
           )}
 
-          <Card title="Your team" icon="users" class="team-card" subtitle={team.length ? `${fmtNum(team.length)} ${team.length === 1 ? 'carer' : 'carers'}${s.prismaticHires.length ? ` · ${s.prismaticHires.length} prismatic` : ''}` : 'Take on your first carer from the shop'}>
+          <Card title="Your team" icon="users" class="team-card" subtitle={team.length ? `${fmtNum(team.length)} ${team.length === 1 ? 'carer' : 'carers'}` : 'Take on your first carer from the shop'}>
             <div class="team-strip">
-              {s.prismaticHires.map((n, i) => <span key={'p' + i} class="team-avatar prismatic" title={`Prismatic ${n}`}>{initialsOf(n)}</span>)}
               {team.slice(0, 18).map((n, i) => <span key={i} class="team-avatar" style={{ '--hue': (i * 47) % 360 }} title={n}>{initialsOf(n)}</span>)}
               {team.length > 18 ? <span class="team-more">+{fmtNum(team.length - 18)}</span> : null}
             </div>
+            {s.prismaticHires.length ? (
+              <p class="team-shifts">🌈 Shifts the team still talks about: {listNames(s.prismaticHires)}. Everybody picked something up
+                {' '}– everything earns {fmtPercent(1 + 0.03 * s.prismaticHires.length)} because of them.</p>
+            ) : null}
             {s.log.length ? <ul class="game-log">{s.log.slice(0, 4).map((l, i) => <li key={i}><span>{l.emoji}</span> {l.text}</li>)}</ul> : null}
           </Card>
 
@@ -527,7 +538,7 @@ export function Game() {
                 <div><dt>Earned this run</dt><dd>{fmtMoney(s.runEarned)}</dd></div>
                 <div><dt>Earned ever</dt><dd>{fmtMoney(s.lifetimeEarned)}</dd></div>
                 <div><dt>Per second</dt><dd>{fmtRate(rate)}</dd></div>
-                <div><dt>Prismatic carers met</dt><dd>{s.prismaticsMet}</dd></div>
+                <div><dt>Brilliant shifts you saw</dt><dd>{s.prismaticsMet}</dd></div>
                 <div><dt>Thank-you cards opened</dt><dd>{s.cardsOpened}</dd></div>
                 <div><dt>Payments chased by hand</dt><dd>{s.collections}</dd></div>
                 <div><dt>Playing since</dt><dd>{new Date(s.startedAt).toLocaleDateString('en-GB')}</dd></div>

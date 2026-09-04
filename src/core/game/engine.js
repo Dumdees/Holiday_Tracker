@@ -9,11 +9,13 @@
 // state. Everything below is derived from the state; nothing important is ever stored twice.
 
 import {
-  BUILDINGS, BUILDINGS_BY_ID, beyondBuilding, UPGRADES, UPGRADES_BY_ID, upgradesFor, upgradeById,
+  BUILDINGS, BUILDINGS_BY_ID, beyondBuilding, BEYOND_PER_LEVEL, UPGRADES, UPGRADES_BY_ID, upgradesFor, upgradeById,
   BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
   ACHIEVEMENTS, PERKS, PRISMATIC_EFFECTS, CARD_EFFECTS, COST_GROWTH, MILESTONES, RATINGS,
   RATING_WEIGHTS, RATING_UPGRADE_POINTS, DAY_PARTS, levelInfo, FALLBACK_NAMES,
 } from './data.js';
+
+import { fmtMoney } from './format.js';
 
 export const SAVE_VERSION = 2;
 const OFFLINE_CAP_SECONDS = 8 * 3600;
@@ -210,7 +212,8 @@ export function sideRate(state, side) {
  * Put the two sides together: the two averaged, with a bonus for keeping them level. Written out,
  * `(work + team + sqrt(work × team)) / 3`, which comes to exactly one side's worth when they match.
  *  - an upgrade to one side is worth its full share of the total, so things do what they say;
- *  - a level board is worth half as much again as a lopsided one, which is the standing decision;
+ *  - a level board is worth up to half as much again as a badly lopsided one, which is the standing
+ *    decision the whole game turns on;
  *  - buying either side always earns more, never less, whatever the board looks like;
  *  - and neither side alone delivers a single visit.
  */
@@ -300,7 +303,8 @@ export function clickValue(state, now = Date.now()) {
   let pct = 0;
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'click') v *= u.mult || 2;
-    if (u.kind === 'clickpct') pct += 0.01;
+    if (u.clickBoost) v *= u.clickBoost;
+    if (u.kind === 'clickpct') pct += u.pct || 0.01;
   }
   if (state.perks.includes('legend')) v *= 10;
   let value = v * globalMultiplier(state, now) + pct * productionPerSecond(state, now);
@@ -314,7 +318,7 @@ export function costDiscount(state, id) {
   let f = state.perks.includes('playbook') ? 0.9 : 1;
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'discount' && u.building === id) f *= u.factor;
-    if (u.kind === 'branch-council') { const b = buildingDef(state, id); if (b && b.side === 'work') f *= u.discount; }
+    if (u.kind === 'branch-council') { const b = buildingDef(state, id); if (b && b.side === (u.discountSide || 'work')) f *= u.discount; }
   }
   return f;
 }
@@ -357,15 +361,15 @@ function incomeWith(state, changes, now) {
 }
 
 /** Extra income a second from buying `qty` more of a thing. Always zero or more. */
-export function buildingGain(state, id, qty = 1, now = Date.now()) {
-  const before = productionPerSecond(state, now);
+export function buildingGain(state, id, qty = 1, now = Date.now(), income = null) {
+  const before = income === null ? productionPerSecond(state, now) : income;
   const after = incomeWith(state, { buildings: { ...state.buildings, [id]: (state.buildings[id] || 0) + qty } }, now);
   return after - before;
 }
 
 /** Extra income a second from owning an upgrade. */
-export function upgradeGain(state, id, now = Date.now()) {
-  const before = productionPerSecond(state, now);
+export function upgradeGain(state, id, now = Date.now(), income = null) {
+  const before = income === null ? productionPerSecond(state, now) : income;
   const after = incomeWith(state, { upgrades: [...state.upgrades, id] }, now);
   return after - before;
 }
@@ -377,14 +381,14 @@ export function paybackSeconds(cost, gain) {
 }
 
 /** Everything about a shop row, worked out once for the view. */
-export function buildingOffer(state, id, qty = 1, now = Date.now()) {
+export function buildingOffer(state, id, qty = 1, now = Date.now(), income = null) {
   const b = buildingDef(state, id);
   const count = state.buildings[id] || 0;
   const cost = buildingCost(state, id, qty);
-  const gain = buildingGain(state, id, qty, now);
+  if (income === null) income = productionPerSecond(state, now);
+  const gain = buildingGain(state, id, qty, now, income);
   return {
-    ...b, count, cost, gain,
-    income: productionPerSecond(state, now),
+    ...b, count, cost, gain, income,
     payback: paybackSeconds(cost, gain),
     each: buildingRate(state, id) * visitValue(state) * globalMultiplier(state, now),
     affordable: state.funds >= cost,
@@ -393,16 +397,17 @@ export function buildingOffer(state, id, qty = 1, now = Date.now()) {
   };
 }
 
-export function upgradeOffer(state, u, now = Date.now()) {
+export function upgradeOffer(state, u, now = Date.now(), income = null) {
   const cost = upgradeCost(state, u.id);
-  const gain = upgradeGain(state, u.id, now);
-  return { ...u, cost, gain, income: productionPerSecond(state, now), payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
+  if (income === null) income = productionPerSecond(state, now);
+  const gain = upgradeGain(state, u.id, now, income);
+  return { ...u, cost, gain, income, payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
 }
 
 /** Every rung you can buy at this stage, including the endless ones past the starship. */
 export function unlockedBuildings(state) {
   const out = BUILDINGS.filter((b) => b.level <= state.level);
-  for (let level = 10; level <= state.level; level++) out.push(beyondBuilding(level));
+  for (let n = 1; n <= (state.level - 9) * BEYOND_PER_LEVEL; n++) out.push(beyondBuilding(n));
   return out;
 }
 
@@ -411,7 +416,7 @@ function buildingDef(state, id) {
   const known = BUILDINGS_BY_ID.get(id);
   if (known) return known;
   const n = /^beyond-(\d+)$/.exec(id);
-  return n ? beyondBuilding(Number(n[1]) + 9) : null;
+  return n ? beyondBuilding(Number(n[1])) : null;
 }
 
 /** The next thing that needs a bigger business, for a "coming soon" line. */
@@ -429,12 +434,13 @@ export function availableUpgrades(state) {
  * them – otherwise they would sit at the bottom for ever and nobody would find them.
  */
 export function upgradeShop(state, now = Date.now(), limit = 12) {
-  const income = Math.max(productionPerSecond(state, now), 1e-9);
+  const earning = productionPerSecond(state, now);
+  const income = Math.max(earning, 1e-9);
   // Things that earn come first, then the ones that only save you a job, then anything that would
   // actually cost you – which is ranked last and says so on the tile.
   const rank = (u) => (u.gain > 0 ? u.payback : u.gain < 0 ? 1e12 : (u.cost / income) * 1.5 + 1e6);
   return availableUpgrades(state)
-    .map((u) => upgradeOffer(state, u, now))
+    .map((u) => upgradeOffer(state, u, now, earning))
     .sort((a, b) => (rank(a) - rank(b)) || (a.cost - b.cost))
     .slice(0, limit);
 }
@@ -708,7 +714,7 @@ export function clickSpawn(state, now = Date.now(), rng = Math.random) {
     state.effects.push({ id: effect.id, name: effect.name, emoji: effect.emoji, until: now + effect.seconds * 1000, prodMult: effect.prodMult, clickMult: effect.clickMult });
   }
   const message = effect.describe(spawn.name);
-  addLog(state, effect.emoji, message + (amount ? ` (+£${Math.floor(amount).toLocaleString('en-GB')})` : ''), now);
+  addLog(state, effect.emoji, message + (amount ? ` (+${fmtMoney(amount)})` : ''), now);
   return { type: spawn.type, effect, amount, name: spawn.name, message };
 }
 
