@@ -241,7 +241,7 @@ export function Game() {
   const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
   const hint = nextStep(s, shop);
   const pending = G.pendingBranch(s);
-  const progress = G.expandProgress(s);
+  const progress = G.expandProgress(s, now);
   const nextLocked = G.nextLockedBuilding(s);
   const workShare = metrics.work + metrics.team > 0 ? (metrics.work / (metrics.work + metrics.team)) * 100 : 50;
   // The news only carries lines that make sense for the business you have actually built.
@@ -500,7 +500,7 @@ export function Game() {
                         {bestBuy && bestBuy.id === b.id ? <span class="best-chip">Best value</span> : null}
                       </span>
                       <span class="building-sub muted">
-                        {fmtPayback(b.payback, b.side) || 'earns nothing extra just now'}
+                        {fmtPayback(b.payback, b.side) || (metrics.team <= 0 ? 'nobody to do the visits yet – take on a carer first' : metrics.work <= 0 ? 'nobody to visit yet – take somebody on first' : 'earns nothing extra just now')}
                         {b.milestone ? <span class="milestone-pip"> · {fmtNum(b.milestone.remaining)} more and every one is {b.milestoneFactor}× better</span> : null}
                       </span>
                     </span>
@@ -520,12 +520,12 @@ export function Game() {
           <Tabs tabs={[{ id: 'grow', label: 'Grow', icon: 'trending-up' }, { id: 'stars', label: 'Stars', icon: 'star', count: G.starsAvailable(s) || undefined }, { id: 'badges', label: 'Badges', icon: 'heart', count: s.achievements.length }, { id: 'stats', label: 'Stats', icon: 'chart' }]} value={rightTab} onChange={setRightTab} variant="segmented" ariaLabel="Game panels" />
 
           {rightTab === 'grow' ? (
-            <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
-              <p class="soft">Earn {fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
+            <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s, now) ? 'ready' : ''}`}>
+              <p class="soft">Earn {fmtMoney(G.expandRequirement(s, now))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, progress * 100)}%` }} /></div>
               <div class="row-between"><span class="muted">{fmtMoney(s.runEarned)} earned this run</span><strong>{Math.floor(progress * 100)}%</strong></div>
-              <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
-                {G.canExpand(s) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
+              <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s, now)} class="mt" data-test="expand">
+                {G.canExpand(s, now) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
               </Button>
               {nextBadge ? <p class="small mt next-goal">🎯 <strong>Next badge:</strong> {nextBadge.emoji} {nextBadge.name} – {nextBadge.blurb}</p> : null}
               {G.branchChoices(s).filter((b) => b.chosen).length ? (

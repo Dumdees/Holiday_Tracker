@@ -546,13 +546,20 @@ describe('the rule that everything you buy changes the street', () => {
     }
   });
 
-  test('the shop never runs out, however far you go', () => {
+  test('every stage brings its own shelf, and it is priced against that stage', () => {
+    for (const level of [1, 4, 9, 12, 18]) {
+      const shelf = upgradesFor(level).filter((u) => u.id.startsWith(`stage-${level}-`));
+      assert.ok(shelf.length >= 8, `stage ${level} has a shelf of its own`);
+      const threshold = levelInfo(level).threshold;
+      const cheapest = Math.min(...shelf.map((u) => u.cost));
+      const dearest = Math.max(...shelf.map((u) => u.cost));
+      assert.ok(cheapest >= threshold * 0.002 && cheapest <= threshold * 0.05, 'the first is affordable early in the stage');
+      assert.ok(dearest >= threshold * 0.2 && dearest <= threshold, 'and the last is something to save the run for');
+      for (const u of shelf) assert.ok(u.visual && u.name && u.blurb && u.icon, `${u.id} is fully written`);
+    }
     const far = { ...board(), level: LEVELS.length + 3, buildings: { carer: 400, client: 400, 'beyond-1': 200, 'beyond-2': 60, 'beyond-3': 20, 'beyond-4': 5 } };
     const ids = new Set(upgradesFor(far.level).map((u) => u.id));
-    for (const n of [1, 2, 3, 4]) {
-      assert.ok(ids.has(`beyond-${n}-t1`), `far rung ${n} brings its own kit`);
-      assert.ok(ids.has(`far-value-${n}`) && ids.has(`far-all-${n}`), `far rung ${n} brings its own bonuses`);
-    }
+    for (const n of [1, 2, 3, 4]) assert.ok(ids.has(`beyond-${n}-t1`), `far rung ${n} brings its own kit`);
     const shop = g.upgradeShop(far, T0);
     assert.ok(shop.length >= 5, 'there is always a shelf full');
     assert.ok(shop.some((u) => u.gain > 0), 'and at least one of them earns you more');

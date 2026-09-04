@@ -198,6 +198,7 @@ export function buildingRate(state, id) {
   let mult = Math.pow(milestoneFactor(state), milestonesPassed(count));
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'building' && u.building === id) mult *= u.mult || 2;
+    if (u.kind === 'side' && u.side === b.side) mult *= 1 + u.flat;
     if (u.kind === 'synergy') {
       const applies = u.to === id || (u.to === '*') || (u.to === '*team' && b.side === 'team') || (u.to === '*work' && b.side === 'work');
       if (applies) mult *= 1 + Math.min(u.cap, u.per * (state.buildings[u.from] || 0));
@@ -220,8 +221,9 @@ export function sideRate(state, side) {
  * Put the two sides together: the two averaged, with a bonus for keeping them level. Written out,
  * `(work + team + sqrt(work × team)) / 3`, which comes to exactly one side's worth when they match.
  *  - an upgrade to one side is worth its full share of the total, so things do what they say;
- *  - a level board is worth up to half as much again as a badly lopsided one, which is the standing
- *    decision the whole game turns on;
+ *  - for the same total visits, a level board is worth up to half as much again as a badly lopsided
+ *    one – which is not the same as saying level is always the best way to spend a pound, because
+ *    the two sides cost different amounts;
  *  - buying either side always earns more, never less, whatever the board looks like;
  *  - and neither side alone delivers a single visit.
  */
@@ -312,7 +314,7 @@ export function clickValue(state, now = Date.now()) {
   let v = visitValue(state);
   let pct = 0;
   for (const u of ownedUpgrades(state)) {
-    if (u.kind === 'click') v *= u.mult || 2;
+    if (u.kind === 'click') { v *= u.mult || 2; pct += u.pct || 0; }
     if (u.clickBoost) v *= u.clickBoost;
     if (u.kind === 'clickpct') pct += u.pct || 0.01;
   }
@@ -628,25 +630,33 @@ export function nextLevel(state) {
   return levelInfo(state.level + 1);
 }
 
+/** A run has to be worth at least this many seconds at its own best rate before you can hand over. */
+export const RUN_SECONDS = 150;
+
 /**
- * What this run has to earn before you can hand the patch over: the stage's own figure, or three
- * times your best run ever, whichever is more. The second half is what stops a big business handing
- * the patch over five times in a minute once the stages start coming quickly.
+ * What this run has to earn before you can hand the patch over: the stage's own figure, three times
+ * your best run ever, or five minutes at the rate you are earning now – whichever is most. The last
+ * one is what stops a big business handing the patch over eight times in two minutes: it rises with
+ * you, so it can only be met once the run has stopped doubling every few seconds.
  */
-export function expandRequirement(state) {
-  return Math.max(nextLevel(state).threshold, (state.bestRun || 0) * 3);
+export function expandRequirement(state, now = Date.now()) {
+  return Math.max(
+    nextLevel(state).threshold,
+    (state.bestRun || 0) * 3,
+    productionPerSecond(state, now) * RUN_SECONDS,
+  );
 }
 
-export function expandProgress(state) {
-  const target = expandRequirement(state);
+export function expandProgress(state, now = Date.now()) {
+  const target = expandRequirement(state, now);
   const floor = target / 100;
   const earned = Math.max(0, state.runEarned);
   if (earned <= floor) return (earned / floor) * 0.15;
   return Math.min(1, 0.15 + 0.85 * (Math.log(earned / floor) / Math.log(100)));
 }
 
-export function canExpand(state) {
-  return state.runEarned >= expandRequirement(state);
+export function canExpand(state, now = Date.now()) {
+  return state.runEarned >= expandRequirement(state, now);
 }
 
 export function starsOnExpand(state) {
@@ -667,7 +677,7 @@ function applyStartPerks(state) {
 
 /** Hand the patch over and start again bigger. Stars, perks and badges stay. */
 export function expand(state, now = Date.now()) {
-  if (!canExpand(state)) return null;
+  if (!canExpand(state, now)) return null;
   const gained = starsOnExpand(state);
   const keep = {
     startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,

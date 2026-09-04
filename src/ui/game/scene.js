@@ -28,7 +28,12 @@ const CAR_COLOURS = ['#e5734a', '#5f9bd1', '#6fa582', '#e39a2e', '#9576b8'];
 const EMOJI_FONT = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
 const UI_FONT = '"Segoe UI", system-ui, sans-serif';
 const TWO_PI = Math.PI * 2;
-const MAX_AGENTS = 14;
+const MAX_AGENTS = 20;
+/**
+ * How many of something to draw for a count. Every doubling puts one more on the street, so a
+ * purchase keeps changing the picture long after the street would otherwise be full.
+ */
+function drawnFor(count, cap) { return count <= 0 ? 0 : Math.min(cap, 1 + Math.floor(Math.log2(count))); }
 
 function rand(a, b) { return a + Math.random() * (b - a); }
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -93,7 +98,7 @@ export function createScene(canvas, { onCoin } = {}) {
 
   function layoutHouses() {
     const maxByWidth = Math.max(3, Math.floor((W - 180) / 58));
-    const count = clamp(Math.min(world.homes, maxByWidth), 1, 9);
+    const count = clamp(Math.min(drawnFor(world.homes, 14), maxByWidth), 1, 14);
     const left = 135, right = W - 26;
     const gap = (right - left) / count;
     const w = Math.min(56, gap * 0.82);
@@ -127,7 +132,7 @@ export function createScene(canvas, { onCoin } = {}) {
     const carers = state.buildings.carer || 0;
     world.teamSize = carers;
     // One figure for you, then a carer for each door we can draw.
-    const wanted = 1 + Math.min(carers, world.houses.length, MAX_AGENTS - 1);
+    const wanted = 1 + Math.min(drawnFor(carers, MAX_AGENTS - 1), MAX_AGENTS - 1);
     while (world.agents.length < wanted) {
       const i = world.agents.length;
       const a = makeAgent(i, i === 0 ? world.starName : (names[(i - 1) % Math.max(1, names.length)] || `Carer ${i}`));
@@ -136,7 +141,7 @@ export function createScene(canvas, { onCoin } = {}) {
     }
     while (world.agents.length > wanted) { const gone = world.agents.pop(); if (gone.house >= 0 && world.houses[gone.house]) world.houses[gone.house].busy = -1; }
     world.agents[0].name = world.starName;
-    const cars = clamp(state.buildings.car || 0, 0, 5);
+    const cars = drawnFor(state.buildings.car || 0, 8);
     while (world.cars.length < cars) {
       const c = { x: world.synced ? -60 : rand(0, W), dir: 1, speed: rand(45, 70), colour: CAR_COLOURS[world.cars.length % CAR_COLOURS.length], laneOffset: world.cars.length % 2 ? 8 : -4, honk: world.synced ? 1.2 : 0 };
       if (!world.synced && Math.random() < 0.5) c.dir = -1;
@@ -211,7 +216,7 @@ export function createScene(canvas, { onCoin } = {}) {
   function syncFolk() {
     const wanted = [];
     for (const id of STREET_FOLK) {
-      const n = Math.min(2, world.counts[id] || 0);
+      const n = drawnFor(world.counts[id] || 0, 5);
       for (let i = 0; i < n; i++) wanted.push(id);
     }
     while (world.folk.length > wanted.length) world.folk.pop();
@@ -858,6 +863,34 @@ export function createScene(canvas, { onCoin } = {}) {
     ctx.fillStyle = '#E39A2E'; ctx.fillRect(c.x - 20, c.y + bob + 52, 40 * left, 3);
   }
 
+  /**
+   * The street can only hold so many doors and so many carers, so the rest are counted honestly at
+   * the end of the row. Buying one more always changes this, however big the business gets.
+   */
+  function drawMore(day) {
+    const chip = (text, x, y) => {
+      ctx.font = `700 10px ${UI_FONT}`; ctx.textAlign = 'center';
+      const w = ctx.measureText(text).width + 12;
+      ctx.fillStyle = day > 0.5 ? 'rgba(255,255,255,.82)' : 'rgba(30,26,44,.7)';
+      ctx.beginPath(); ctx.roundRect(x - w / 2, y - 11, w, 16, 8); ctx.fill();
+      ctx.fillStyle = day > 0.5 ? '#3a2a24' : '#f6f1ea';
+      ctx.fillText(text, x, y);
+    };
+    const last = world.houses[world.houses.length - 1];
+    const moreDoors = Math.max(0, world.homes - world.houses.length);
+    if (last && moreDoors > 0) chip(`+${fmtCount(moreDoors)} more doors`, Math.min(W - 52, last.x + 44), pavementY() - 58);
+    const drawnCarers = Math.max(0, world.agents.length - 1);
+    const moreCarers = Math.max(0, (world.teamSize || 0) - drawnCarers);
+    if (moreCarers > 0) chip(`+${fmtCount(moreCarers)} on the round`, officeX() + 46, pavementY() + 26);
+  }
+
+  function fmtCount(n) {
+    if (n < 1000) return String(n);
+    if (n < 1e6) return `${(n / 1000).toFixed(n < 1e4 ? 1 : 0)}k`;
+    if (n < 1e9) return `${(n / 1e6).toFixed(1)}m`;
+    return n.toExponential(1);
+  }
+
   function draw(frameNow) {
     const t = th(), day = dayFactor();
     ctx.save();
@@ -867,6 +900,7 @@ export function createScene(canvas, { onCoin } = {}) {
     drawOffice(day); drawLamps(day);
     world.houses.forEach((h, i) => drawHouse(h, i, day));
     for (const f of world.folk) drawFolk(f);
+    drawMore(day);
     const agents = [...world.agents].sort((a, b) => a.x - b.x);
     for (const a of agents) drawAgent(a, a.id === 0);
     if (world.prismatic) drawAgent({ ...world.prismatic, dir: 1, skin: '#F6D2B6', hair: '#fff', pop: 1, state: 'walk', colour: '#fff', dash: 0 }, false, true);
