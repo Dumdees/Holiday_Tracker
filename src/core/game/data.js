@@ -134,8 +134,9 @@ export function legacyPerk(n) {
 // Every upgrade has a `kind` the engine knows how to fold in, and a `question` – the one line that
 // says why you might buy this one before the others.
 
-const TIER_AT = [1, 30, 150];           // how many you must own for each tier to appear
+const TIER_AT = [10, 60, 300];          // how many you must own for each tier to appear
 const TIER_COST = [10, 250, 5000];      // times the building's base cost
+const TIER_MULT = [2, 2.5, 3];          // each tier is a bigger step than the last
 const TIER_WHERE = {
   carer: 'on every carer', client: 'at every door you look after', keysafe: 'on every key safe',
   package: 'on every care folder', car: 'on every car', directpay: 'in every window',
@@ -174,8 +175,8 @@ for (const b of BUILDINGS) {
   TIER_AT.forEach((count, i) => {
     TIERS.push({
       id: `${b.id}-t${i + 1}`, name: TIER_NAMES[b.id][i], emoji: b.emoji, kind: 'building', building: b.id,
-      cost: b.baseCost * TIER_COST[i], archetype: 'kit',
-      blurb: `${b.plural} are twice as good.`,
+      cost: b.baseCost * TIER_COST[i], archetype: 'kit', mult: TIER_MULT[i],
+      blurb: `${b.plural} are ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as good.`,
       visual: `${TIER_NAMES[b.id][i]} ${TIER_WHERE[b.id]}.`,
       question: `Doubles a rung you already own – worth it only if you own a lot of ${b.plural.toLowerCase()}.`,
       unlock: (s) => (s.buildings[b.id] || 0) >= count,
@@ -247,7 +248,7 @@ const AUTOMATION = [
 /** Cheaper things. Priced at about one and a half of the next one you would buy. */
 const DISCOUNTS = [
   { id: 'disc-recruit', name: 'Refer a friend', emoji: '🫂', kind: 'discount', building: 'carer', factor: 0.85, cost: 9000, blurb: 'Carers cost 15% less, for good.', question: 'Only pays back if you are going to keep hiring.', unlock: (s) => (s.buildings.carer || 0) >= 40 },
-  { id: 'disc-safes', name: 'Key safes by the box', emoji: '📦', kind: 'discount', building: 'keysafe', factor: 0.8, cost: 260000, blurb: 'Key safes cost 20% less, for good.', question: 'The cheapest way to keep A tidy patch switched on.', unlock: (s) => (s.buildings.keysafe || 0) >= 30 },
+  { id: 'disc-safes', name: 'Key safes by the box', emoji: '📦', kind: 'discount', building: 'keysafe', factor: 0.8, cost: 260000, blurb: 'Key safes cost 20% less, for good.', question: 'Key safes stay worth buying long after their own income has faded.', unlock: (s) => (s.buildings.keysafe || 0) >= 30 },
   { id: 'disc-mileage', name: 'Mileage sorted properly', emoji: '⛽', kind: 'discount', building: 'car', factor: 0.8, cost: 5.5e6, blurb: 'Care cars cost 20% less, for good.', question: 'Cars are the priciest thing you buy in bulk early on.', unlock: (s) => (s.buildings.car || 0) >= 25 },
   { id: 'disc-homes', name: 'Word gets round', emoji: '🗣️', kind: 'discount', building: 'client', factor: 0.85, cost: 12000, blurb: 'Taking on someone new costs 15% less, for good.', question: 'The work-side answer to Refer a friend.', unlock: (s) => (s.buildings.client || 0) >= 40 },
 ];
@@ -405,8 +406,8 @@ export function farUpgrades(n) {
   FAR_KIT.forEach((name, i) => {
     out.push({
       id: `${b.id}-t${i + 1}`, name: `${name} ${n}`, emoji: b.emoji, kind: 'building', building: b.id,
-      cost: b.baseCost * TIER_COST[i], archetype: 'kit', icon: b.emoji,
-      blurb: `${b.plural} are twice as good.`,
+      cost: b.baseCost * TIER_COST[i], archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
+      blurb: `${b.plural} are ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as good.`,
       visual: `${name} on every ${b.name.toLowerCase()}, counted on the horizon.`,
       question: `Doubles a rung you already own – worth it only if you own a lot of ${b.plural.toLowerCase()}.`,
       unlock: (s) => (s.buildings[b.id] || 0) >= TIER_AT[i],

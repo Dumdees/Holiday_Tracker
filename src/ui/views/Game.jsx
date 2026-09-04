@@ -58,11 +58,19 @@ function listNames(names) {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** "+18%" – how much more would be coming in, for the face of a tile. Empty when it earns nothing. */
+/**
+ * The one figure on the face of an upgrade tile. Things that earn more say how much more; things
+ * that do something else say what they do, in the same shape, so tiles can be compared at a glance.
+ */
 function gainPct(u) {
-  if (!(u.gain > 0) || !(u.income > 0)) return '';
-  const pct = (u.gain / u.income) * 100;
-  return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : `+${pct.toFixed(1)}%`;
+  if (u.gain > 0 && u.income > 0) {
+    const pct = (u.gain / u.income) * 100;
+    return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : `+${pct.toFixed(1)}%`;
+  }
+  if (u.kind === 'discount') return `−${Math.round((1 - u.factor) * 100)}% to buy`;
+  if (u.kind === 'clickpct') return `+${Math.round((u.pct || 0.01) * 100)}% a tap`;
+  if (u.kind === 'click') return `×${u.mult || 2} a tap`;
+  return '';
 }
 
 /** How much more you would earn, in plain words, for the top of a tooltip. */
@@ -448,7 +456,7 @@ export function Game() {
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
-                  <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'when it fits' : u.kind === 'discount' ? 'cheaper' : u.kind === 'click' || u.kind === 'clickpct' ? 'your visits' : 'saves a job')}</span>
+                  <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'when it fits' : 'saves a job')}</span>
                 </button>
               ))}
             </div>

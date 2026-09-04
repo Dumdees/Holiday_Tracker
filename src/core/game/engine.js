@@ -189,7 +189,7 @@ export function buildingRate(state, id) {
   const count = state.buildings[id] || 0;
   let mult = Math.pow(milestoneFactor(state), milestonesPassed(count));
   for (const u of ownedUpgrades(state)) {
-    if (u.kind === 'building' && u.building === id) mult *= 2;
+    if (u.kind === 'building' && u.building === id) mult *= u.mult || 2;
     if (u.kind === 'synergy') {
       const applies = u.to === id || (u.to === '*') || (u.to === '*team' && b.side === 'team') || (u.to === '*work' && b.side === 'work');
       if (applies) mult *= 1 + Math.min(u.cap, u.per * (state.buildings[u.from] || 0));
