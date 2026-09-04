@@ -1,5 +1,7 @@
-// Care Empire – a light-hearted clicker game. Start with one carer and one street; end up caring for the galaxy.
-// The street itself is a living canvas scene (src/ui/game/scene.js); this view owns the game loop, the HUD and the shop.
+// Care Empire – a light-hearted clicker game about growing a home-care service.
+// The street itself is a living canvas scene (src/ui/game/scene.js); this view owns the game loop,
+// the HUD, the shop and the choices. Everything the player is asked to decide is shown in pounds
+// and seconds, so nobody needs a wiki to know what to buy next.
 import { useState, useEffect, useRef, useMemo } from 'preact/hooks';
 import { navigate } from '../../app/router.js';
 import { PageHeader } from '../components/PageHeader.jsx';
@@ -13,7 +15,7 @@ import { toast } from '../components/Toast.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { carers, settings } from '../../store/store.js';
 import * as G from '../../core/game/engine.js';
-import { TICKER, levelInfo } from '../../core/game/data.js';
+import { TICKER, SIDES, levelInfo } from '../../core/game/data.js';
 import { fmtMoney, fmtNum, fmtRate, fmtSeconds, fmtPercent } from '../../core/game/format.js';
 import { game, offlineReport, startGame, saveGame, scheduleSave, mutate, resetGame } from '../game/gameStore.js';
 import { createScene } from '../game/scene.js';
@@ -22,6 +24,14 @@ const TICK_MS = 100;
 
 function initialsOf(name) {
   return String(name || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+}
+
+/** How long something takes to pay for itself, in words. */
+function fmtPayback(seconds) {
+  if (!Number.isFinite(seconds)) return null;
+  if (seconds < 90) return `pays for itself in ${Math.max(1, Math.round(seconds))} seconds`;
+  if (seconds < 5400) return `pays for itself in about ${Math.round(seconds / 60)} minutes`;
+  return `pays for itself in about ${Math.round(seconds / 3600)} hours`;
 }
 
 /** Restart a CSS animation on an element without going through state. */
@@ -56,9 +66,10 @@ export function Game() {
   const hudRef = useRef(null);
   const sceneRef = useRef(null);
   const lastTick = useRef(Date.now());
-  const firstSeen = useRef(new Map()); // upgrade id → when it first appeared, for the NEW tag
+  const firstSeen = useRef(new Map());
   const prevEffects = useRef('');
   const effectMeta = useRef(new Map());
+  const seenBranch = useRef(new Set());
   const s = game.value;
   const hasGame = !!s;
   const away = offlineReport.value;
@@ -73,7 +84,7 @@ export function Game() {
     return () => clearInterval(id);
   }, []);
 
-  // The game loop: 10 ticks a second, saving every few seconds.
+  // The game loop: ten ticks a second, saving every few seconds.
   useEffect(() => {
     startGame();
     lastTick.current = Date.now();
@@ -90,8 +101,8 @@ export function Game() {
         }
         const events = G.tick(st, dt, now, Math.random, names);
         const badges = events.filter((e) => e.kind === 'achievement').map((e) => e.achievement);
-        if (badges.length === 1) toast(`${badges[0].emoji} Achievement: ${badges[0].name} – +1% to everything`, { kind: 'success', duration: 5000 });
-        else if (badges.length > 1) toast(`🎉 ${badges.length} achievements at once: ${badges.map((b) => b.name).join(', ')} – +${badges.length}% to everything`, { kind: 'success', duration: 6000 });
+        if (badges.length === 1) toast(`${badges[0].emoji} Badge earned: ${badges[0].name} – everything earns 1% more`, { kind: 'success', duration: 5000 });
+        else if (badges.length > 1) toast(`🎉 ${badges.length} badges at once: ${badges.map((b) => b.name).join(', ')} – everything earns ${badges.length}% more`, { kind: 'success', duration: 6000 });
         if (badges.length) { setConfetti((c) => c + 1); sceneRef.current?.celebrate('achievement'); }
         for (const e of events) {
           if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 A prismatic ${e.spawn.name} is walking down the street – catch them!`, { kind: 'info', duration: 6000 });
@@ -114,7 +125,6 @@ export function Game() {
     return () => { scene.destroy(); sceneRef.current = null; };
   }, [hasGame]);
 
-  // Keep the street in step with the game after every render (cheap).
   useEffect(() => { if (s) sceneRef.current?.sync(s, names, Date.now()); });
 
   // Say when a boost runs out, so the chip does not just vanish.
@@ -137,7 +147,7 @@ export function Game() {
       <div class="confirm">
         <div class="confirm-icon"><Icon name="sun" size={28} /></div>
         <h2>Welcome back!</h2>
-        <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the Night shift perk makes it full speed)' : ''}.{away.needsCollect ? ' The payments are waiting to be collected.' : ''}</p>
+        <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}.{away.needsCollect ? ' The payments are waiting to be collected.' : ''}</p>
         <div class="modal-actions"><Button variant="primary" onClick={() => close()}>Lovely</Button></div>
       </div>
     ), { size: 'sm', ariaLabel: 'Welcome back' });
@@ -146,6 +156,7 @@ export function Game() {
   if (!s) return <div class="page"><PageHeader title="Care Empire" /></div>;
 
   const now = Date.now();
+  const metrics = G.boardMetrics(s);
   const rate = G.productionPerSecond(s, now);
   const perClick = G.clickValue(s, now);
   const mode = G.collectionMode(s);
@@ -153,13 +164,28 @@ export function Game() {
   const next = G.nextLevel(s);
   const starName = names[0] || 'Sam';
   const team = G.teamNames(s, names);
+  const rating = G.ratingInfo(s);
+  const balance = G.bottleneck(s, metrics);
   const activeEffects = s.effects.filter((e) => e.until > now);
   const frenzy = activeEffects.some((e) => e.clickMult);
   const spawnBox = s.spawn ? sceneRef.current?.spawnPos() : null;
   const nextBadge = G.achievementList(s).find((a) => !a.done);
-  const upgrades = G.availableUpgrades(s).slice(0, 12);
+  const upgrades = G.upgradeShop(s, now, 12);
   const firstRender = firstSeen.current.size === 0;
-  for (const u of upgrades) if (!firstSeen.current.has(u.id)) firstSeen.current.set(u.id, firstRender ? 0 : now); // no NEW tags on what was already there
+  for (const u of upgrades) if (!firstSeen.current.has(u.id)) firstSeen.current.set(u.id, firstRender ? 0 : now);
+  const shop = G.unlockedBuildings(s).map((b) => G.buildingOffer(s, b.id, buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty, now));
+  const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
+  const pending = G.pendingBranch(s);
+  const progress = G.expandProgress(s);
+  const nextLocked = G.nextLockedBuilding(s);
+  const workShare = metrics.work + metrics.team > 0 ? (metrics.work / (metrics.work + metrics.team)) * 100 : 50;
+  const tickerText = TICKER[tickerIndex].replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName).replace(/\{co\}/g, settings.value?.companyName || 'Monteith');
+
+  // Announce a big choice the first time it becomes available.
+  if (pending && !seenBranch.current.has(pending.slot)) {
+    seenBranch.current.add(pending.slot);
+    setTimeout(() => toast(`${pending.emoji} A decision to make: ${pending.name}`, { kind: 'info', duration: 7000 }), 0);
+  }
 
   function addFloater(text, x, y, cls = '') {
     const id = Math.random();
@@ -212,28 +238,50 @@ export function Game() {
     saveGame();
   }
 
-  function onBuy(id) {
-    const r = mutate((st) => G.buyBuilding(st, id, buyQty));
-    if (r.bought) { sceneRef.current?.celebrate('buy'); scheduleSave(); }
+  function onBuy(offer) {
+    const r = mutate((st) => G.buyBuilding(st, offer.id, buyQty));
+    if (!r.bought) return;
+    sceneRef.current?.celebrate('buy');
+    if (r.milestone) {
+      toast(`${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – every one of them is now ${offer.milestoneFactor} times better!`, { kind: 'success', duration: 6000 });
+      setConfetti((c) => c + 1);
+      sceneRef.current?.celebrate('achievement');
+    }
+    scheduleSave();
   }
 
   function onUpgrade(u) {
-    if (mutate((st) => G.buyUpgrade(st, u.id))) { toast(`${u.emoji} ${u.name} – ${u.blurb}`, { kind: 'success' }); sceneRef.current?.celebrate('upgrade'); scheduleSave(); }
+    if (mutate((st) => G.buyUpgrade(st, u.id))) {
+      toast(`${u.emoji} ${u.name} – ${u.visual || u.blurb}`, { kind: 'success', duration: 5000 });
+      sceneRef.current?.celebrate('upgrade');
+      scheduleSave();
+    }
+  }
+
+  function onPickBranch(slot, option) {
+    if (mutate((st) => G.pickBranch(st, slot, option.id))) {
+      toast(`${option.emoji} ${option.name} – ${option.visual || option.blurb}`, { kind: 'success', duration: 6000 });
+      setConfetti((c) => c + 1);
+      sceneRef.current?.celebrate('expand');
+      saveGame();
+    }
   }
 
   async function onExpand() {
     const gained = G.starsOnExpand(s);
+    const kit = G.startingKit(s.level + 1);
     const ok = await confirm({
-      title: `Expand to ${next.name.toLowerCase()} ${next.emoji}?`,
-      message: `Your carers, buildings, upgrades and money start again from scratch – but you keep every achievement and gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 2% to everything, forever). New buildings unlock at this level.`,
-      confirmLabel: `Expand to ${next.name.toLowerCase()}`, icon: 'trending-up',
+      title: `Hand over and grow to ${next.name.toLowerCase()} ${next.emoji}?`,
+      message: `Your people, your kit and your money start again – but you keep every badge, gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 2% to everything, forever) and begin with ${kit.carer} carers and ${kit.client} people to look after. Bigger things unlock at the next stage.`,
+      confirmLabel: `Hand over`, icon: 'trending-up',
     });
     if (!ok) return;
     const r = mutate((st) => G.expand(st, Date.now()));
     if (r) {
-      toast(`${levelInfo(r.level).emoji} Welcome to ${levelInfo(r.level).name.toLowerCase()}! +${r.gained} Legacy ${r.gained === 1 ? 'Star' : 'Stars'}`, { kind: 'success', duration: 7000 });
+      toast(`${levelInfo(r.level).emoji} ${levelInfo(r.level).name}! +${r.gained} Legacy ${r.gained === 1 ? 'Star' : 'Stars'}`, { kind: 'success', duration: 7000 });
       setConfetti((c) => c + 1);
       sceneRef.current?.celebrate('expand');
+      seenBranch.current = new Set();
       saveGame();
     }
   }
@@ -244,36 +292,28 @@ export function Game() {
 
   async function onReset() {
     const ok = await confirm({ title: 'Start the game over?', message: 'Everything in the game goes back to the very beginning, including Legacy Stars. Your real holiday records are not affected.', confirmLabel: 'Start over', danger: true, icon: 'refresh' });
-    if (ok) { resetGame(); toast('Back to the beginning. Good luck!'); }
+    if (ok) { resetGame(); seenBranch.current = new Set(); firstSeen.current = new Map(); toast('Back to the beginning. Good luck!'); }
   }
-
-  const progress = G.expandProgress(s);
-  const nextLocked = G.nextLockedBuilding(s);
-  const onShift = s.buildings.carer || 0;
-  const homes = s.buildings.home || 0;
-  const waiting = G.carersWaiting(s);
-  const tickerText = TICKER[tickerIndex].replace(/\{n\}/g, team[Math.floor((tickerIndex * 7) % Math.max(1, team.length))] || starName).replace(/\{co\}/g, settings.value?.companyName || 'Monteith');
 
   return (
     <div class="page game-page">
       <PageHeader title={<span class="row">Care Empire <Badge tone="peach" size="md">{level.emoji} {level.name}</Badge></span>} lede={level.tagline} />
 
-      {/* ---------- The street: click anywhere to send your star carer on a visit ---------- */}
+      {/* ---------- The street ---------- */}
       <div class="world-frame">
-        <div class={`world ${frenzy ? 'frenzy' : ''}`} ref={worldRef} role="button" tabIndex={0} aria-label={`Send ${starName} on a visit`} data-test="clicker" onClick={onWorldClick} onKeyDown={onWorldKey}>
+        <div class={`world ${frenzy ? 'frenzy' : ''}`} ref={worldRef} role="button" tabIndex={0} aria-label={`Do a visit with ${starName}`} data-test="clicker" onClick={onWorldClick} onKeyDown={onWorldKey}>
           <canvas ref={canvasRef} aria-hidden="true" />
           <div class="world-hud" ref={hudRef}>
             <div class="game-funds-main">{fmtMoney(s.funds)}</div>
             <div class="world-rate">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div>
           </div>
-          <div class="world-level">{level.emoji} {level.name} · 🏠 {fmtNum(homes)} {homes === 1 ? 'home' : 'homes'} · {onShift ? `${fmtNum(onShift + 1)} on shift` : `${starName} on shift`}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
-          {waiting > 0 ? <div class="world-warning">⏳ {fmtNum(waiting)} {waiting === 1 ? 'carer has' : 'carers have'} no home to visit – buy more client homes</div> : null}
+          <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
           {activeEffects.length ? (
             <div class="world-effects">
               {activeEffects.map((e) => <span key={e.id} class={`effect-chip effect-${e.id}`}>{e.emoji} {e.name} · {fmtSeconds((e.until - now) / 1000)}</span>)}
             </div>
           ) : null}
-          {s.clicks < 8 ? <div class="world-hint">👆 Tap the house to send {starName} on a visit</div> : homes < 2 && s.clicks < 40 ? <div class="world-hint">🏠 Each home needs a moment between visits – buy more client homes in the shop</div> : null}
+          {s.clicks < 8 ? <div class="world-hint">👆 Tap a door to do a visit yourself</div> : null}
           {confetti ? <Confetti key={confetti} /> : null}
           {floaters.map((f) => <span key={f.id} class={`floater ${f.cls}`} style={{ left: f.x + '%', top: f.y + '%' }}>{f.text}</span>)}
           {spawnBox ? (
@@ -281,8 +321,37 @@ export function Game() {
               onClick={(e) => { e.stopPropagation(); onSpawnClick(); }} data-test="spawn" aria-label={s.spawn.type === 'prismatic' ? `Catch prismatic ${s.spawn.name}` : 'Open the thank-you card'} />
           ) : null}
         </div>
+
+        {/* The one number that drives every decision: which side is behind. */}
+        <div class="balance-strip" data-test="balance">
+          <span class="balance-label">🏠 {fmtNum(metrics.work)} wanted</span>
+          <span class="balance-bar" role="img" aria-label={`Work ${Math.round(workShare)} per cent, team ${100 - Math.round(workShare)} per cent`}>
+            <span class="balance-work" style={{ width: `${workShare}%` }} />
+            <span class="balance-team" style={{ width: `${100 - workShare}%` }} />
+          </span>
+          <span class="balance-label">👥 {fmtNum(metrics.team)} deliverable</span>
+          <span class={`balance-advice side-${balance.side}`}>{balance.advice}</span>
+        </div>
+
         <div class="ticker-bar" aria-live="off"><span>📰</span><span class="ticker-text" key={tickerIndex}>{tickerText}</span></div>
       </div>
+
+      {/* ---------- A big choice, when there is one ---------- */}
+      {pending ? (
+        <Card title={`${pending.emoji} ${pending.name}`} icon="help" class="branch-card" subtitle={`${pending.blurb} You choose once, and it lasts until you hand over.`}>
+          <div class="branch-grid">
+            {pending.options.map((o) => (
+              <button key={o.id} type="button" class="branch-option" onClick={() => onPickBranch(pending.slot, o)} data-test={`branch-${o.id}`}>
+                <span class="branch-emoji">{o.emoji}</span>
+                <strong>{o.name}</strong>
+                <span class="muted small">{o.blurb}</span>
+                <span class="branch-question">{o.question}</span>
+                <span class="branch-visual">You will see: {o.visual}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <div class="game-grid">
         {/* ---------- Left: money in, and the team ---------- */}
@@ -293,12 +362,12 @@ export function Game() {
               <span class="collect-amount">{fmtMoney(s.invoices)}</span>
             </button>
           ) : mode === 'admin' ? (
-            <div class="collect-auto"><span>🗂️ The office admin collects payments every few seconds</span><strong>{fmtMoney(s.invoices)} waiting</strong></div>
+            <div class="collect-auto"><span>🗃️ The office admin collects the payments every few seconds</span><strong>{fmtMoney(s.invoices)} waiting</strong></div>
           ) : (
-            <div class="collect-auto"><span>🏦 Payments arrive instantly by direct debit</span></div>
+            <div class="collect-auto"><span>🏦 Payments arrive the moment the visit is done</span></div>
           )}
 
-          <Card title="Your team" icon="users" class="team-card" subtitle={team.length ? `${fmtNum(team.length)} ${team.length === 1 ? 'carer' : 'carers'}${s.prismaticHires.length ? ` · ${s.prismaticHires.length} prismatic` : ''}` : 'Hire your first carer from the shop'}>
+          <Card title="Your team" icon="users" class="team-card" subtitle={team.length ? `${fmtNum(team.length)} ${team.length === 1 ? 'carer' : 'carers'}${s.prismaticHires.length ? ` · ${s.prismaticHires.length} prismatic` : ''}` : 'Take on your first carer from the shop'}>
             <div class="team-strip">
               {s.prismaticHires.map((n, i) => <span key={'p' + i} class="team-avatar prismatic" title={`Prismatic ${n}`}>{initialsOf(n)}</span>)}
               {team.slice(0, 18).map((n, i) => <span key={i} class="team-avatar" style={{ '--hue': (i * 47) % 360 }} title={n}>{initialsOf(n)}</span>)}
@@ -306,66 +375,79 @@ export function Game() {
             </div>
             {s.log.length ? <ul class="game-log">{s.log.slice(0, 4).map((l, i) => <li key={i}><span>{l.emoji}</span> {l.text}</li>)}</ul> : null}
           </Card>
+
+          <Card title="How you are rated" icon="star" class="rating-card" subtitle={rating.blurb}>
+            <div class="rating-row"><span class="rating-emoji">{rating.emoji}</span><strong>{rating.name}</strong></div>
+            {rating.next ? (
+              <p class="muted small">Coordinators, supervisors, academies and the quality upgrades all count towards the next one. {fmtNum(rating.next.score - rating.score)} more to {rating.next.name}.</p>
+            ) : <p class="muted small">There is nothing above this. Everybody knows it.</p>}
+          </Card>
         </div>
 
-        {/* ---------- Middle: the shop ---------- */}
+        {/* ---------- Middle: what to buy ---------- */}
         <div class="game-mid">
-          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? 'Hover for details. Click to buy.' : 'Keep going – upgrades appear as you grow.'}>
+          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? 'Best value first. Hover for what it does.' : 'Keep going – upgrades appear as you grow.'}>
             <div class="upgrade-row">
               {upgrades.map((u) => (
-                <button key={u.id} type="button" class={`upgrade-tile ${s.funds >= u.cost ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={s.funds < u.cost} title={`${u.name} – ${u.blurb} (${fmtMoney(u.cost)})`} data-test={`upgrade-${u.id}`}>
+                <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
+                  title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${fmtPayback(u.payback) || 'No extra income, but it saves you a job.'}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
+                  <span class="upgrade-pay">{Number.isFinite(u.payback) ? fmtSeconds(u.payback) : 'saves a job'}</span>
                 </button>
               ))}
             </div>
           </Card>
-          <Card title="Shop" icon="briefcase" padded={false} actions={
+
+          <Card title="Shop" icon="briefcase" padded={false} subtitle="Whichever side is behind is worth more." actions={
             <div class="qty-picker" role="group" aria-label="How many to buy">
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => setBuyQty(q)}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
             <ul class="building-list">
-              {G.unlockedBuildings(s).map((b) => {
-                const owned = s.buildings[b.id] || 0;
-                const qty = buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty;
-                const cost = G.buildingCost(s, b.id, qty);
-                const each = G.buildingRate(s, b.id) * G.visitValue(s) * G.globalMultiplier(s, now);
-                const can = s.funds >= cost;
-                return (
-                  <li key={b.id}>
-                    <button type="button" class={`building-row ${can ? 'affordable' : ''}`} onClick={() => onBuy(b.id)} disabled={!can} title={b.blurb} data-test={`buy-${b.id}`}>
-                      <span class="building-emoji">{b.emoji}</span>
-                      <span class="building-main">
-                        <span class="building-name">{b.name}{owned ? <span class="building-owned">{fmtNum(owned)}</span> : null}</span>
-                        <span class="building-sub muted">{b.rate ? `${fmtRate(each)} each${owned ? ` · ${fmtRate(each * owned)} total` : ''}` : `Room for one carer each${waiting ? ` · ${fmtNum(waiting)} waiting for one` : ''}`}</span>
+              {shop.map((b) => (
+                <li key={b.id}>
+                  <button type="button" class={`building-row ${b.affordable ? 'affordable' : ''} ${bestBuy && bestBuy.id === b.id ? 'best' : ''}`} onClick={() => onBuy(b)} disabled={!b.affordable}
+                    title={`${b.name} – ${b.blurb}\nYou will see: ${b.visual}`} data-test={`buy-${b.id}`}>
+                    <span class="building-emoji">{b.emoji}</span>
+                    <span class="building-main">
+                      <span class="building-name">
+                        <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
+                        {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
+                        {bestBuy && bestBuy.id === b.id ? <span class="best-chip">Best value</span> : null}
                       </span>
-                      <span class="building-buy"><span class="building-cost">{fmtMoney(cost)}</span><span class="muted small">buy {qty === 1 ? '1' : qty}</span></span>
-                    </button>
-                  </li>
-                );
-              })}
+                      <span class="building-sub muted">
+                        {fmtPayback(b.payback) || 'earns nothing extra just now'}
+                        {b.milestone ? <span class="milestone-pip"> · {fmtNum(b.milestone.remaining)} more and every one is {b.milestoneFactor}× better</span> : null}
+                      </span>
+                    </span>
+                    <span class="building-buy"><span class="building-cost">{fmtMoney(b.cost)}</span><span class="muted small">+{fmtRate(b.gain)}</span></span>
+                  </button>
+                </li>
+              ))}
               {nextLocked ? (
-                <li class="building-locked">🔒 <strong>{nextLocked.name}</strong> unlocks when you expand to {levelInfo(nextLocked.level).name.toLowerCase()} {levelInfo(nextLocked.level).emoji}</li>
+                <li class="building-locked">🔒 <strong>{nextLocked.name}</strong> unlocks when you hand over and reach {levelInfo(nextLocked.level).name.toLowerCase()} {levelInfo(nextLocked.level).emoji}</li>
               ) : null}
             </ul>
           </Card>
         </div>
 
-        {/* ---------- Right: growth, legacy, achievements ---------- */}
+        {/* ---------- Right: growing, legacy, badges ---------- */}
         <div class="game-right">
           <Tabs tabs={[{ id: 'grow', label: 'Grow', icon: 'trending-up' }, { id: 'stars', label: 'Stars', icon: 'star', count: G.starsAvailable(s) || undefined }, { id: 'badges', label: 'Badges', icon: 'heart', count: s.achievements.length }, { id: 'stats', label: 'Stats', icon: 'chart' }]} value={rightTab} onChange={setRightTab} variant="segmented" ariaLabel="Game panels" />
 
           {rightTab === 'grow' ? (
             <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
-              <p class="soft">Earn {fmtMoney(next.threshold)} in this run to expand. Expanding starts the run again but keeps your Legacy Stars and unlocks bigger things to buy.</p>
+              <p class="soft">Earn {fmtMoney(next.threshold)} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, progress * 100)}%` }} /></div>
               <div class="row-between"><span class="muted">{fmtMoney(s.runEarned)} earned this run</span><strong>{Math.floor(progress * 100)}%</strong></div>
               <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
-                {G.canExpand(s) ? `Expand to ${next.name.toLowerCase()} · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
+                {G.canExpand(s) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
               </Button>
               {nextBadge ? <p class="small mt next-goal">🎯 <strong>Next badge:</strong> {nextBadge.emoji} {nextBadge.name} – {nextBadge.blurb}</p> : null}
-              {s.level > 0 ? <p class="muted small mt">Level {s.level}: {level.name} {level.emoji}. Total earned ever: {fmtMoney(s.lifetimeEarned)}.</p> : null}
+              {G.branchChoices(s).filter((b) => b.chosen).length ? (
+                <p class="muted small mt">You are known for: {G.branchChoices(s).filter((b) => b.chosen).map((b) => b.options.find((o) => o.picked).name).join(', ')}.</p>
+              ) : null}
             </Card>
           ) : null}
 
@@ -380,12 +462,12 @@ export function Game() {
                   </li>
                 ))}
               </ul>
-              <p class="muted small mt">Stars come from expanding: the more you have earned over all time, the more you get.</p>
+              <p class="muted small mt">Stars come from handing over: the more you have earned over all time, the more you get.</p>
             </Card>
           ) : null}
 
           {rightTab === 'badges' ? (
-            <Card title="Achievements" icon="heart" subtitle={`${s.achievements.length} of ${G.achievementList(s).length} · each one adds 1% to everything`}>
+            <Card title="Badges" icon="heart" subtitle={`${s.achievements.length} of ${G.achievementList(s).length} · each one adds 1% to everything`}>
               <div class="badge-grid">
                 {G.achievementList(s).map((a) => <span key={a.id} class={`badge-tile ${a.done ? 'done' : ''}`} title={`${a.name} – ${a.blurb}`}>{a.done ? a.emoji : '🔒'}<span class="badge-name">{a.done ? a.name : '???'}</span></span>)}
               </div>
@@ -397,6 +479,8 @@ export function Game() {
               <dl class="game-stats">
                 <div><dt>Visits done by you</dt><dd>{fmtNum(s.clicks)}</dd></div>
                 <div><dt>Visits altogether</dt><dd>{fmtNum(Math.floor(s.visits))}</dd></div>
+                <div><dt>Work wanted</dt><dd>{fmtNum(metrics.work)}/s</dd></div>
+                <div><dt>Care you can deliver</dt><dd>{fmtNum(metrics.team)}/s</dd></div>
                 <div><dt>Earned this run</dt><dd>{fmtMoney(s.runEarned)}</dd></div>
                 <div><dt>Earned ever</dt><dd>{fmtMoney(s.lifetimeEarned)}</dd></div>
                 <div><dt>Per second</dt><dd>{fmtRate(rate)}</dd></div>
@@ -419,7 +503,6 @@ export function Game() {
     </div>
   );
 }
-
 
 /** A short burst of confetti. Re-mount (change key) to fire again. */
 function Confetti() {

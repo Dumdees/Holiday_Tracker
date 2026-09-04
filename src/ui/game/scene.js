@@ -4,6 +4,26 @@
 // the view calls each tick. All positions inside are "logical" pixels; the scene scales itself down
 // on narrow screens so the same street fits on a phone.
 
+import { BUILDINGS } from '../../core/game/data.js';
+
+/** Things drawn on the horizon behind the street, biggest last. */
+const HORIZON = ['council', 'office', 'academy', 'framework', 'discharge', 'group', 'world', 'orbit', 'starship'];
+/** Things drawn on the doors themselves, one per door, in the order the doors run. */
+const DOOR_MARKS = ['keysafe', 'package', 'directpay', 'chc', 'tech'];
+/** People who walk the street besides the carers. */
+const STREET_FOLK = ['coordinator', 'supervisor', 'nurse'];
+/** The little icons that appear on the office noticeboard, one per upgrade you own. */
+const BADGE_EMOJI = {
+  admin: '🗃️', ecm: '📲', 'direct-debit': '🏦', oncall: '📞',
+  'qual-cert': '📜', 'qual-plans': '📗', 'qual-nomeds': '⏱️', 'qual-hours': '🗓️', 'qual-reviews': '⭐',
+  'disc-recruit': '🫂', 'disc-safes': '📦', 'disc-mileage': '⛽', 'disc-homes': '🗣️',
+  'cond-covered': '🫶', 'cond-continuity': '🤝', 'cond-tidy': '🔑', 'cond-wellled': '🌟',
+  'mile-1': '🎉', 'mile-2': '🎖️', 'syn-office-all': '🏢', 'syn-academy-team': '🎓', 'syn-council-package': '🏛️',
+  'known-dementia': '🧠', 'known-reablement': '🌤️', 'known-complex': '🧑‍⚕️',
+};
+
+const SIGN_COLOURS = { 'buyer-private': '#E5734A', 'buyer-council': '#4C7A4C', 'buyer-nhs': '#2A5EA8' };
+
 const HOUSE_COLOURS = ['#FFD9C7', '#FCE7A6', '#CDE7D8', '#D6E4F7', '#EAD9F5', '#FFE0E6', '#E8EFC9', '#FFEBC2'];
 const SKIN = ['#F6D2B6', '#E8B58E', '#C68C5B', '#8D5A3A', '#F1C9A5'];
 const HAIR = ['#3B2A24', '#7A4A2A', '#C97D3B', '#D9C07A', '#1E1E28', '#8E8E8E'];
@@ -31,13 +51,26 @@ export function theme(level) {
   return { day: ['#d6ebff', '#fff6ee'], night: ['#2b2450', '#7a5077'], ground: '#bfe0a8', road: '#858a99', kind: 'village', space: false };
 }
 
+/**
+ * Which part of the street each thing you can buy shows up in. A unit test checks that every
+ * building in the game has an entry, so nothing can be added to the shop without a pixel.
+ */
+export const DRAWS = {
+  carer: 'drawAgent', client: 'drawHouse', keysafe: 'drawDoorMark', package: 'drawDoorMark',
+  car: 'drawCar', directpay: 'drawDoorMark', coordinator: 'drawFolk', council: 'drawHorizon',
+  supervisor: 'drawFolk', discharge: 'drawHorizon', office: 'drawHorizon', framework: 'drawHorizon',
+  academy: 'drawHorizon', chc: 'drawDoorMark', nurse: 'drawFolk', group: 'drawHorizon',
+  tech: 'drawDoorMark', world: 'drawHorizon', orbit: 'drawHorizon', starship: 'drawHorizon',
+};
+
 export function createScene(canvas, { onCoin } = {}) {
   const ctx = canvas.getContext('2d');
   let W = 820, H = 380, k = 1, dpr = 1; // W, H are logical; k scales logical → CSS pixels
   const world = {
-    level: 0, homes: 1, cooldowns: {}, houses: [], agents: [], cars: [], clouds: [], particles: [], coins: [], birds: [], lamps: [], landmarks: [],
+    level: 0, homes: 1, cooldowns: {}, houses: [], agents: [], cars: [], clouds: [], particles: [], coins: [], birds: [], lamps: [],
     prismatic: null, card: null, buildings: {}, effects: [], mode: 'manual', invoices: 0, teamSize: 0,
     names: [], starName: 'Sam', t: 0, now: Date.now(), lastFrame: 0, synced: false,
+    counts: {}, tiers: {}, owned: new Set(), rating: 0, sign: '#E5734A', coinSize: 6, folk: [], badges: [],
     shake: 0, flashUntil: 0, expandFlash: 0, rocket: null, satelliteAngle: 0, rain: 0, rainCooldown: rand(60, 120),
   };
   let raf = 0;
@@ -84,7 +117,7 @@ export function createScene(canvas, { onCoin } = {}) {
   function sync(state, names, now) {
     world.now = now; world.names = names; world.starName = names[0] || 'Sam';
     world.cooldowns = state.cooldowns || {};
-    const homes = Math.max(1, state.buildings.home || 0);
+    const homes = Math.max(1, state.buildings.client || 0);
     if (world.homes !== homes) { world.homes = homes; layoutHouses(); }
     if (world.level !== state.level) {
       world.level = state.level; layoutHouses();
@@ -93,10 +126,8 @@ export function createScene(canvas, { onCoin } = {}) {
     }
     const carers = state.buildings.carer || 0;
     world.teamSize = carers;
-    // Carers with a home to visit are shown working (up to the houses on screen); a few without one wait at the office.
-    const working = Math.min(world.houses.length, Math.min(carers, homes), MAX_AGENTS - 1);
-    const waiting = Math.min(3, Math.max(0, carers - homes), MAX_AGENTS - 1 - working);
-    const wanted = 1 + working + waiting;
+    // One figure for you, then a carer for each door we can draw.
+    const wanted = 1 + Math.min(carers, world.houses.length, MAX_AGENTS - 1);
     while (world.agents.length < wanted) {
       const i = world.agents.length;
       const a = makeAgent(i, i === 0 ? world.starName : (names[(i - 1) % Math.max(1, names.length)] || `Carer ${i}`));
@@ -104,7 +135,6 @@ export function createScene(canvas, { onCoin } = {}) {
       if (world.synced && i > 0) { burst(a.x, pavementY() - 30, 'sparkle', 8); floatText('Hello! 👋', a.x, pavementY() - 52); }
     }
     while (world.agents.length > wanted) { const gone = world.agents.pop(); if (gone.house >= 0 && world.houses[gone.house]) world.houses[gone.house].busy = -1; }
-    world.agents.forEach((a, i) => { const shouldWait = i > working; if (a.waiting !== shouldWait) { a.waiting = shouldWait; if (shouldWait) { if (a.house >= 0 && world.houses[a.house]) world.houses[a.house].busy = -1; a.house = -1; a.targetX = officeX() + rand(-16, 16); a.state = 'walk'; } } });
     world.agents[0].name = world.starName;
     const cars = clamp(state.buildings.car || 0, 0, 5);
     while (world.cars.length < cars) {
@@ -114,23 +144,22 @@ export function createScene(canvas, { onCoin } = {}) {
     }
     while (world.cars.length > cars) world.cars.pop();
     world.buildings = state.buildings;
+    world.counts = state.buildings;
+    world.owned = new Set([...(state.upgrades || []), ...Object.values(state.branches || {})]);
+    world.tiers = {};
+    for (const b of BUILDINGS) {
+      let n = 0;
+      for (let i = 1; i <= 3; i++) if (world.owned.has(`${b.id}-t${i}`)) n = i;
+      world.tiers[b.id] = n;
+    }
+    world.rating = ratingOf(state);
+    for (const [id, colour] of Object.entries(SIGN_COLOURS)) if (world.owned.has(id)) world.sign = colour;
+    world.coinSize = 6 + Math.min(6, Math.log10(1 + valueOf(state)) * 3);
+    world.badges = [...world.owned].map((id) => BADGE_EMOJI[id]).filter(Boolean).slice(0, 12);
+    syncFolk();
     world.effects = state.effects.filter((e) => e.until > now);
     world.mode = state.upgrades.includes('direct-debit') ? 'instant' : state.upgrades.includes('admin') ? 'admin' : 'manual';
     world.invoices = state.invoices;
-    const marks = [];
-    if (state.buildings.office) marks.push(['office', '🏢', 'Office']);
-    if (state.buildings.academy) marks.push(['academy', '🎓', 'Academy']);
-    if (state.buildings.hub) marks.push(['hub', '🏥', 'Care hub']);
-    if (state.buildings.network) marks.push(['network', '🗺️', 'Network']);
-    if (state.buildings.franchise) marks.push(['franchise', '🌍', 'Global']);
-    if (state.buildings.lunar) marks.push(['lunar', '🌙', 'Moon base']);
-    world.landmarks = marks.map(([key, emoji, label]) => {
-      const prev = world.landmarks.find((m) => m.key === key);
-      if (prev) return prev;
-      const m = { key, emoji, label, pop: world.synced ? 0 : 1 };
-      if (world.synced) { const x = W - 44 - marks.indexOf(marks.find((z) => z[0] === key)) * 46; burst(x, pavementY() - 30, 'sparkle', 12); floatText(`${emoji} ${label} opens!`, x, pavementY() - 60); }
-      return m;
-    });
     if (state.spawn && state.spawn.type === 'prismatic') {
       if (!world.prismatic || world.prismatic.born !== state.spawn.born) world.prismatic = { born: state.spawn.born, until: state.spawn.until, name: state.spawn.name, x: -40, phase: 0 };
     } else world.prismatic = null;
@@ -139,6 +168,34 @@ export function createScene(canvas, { onCoin } = {}) {
     } else world.card = null;
     if ((state.buildings.starship || 0) > 0 && !world.rocket && Math.random() < 0.004) world.rocket = { x: -60, y: H * 0.35, t: 0 };
     world.synced = true;
+  }
+
+  /** How many quality points the service has, mirrored from the engine's rating rungs. */
+  function ratingOf(state) {
+    const w = { coordinator: 1, supervisor: 3, academy: 8, nurse: 12, office: 2 };
+    let score = 0;
+    for (const [id, weight] of Object.entries(w)) score += (state.buildings[id] || 0) * weight;
+    for (const id of world.owned) if (String(id).startsWith('qual-')) score += 6;
+    return score >= 2000 ? 3 : score >= 120 ? 2 : score >= 6 ? 1 : 0;
+  }
+
+  /** Roughly what a visit is worth, used only to draw bigger coins as you grow. */
+  function valueOf(state) {
+    let v = 1;
+    for (const id of world.owned) if (String(id).startsWith('val-') || id === 'grow-rates') v *= 1.7;
+    return v;
+  }
+
+  /** Coordinators, supervisors and nurses who walk the street alongside the carers. */
+  function syncFolk() {
+    const wanted = [];
+    for (const id of STREET_FOLK) {
+      const n = Math.min(2, world.counts[id] || 0);
+      for (let i = 0; i < n; i++) wanted.push(id);
+    }
+    while (world.folk.length > wanted.length) world.folk.pop();
+    while (world.folk.length < wanted.length) world.folk.push({ role: wanted[world.folk.length], x: rand(90, Math.max(120, W - 40)), dir: 1, phase: rand(0, TWO_PI), speed: rand(16, 26) });
+    world.folk.forEach((f, i) => { f.role = wanted[i]; });
   }
 
   // ---------- Effects helpers ----------
@@ -229,7 +286,7 @@ export function createScene(canvas, { onCoin } = {}) {
       a.dash = Math.max(0, a.dash - dt * 0.7);
       if (a.state === 'idle') {
         a.timer -= dt;
-        if (a.timer <= 0 && !a.waiting) {
+        if (a.timer <= 0) {
           const free = world.houses.map((h, i) => (h.busy < 0 ? i : -1)).filter((i) => i >= 0);
           if (free.length) { a.house = free[Math.floor(Math.random() * free.length)]; world.houses[a.house].busy = a.id; a.targetX = world.houses[a.house].x + rand(-14, 14); a.state = 'walk'; }
           else a.timer = rand(0.3, 0.8);
@@ -238,8 +295,13 @@ export function createScene(canvas, { onCoin } = {}) {
         const dx = a.targetX - a.x; a.dir = dx >= 0 ? 1 : -1;
         const stepX = a.speed * rush * dt * (a.id === 0 ? 1.15 + a.dash * 1.8 : 1);
         if (Math.abs(dx) <= stepX) {
-          a.x = a.targetX; a.state = 'visit'; a.timer = a.house >= 0 ? rand(1.2, 2.2) / rush : rand(0.4, 1.5);
-          if (a.house >= 0) { world.houses[a.house].glow = 1; burst(a.x, pavementY() - 34, 'heart', 2); }
+          const quick = world.owned.has('syn-keysafe-carer') ? 0.6 : 1; // keys in the box: straight in
+          a.x = a.targetX; a.state = 'visit'; a.timer = a.house >= 0 ? rand(1.2, 2.2) * quick / rush : rand(0.4, 1.5);
+          if (a.house >= 0) {
+            world.houses[a.house].glow = 1;
+            burst(a.x, pavementY() - 34, 'heart', 2);
+            if (world.owned.has('ecm')) world.houses[a.house].tick = 1.1; // calls log themselves in
+          }
         } else a.x += Math.sign(dx) * stepX;
         a.phase += dt * 9 * rush * (1 + a.dash);
       } else if (a.state === 'visit') {
@@ -250,8 +312,11 @@ export function createScene(canvas, { onCoin } = {}) {
         }
       }
     }
-    for (const h of world.houses) { h.glow = Math.max(0, h.glow - dt * 0.8); h.pop = Math.min(1, h.pop + dt * 1.8); h.shake = Math.max(0, h.shake - dt); }
-    for (const m of world.landmarks) m.pop = Math.min(1, m.pop + dt * 2);
+    for (const f of world.folk) {
+      f.x += f.dir * f.speed * dt; f.phase += dt * 6;
+      if (f.x > W - 30) f.dir = -1; if (f.x < 80) f.dir = 1;
+    }
+    for (const h of world.houses) { h.glow = Math.max(0, h.glow - dt * 0.8); h.pop = Math.min(1, h.pop + dt * 1.8); h.shake = Math.max(0, h.shake - dt); h.tick = Math.max(0, (h.tick || 0) - dt); }
     for (const c of world.cars) { c.x += c.dir * c.speed * rush * dt; c.honk = Math.max(0, c.honk - dt); if (c.x > W + 60) c.x = -60; if (c.x < -60) c.x = W + 60; }
     for (const c of world.clouds) { c.x += c.speed * dt; if (c.x - c.w > W) c.x = -c.w; }
     for (const p of world.particles) {
@@ -367,22 +432,11 @@ export function createScene(canvas, { onCoin } = {}) {
     }
   }
 
-  function drawLandmark(m, i, day) {
-    const x = W - 44 - i * 46, y = pavementY() - 26;
-    const s = m.pop < 1 ? 0.3 + 0.7 * m.pop : 1;
-    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-    ctx.font = `30px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText(m.emoji, 0, 0);
-    ctx.font = `600 10px ${UI_FONT}`; ctx.fillStyle = day > 0.5 ? 'rgba(58,42,36,.85)' : 'rgba(255,255,255,.85)'; ctx.fillText(m.label, 0, 13);
-    ctx.restore();
-  }
-
   function drawOffice(day) {
     const x = officeX(), base = pavementY() + 4;
     ctx.fillStyle = mix('#8a5a4a', '#FFB88C', day); ctx.fillRect(x - 36, base - 66, 72, 66);
-    ctx.fillStyle = mix('#5a3a30', '#E5734A', day); ctx.fillRect(x - 40, base - 72, 80, 10);
-    ctx.fillStyle = '#fff'; ctx.font = `700 11px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('MONTEITH', x, base - 46);
     ctx.fillStyle = `rgba(255, 236, 170, ${1 - day * 0.5})`; ctx.fillRect(x - 28, base - 38, 14, 12); ctx.fillRect(x + 14, base - 38, 14, 12);
-    ctx.fillStyle = '#6b3a2a'; ctx.fillRect(x - 8, base - 22, 16, 22);
+    ctx.fillStyle = '#6b3a2a'; ctx.fillRect(x - 10, base - 20, 20, 20);
     if (world.mode === 'manual' && world.invoices > 0) {
       const n = clamp(Math.ceil(Math.log10(world.invoices + 1) * 3), 1, 12);
       for (let i = 0; i < n; i++) { ctx.fillStyle = '#F5C542'; ctx.beginPath(); ctx.ellipse(x + 30 + (i % 4) * 7, base - 3 - Math.floor(i / 4) * 5, 5, 2.5, 0, 0, TWO_PI); ctx.fill(); ctx.strokeStyle = '#c99a1e'; ctx.stroke(); }
@@ -391,7 +445,136 @@ export function createScene(canvas, { onCoin } = {}) {
       ctx.beginPath(); ctx.roundRect(x + 12 - tw / 2, base - 100 + bob, tw, 18, 9); ctx.fill(); ctx.fillStyle = '#2f6b45'; ctx.fillText(label, x + 12, base - 87 + bob);
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x + 8, base - 82 + bob); ctx.lineTo(x + 16, base - 82 + bob); ctx.lineTo(x + 12, base - 76 + bob); ctx.fill();
     }
-    world.landmarks.forEach((m, i) => drawLandmark(m, i, day));
+    drawOfficeExtras(day, x, base);
+  }
+
+  /** Everything the office wears: the sign, the rating, the star board and the noticeboard. */
+  function drawOfficeExtras(day, x, base) {
+    // the sign over the door takes the colour of whoever you work for
+    ctx.fillStyle = world.sign; ctx.fillRect(x - 40, base - 72, 80, 10);
+    ctx.fillStyle = '#fff'; ctx.font = `700 11px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('MONTEITH', x, base - 63.5);
+    // the rating sticker in the window
+    if (world.rating > 0) {
+      const stick = ['', '#4C7A4C', '#E5A93B', '#B06BFF'][world.rating];
+      const glow = world.owned.has('cond-wellled') ? 0.35 + 0.25 * Math.sin(world.t * 3) : 0;
+      if (glow) { ctx.fillStyle = `rgba(255,220,120,${glow})`; ctx.beginPath(); ctx.arc(x + 21, base - 32, 14, 0, TWO_PI); ctx.fill(); }
+      ctx.fillStyle = stick; ctx.beginPath(); ctx.arc(x + 21, base - 32, 7, 0, TWO_PI); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `700 8px ${UI_FONT}`; ctx.fillText(['', 'G', 'O', 'O'][world.rating], x + 21, base - 29);
+    }
+    // a star board outside once families are leaving reviews
+    if (world.owned.has('qual-reviews')) {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x + 44, base - 30, 26, 16, 3); ctx.fill();
+      ctx.font = `9px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('⭐⭐', x + 57, base - 19);
+    }
+    // a certificate when everyone has done the Care Certificate
+    if (world.owned.has('qual-cert')) { ctx.fillStyle = '#fdf6e3'; ctx.fillRect(x - 26, base - 36, 10, 8); ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 1; ctx.strokeRect(x - 26, base - 36, 10, 8); }
+    // bunting once you started marking the tenth of everything
+    if (world.owned.has('mile-1')) {
+      const n = world.owned.has('mile-2') ? 10 : 6;
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x - 40, base - 74); ctx.quadraticCurveTo(x, base - 66, x + 40, base - 74); ctx.stroke();
+      for (let i = 0; i < n; i++) {
+        const t = i / (n - 1), fx = lerp(x - 40, x + 40, t), fy = base - 74 + Math.sin(Math.PI * t) * 7;
+        ctx.fillStyle = `hsl(${(i * 57) % 360} 75% 62%)`;
+        ctx.beginPath(); ctx.moveTo(fx - 3, fy); ctx.lineTo(fx + 3, fy); ctx.lineTo(fx, fy + 6); ctx.closePath(); ctx.fill();
+      }
+    }
+    // a hiring board, a box of key safes, a minibus – the things you have paid for
+    if (world.owned.has('disc-recruit')) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x - 62, base - 22, 18, 14, 2); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.fillText('HIRING', x - 53, base - 13); }
+    if (world.owned.has('disc-safes')) { ctx.fillStyle = '#c8a06a'; ctx.fillRect(x + 34, base - 10, 14, 10); ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 1; ctx.strokeRect(x + 34, base - 10, 14, 10); }
+    if (world.owned.has('syn-academy-team')) { ctx.fillStyle = '#e8e2d0'; ctx.beginPath(); ctx.roundRect(x - 92, base - 20, 30, 14, 3); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(x - 84, base - 5, 3.5, 0, TWO_PI); ctx.arc(x - 70, base - 5, 3.5, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.font = `600 6px ${UI_FONT}`; ctx.fillText('TRAINING', x - 77, base - 11); }
+    // the office noticeboard: one small icon for every upgrade you have bought
+    if (world.badges.length) {
+      const cols = 4, bx = x - 33, by = base - 50;
+      ctx.fillStyle = 'rgba(255,255,255,.65)';
+      const rows = Math.ceil(world.badges.length / cols);
+      ctx.beginPath(); ctx.roundRect(bx - 3, by - 8, cols * 9 + 6, rows * 9 + 4, 3); ctx.fill();
+      ctx.font = `7px ${EMOJI_FONT}`; ctx.textAlign = 'center';
+      world.badges.forEach((e, i) => ctx.fillText(e, bx + (i % cols) * 9 + 3, by + Math.floor(i / cols) * 9));
+    }
+    // one window that never goes dark, once somebody carries the on-call phone
+    if (world.owned.has('oncall')) { ctx.fillStyle = `rgba(255,236,170,${0.55 + 0.35 * Math.sin(world.t * 1.3)})`; ctx.fillRect(x + 14, base - 38, 14, 12); }
+    drawHorizon(day);
+  }
+
+  /**
+   * The kit on the doors. Each thing you own appears on that many doors, so buying a key safe
+   * really does put a key safe on a door you can point at.
+   */
+  function drawDoorMark(h, i, day) {
+    const y = pavementY() + 2, hh = h.tall ? 58 : 46, w = h.w;
+    if ((world.counts.keysafe || 0) > i) {
+      const kx = h.x + 11, ky = y - 26;
+      ctx.fillStyle = world.tiers.keysafe >= 2 ? '#8a8f99' : '#6b7078';
+      ctx.beginPath(); ctx.roundRect(kx, ky, 7, 9, 2); ctx.fill();
+      ctx.fillStyle = world.tiers.keysafe >= 1 ? '#ffd76a' : '#c9ced6'; ctx.fillRect(kx + 1.5, ky + 2, 4, 2.5);
+    }
+    if ((world.counts.package || 0) > i) {
+      ctx.fillStyle = '#e8ddc8'; ctx.beginPath(); ctx.roundRect(h.x - 17, y - 8, 8, 10, 1); ctx.fill();
+      ctx.fillStyle = '#c26a4a'; ctx.fillRect(h.x - 17, y - 8, 8, 2.5);
+    }
+    if ((world.counts.directpay || 0) > i) {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(h.x - w * 0.36, y - hh + 12, 8, 7, 1); ctx.fill();
+      ctx.strokeStyle = '#5a6cae'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(h.x - w * 0.34, y - hh + 17); ctx.lineTo(h.x - w * 0.30, y - hh + 15); ctx.stroke();
+    }
+    if ((world.counts.chc || 0) > i) {
+      ctx.strokeStyle = '#2A5EA8'; ctx.lineWidth = 2.5; ctx.strokeRect(h.x - 8, y - 22, 16, 22);
+    }
+    if ((world.counts.tech || 0) > i) {
+      const on = 0.4 + 0.6 * Math.abs(Math.sin(world.t * 1.6 + i));
+      ctx.fillStyle = `rgba(90,200,255,${on})`; ctx.beginPath(); ctx.arc(h.x - 13, y - 27, 2.6, 0, TWO_PI); ctx.fill();
+    }
+    if (world.owned.has('syn-package-client')) {
+      ctx.fillStyle = '#d9c9a8'; ctx.beginPath(); ctx.roundRect(h.x + 8, y - 6, 7, 6, 1); ctx.fill();
+    }
+    if (world.owned.has('known-dementia')) {
+      ctx.fillStyle = '#fff'; ctx.fillRect(h.x + w * 0.16, y - hh + 12, 7, 6);
+      ctx.fillStyle = '#8b6b5a'; ctx.fillRect(h.x + w * 0.17, y - hh + 13, 5, 4);
+    }
+    if (h.tick > 0) {
+      ctx.strokeStyle = `rgba(60,170,90,${Math.min(1, h.tick)})`; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      const ty = y - hh - 14;
+      ctx.beginPath(); ctx.moveTo(h.x - 5, ty); ctx.lineTo(h.x - 1, ty + 4); ctx.lineTo(h.x + 6, ty - 5); ctx.stroke();
+    }
+  }
+
+  /** Coordinators, supervisors and nurses, so the people you pay for are people you can see. */
+  function drawFolk(f) {
+    const y = pavementY() - 2, swing = Math.sin(f.phase) * 4;
+    const kit = { coordinator: { body: '#6a5acd', hat: '📋' }, supervisor: { body: '#e8b52a', hat: '🦺' }, nurse: { body: '#2A5EA8', hat: '🩺' } }[f.role] || { body: '#888' };
+    ctx.save(); ctx.translate(f.x, y); ctx.scale(f.dir, 1);
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.beginPath(); ctx.ellipse(0, 2, 9, 3, 0, 0, TWO_PI); ctx.fill();
+    ctx.strokeStyle = '#3a2a24'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-3, -9); ctx.lineTo(-3 + swing, 0); ctx.moveTo(3, -9); ctx.lineTo(3 - swing, 0); ctx.stroke();
+    ctx.fillStyle = kit.body; ctx.beginPath(); ctx.roundRect(-7, -25, 14, 18, 5); ctx.fill();
+    if (f.role === 'supervisor') { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(-7, -19, 14, 3); }
+    ctx.fillStyle = '#F1C9A5'; ctx.beginPath(); ctx.arc(0, -31, 6, 0, TWO_PI); ctx.fill();
+    ctx.fillStyle = '#3B2A24'; ctx.beginPath(); ctx.arc(0, -33, 6, Math.PI, TWO_PI); ctx.fill();
+    ctx.restore();
+    if (kit.hat) { ctx.font = `11px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.fillText(kit.hat, f.x + 9 * f.dir, y - 26); }
+  }
+
+  /** The big things you own, on the horizon behind the street, with how many of each. */
+  function drawHorizon(day) {
+    const owned = HORIZON.filter((id) => (world.counts[id] || 0) > 0);
+    if (!owned.length) return;
+    const shown = owned.slice(-9);
+    const gy = pavementY() - 96;          // a skyline band well above the doors
+    const left = 118, right = W - 20;
+    const gap = Math.min(46, (right - left) / Math.max(1, shown.length));
+    shown.forEach((id, i) => {
+      const b = BUILDINGS.find((x) => x.id === id);
+      const x = right - i * gap;
+      if (x < left) return;
+      const n = world.counts[id] || 0;
+      const bob = Math.sin(world.t * 0.6 + i) * 1.5;
+      ctx.font = `22px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.globalAlpha = 0.9; ctx.fillText(b.emoji, x, gy + bob); ctx.globalAlpha = 1;
+      ctx.font = `700 9px ${UI_FONT}`;
+      ctx.fillStyle = day > 0.5 ? 'rgba(58,42,36,.75)' : 'rgba(255,255,255,.85)';
+      ctx.fillText(n > 999 ? `${Math.round(n / 1000)}k` : String(n), x, gy + bob + 10);
+    });
   }
 
   function drawResident(x, y) {
@@ -429,6 +612,7 @@ export function createScene(canvas, { onCoin } = {}) {
       if ((world.buildings.sensors || 0) > 0) { ctx.strokeStyle = `rgba(80, 160, 230, ${0.4 + 0.3 * Math.sin(world.t * 3 + h.x)})`; ctx.lineWidth = 1.5; for (let r = 5; r <= 13; r += 4) { ctx.beginPath(); ctx.arc(h.x + w / 2 - 4, y - hh - 6, r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); } }
       if ((world.buildings.franchise || 0) > 0) { ctx.fillStyle = CAR_COLOURS[i % 3]; ctx.fillRect(h.x - w / 2 - 2, y - hh - 30, 2, 22); ctx.beginPath(); ctx.moveTo(h.x - w / 2, y - hh - 30); ctx.lineTo(h.x - w / 2 + 12, y - hh - 26); ctx.lineTo(h.x - w / 2, y - hh - 22); ctx.fill(); }
     }
+    if (!th().space) drawDoorMark(h, i, day);
     if (cool > 0) {
       const top = y - (th().space ? w / 2 + 22 : hh + 30);
       ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(h.x, top, 9, 0, TWO_PI); ctx.fill();
@@ -456,6 +640,13 @@ export function createScene(canvas, { onCoin } = {}) {
     if (space && !prismatic) { ctx.fillStyle = a.colour; ctx.fillRect(-8, -22, 16, 4); }
     ctx.fillStyle = prismatic ? '#fff' : '#f0e6da'; ctx.fillRect(6, -18, 6, 8);
     ctx.fillStyle = '#e5734a'; ctx.fillRect(8, -16, 2, 4); ctx.fillRect(7, -15, 4, 2);
+    if (world.owned.has('syn-coord-carer')) { // the rota app, in everybody's hand
+      ctx.fillStyle = '#2f3a46'; ctx.beginPath(); ctx.roundRect(-13, -22, 6, 8, 1); ctx.fill();
+      ctx.fillStyle = `rgba(140,220,255,${0.6 + 0.4 * Math.sin(world.t * 4 + a.id)})`; ctx.fillRect(-12.2, -21.2, 4.4, 6.4);
+    }
+    if (world.tiers.carer >= 1 && !prismatic) { ctx.fillStyle = '#3a4a6a'; ctx.fillRect(-5, -1.5, 10, 2.5); } // comfy shoes
+    if (world.tiers.carer >= 2 && !prismatic) { ctx.fillStyle = '#d9c07a'; ctx.beginPath(); ctx.arc(-4, -20, 1.8, 0, TWO_PI); ctx.fill(); } // fob watch
+    if (world.tiers.carer >= 3 && !prismatic) { ctx.fillStyle = '#b06bff'; ctx.fillRect(2, -26, 4, 2); } // long-service badge
     ctx.strokeStyle = body; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-6, -24); ctx.lineTo(-9 - swing * 0.6, -14); ctx.stroke();
     ctx.fillStyle = a.skin; ctx.beginPath(); ctx.arc(0, -35, 7, 0, TWO_PI); ctx.fill();
     ctx.fillStyle = prismatic ? '#fff' : a.hair; ctx.beginPath(); ctx.arc(0, -37, 7, Math.PI, TWO_PI); ctx.fill();
@@ -463,7 +654,6 @@ export function createScene(canvas, { onCoin } = {}) {
     if (space) { ctx.fillStyle = 'rgba(200,230,255,.35)'; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, -35, 10, 0, TWO_PI); ctx.fill(); ctx.stroke(); }
     ctx.restore();
     ctx.textAlign = 'center';
-    if (a.waiting && a.state !== 'walk') { ctx.font = `12px ${EMOJI_FONT}`; ctx.fillText('⏳', x, y - 48 + Math.sin(world.t * 3 + a.id) * 2); }
     if (isStar) {
       ctx.font = `700 11px ${UI_FONT}`; ctx.fillStyle = '#fff'; const tw = ctx.measureText(a.name).width + 10;
       ctx.beginPath(); ctx.roundRect(x - tw / 2, y + 6, tw, 15, 7); ctx.fill(); ctx.fillStyle = '#3a2a24'; ctx.fillText(a.name, x, y + 17);
@@ -485,6 +675,8 @@ export function createScene(canvas, { onCoin } = {}) {
     ctx.fillStyle = 'rgba(200,230,255,.9)'; ctx.fillRect(-8, -14, 7, 6); ctx.fillRect(2, -14, 7, 6);
     ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(-12, 7, 4, 0, TWO_PI); ctx.arc(12, 7, 4, 0, TWO_PI); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = `700 7px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('CARE', 0, 2);
+    if (world.tiers.car >= 1) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-16, -6, 12, 5, 1); ctx.fill(); ctx.fillStyle = world.sign; ctx.font = `700 4px ${UI_FONT}`; ctx.fillText('MONTEITH', -10, -2.2); }
+    if (world.owned.has('disc-mileage')) { ctx.fillStyle = '#5ac8a0'; ctx.fillRect(4, -13, 4, 3); }
     if (day < 0.5) { ctx.fillStyle = `rgba(255, 240, 180, ${(0.5 - day) * 1.6})`; ctx.beginPath(); ctx.moveTo(20, -4); ctx.lineTo(48, -12); ctx.lineTo(48, 4); ctx.closePath(); ctx.fill(); }
     ctx.restore();
     if (c.honk > 0) { ctx.font = `700 11px ${UI_FONT}`; ctx.fillStyle = `rgba(58,42,36,${Math.min(1, c.honk)})`; ctx.textAlign = 'center'; ctx.fillText('beep beep!', c.x, y - 24); }
@@ -508,8 +700,9 @@ export function createScene(canvas, { onCoin } = {}) {
     for (const c of world.coins) {
       const t = c.t;
       const x = lerp(c.sx, target.x, t), y = lerp(c.sy, target.y, t) - Math.sin(t * Math.PI) * c.arc;
-      ctx.fillStyle = '#F5C542'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TWO_PI); ctx.fill(); ctx.strokeStyle = '#c99a1e'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = '#8a6a10'; ctx.font = `700 8px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('£', x, y + 0.5); ctx.textBaseline = 'alphabetic';
+      const cr = world.coinSize;
+      ctx.fillStyle = '#F5C542'; ctx.beginPath(); ctx.arc(x, y, cr, 0, TWO_PI); ctx.fill(); ctx.strokeStyle = '#c99a1e'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#8a6a10'; ctx.font = `700 ${Math.round(cr * 1.3)}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('£', x, y + 0.5); ctx.textBaseline = 'alphabetic';
     }
   }
 
@@ -535,6 +728,7 @@ export function createScene(canvas, { onCoin } = {}) {
     if (world.effects.some((e) => e.id === 'rainbow-rush')) { const g = ctx.createLinearGradient(0, 0, W, 0); for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsla(${(i * 60 + world.t * 60) % 360} 90% 65% / .28)`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
     drawOffice(day); drawLamps(day);
     world.houses.forEach((h, i) => drawHouse(h, i, day));
+    for (const f of world.folk) drawFolk(f);
     const agents = [...world.agents].sort((a, b) => a.x - b.x);
     for (const a of agents) drawAgent(a, a.id === 0);
     if (world.prismatic) drawAgent({ ...world.prismatic, dir: 1, skin: '#F6D2B6', hair: '#fff', pop: 1, state: 'walk', colour: '#fff', dash: 0 }, false, true);

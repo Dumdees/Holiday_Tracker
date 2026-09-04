@@ -1,19 +1,31 @@
-// The Care Empire game engine: pure functions over a plain state object. No DOM, no timers.
+// The Care Empire engine: pure functions over a plain state object. No DOM, no timers.
 // The view calls tick() many times a second and the other functions when the player acts.
-import { BUILDINGS, UPGRADES, UPGRADES_BY_ID, ACHIEVEMENTS, PERKS, PRISMATIC_EFFECTS, CARD_EFFECTS, COST_GROWTH, levelInfo, FALLBACK_NAMES } from './data.js';
+//
+// How the money works, in one paragraph. Two sides have to grow together: WORK (how much care is
+// wanted) and TEAM (how much care you can deliver). Visits come from combining them, so the side
+// that is behind is worth more per pound – but buying either side always earns you more, never
+// less. Each thing you own gets better every tenth you buy. Upgrades then multiply particular
+// things, particular sides, or everything, and a few only apply while the board is in a certain
+// state. Everything below is derived from the state; nothing important is ever stored twice.
 
-export const SAVE_VERSION = 1;
+import {
+  BUILDINGS, BUILDINGS_BY_ID, UPGRADES, UPGRADES_BY_ID, BRANCHES, BRANCH_OPTIONS, BRANCHES_BY_SLOT,
+  ACHIEVEMENTS, PERKS, PRISMATIC_EFFECTS, CARD_EFFECTS, COST_GROWTH, MILESTONES, RATINGS,
+  RATING_WEIGHTS, RATING_UPGRADE_POINTS, DAY_PARTS, levelInfo, FALLBACK_NAMES,
+} from './data.js';
+
+export const SAVE_VERSION = 2;
 const OFFLINE_CAP_SECONDS = 8 * 3600;
+const OFFLINE_CAP_ONCALL = 12 * 3600;
 const ADMIN_COLLECT_EVERY = 5;
 const SPAWN_LIFETIME = 13;
 const PRISMATIC_CHANCE_PER_SECOND = 1 / 210;
 const CARD_CHANCE_PER_SECOND = 1 / 70;
-export const HOUSE_COOLDOWN_MS = 1500; // a home just visited by the player needs a moment before the next knock
+export const HOUSE_COOLDOWN_MS = 1500; // a door you have just knocked on needs a moment
 
-const BUILDINGS_BY_ID = new Map(BUILDINGS.map((b) => [b.id, b]));
 const PERKS_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
 
-/** A brand-new game. `now` is a millisecond timestamp. */
+/** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
 export function newGame(now = Date.now()) {
   return {
     version: SAVE_VERSION,
@@ -27,139 +39,246 @@ export function newGame(now = Date.now()) {
     visits: 0,
     clicks: 0,
     collections: 0,
-    buildings: { home: 1 },  // you start with one client home; every carer needs one
+    buildings: { client: 1 },   // one person to look after; you do their visits yourself at first
     upgrades: [],
+    branches: {},               // slot -> option id, chosen once per run
     achievements: [],
     level: 0,
     starsEarned: 0,
     starsSpent: 0,
     perks: [],
-    effects: [],            // { id, name, emoji, until, prodMult?, clickMult? }
-    spawn: null,            // { type: 'prismatic'|'card', name, x, y, until }
+    effects: [],                // { id, name, emoji, until, prodMult?, clickMult? }
+    spawn: null,                // { type: 'prismatic'|'card', name, x, y, until, born }
     spawnsThisRun: 0,
-    cooldowns: {},          // house index → timestamp until which the player cannot visit it
-    prismaticHires: [],     // names of permanent prismatic carers this run
+    cooldowns: {},              // door index -> timestamp it can be knocked on again
+    prismaticHires: [],
     prismaticsMet: 0,
     cardsOpened: 0,
     offlineReturns: 0,
     playedLate: false,
     adminTimer: 0,
-    log: [],                // last few events, newest first: { at, text, emoji }
+    log: [],                    // newest first: { at, emoji, text }
   };
 }
 
-/** Apply the starting bonuses from perks to a fresh run. */
-function applyStartPerks(state) {
-  if (state.perks.includes('admin') && !state.upgrades.includes('admin')) state.upgrades.push('admin');
-  if (state.perks.includes('alumni')) { state.buildings.carer = Math.max(state.buildings.carer || 0, 5); state.buildings.home = Math.max(state.buildings.home || 0, 5); }
-  if (state.perks.includes('momentum')) {
-    state.buildings.carer = Math.max(state.buildings.carer || 0, 25);
-    state.buildings.home = Math.max(state.buildings.home || 0, 25);
-    state.buildings.car = Math.max(state.buildings.car || 0, 5);
+// ---------- Loading and migrating ----------
+
+/** Old ids from the first version of the game, mapped onto the rebuilt street. */
+const OLD_BUILDINGS = { home: 'client', carer: 'carer', car: 'car', rota: 'coordinator', office: 'office', academy: 'academy', hub: 'supervisor', network: 'framework', sensors: 'tech', franchise: 'group', satellite: 'orbit', lunar: 'orbit', starship: 'starship' };
+
+/** Bring a save from the older game onto the new street, losing nothing that mattered. */
+export function migrate(saved) {
+  if (!saved || typeof saved !== 'object') return saved;
+  if ((saved.version || 1) >= SAVE_VERSION) return saved;
+  const buildings = {};
+  for (const [oldId, count] of Object.entries(saved.buildings || {})) {
+    const id = OLD_BUILDINGS[oldId] || (BUILDINGS_BY_ID.has(oldId) ? oldId : null);
+    if (id && Number.isFinite(count) && count > 0) buildings[id] = (buildings[id] || 0) + Math.floor(count);
   }
+  if (!buildings.client) buildings.client = 1;
+  const upgrades = (saved.upgrades || []).filter((id) => UPGRADES_BY_ID.has(id) && !BRANCH_OPTIONS.some((o) => o.id === id));
+  const perks = (saved.perks || []).map((id) => (id === 'admin' ? 'perk-admin' : id)).filter((id) => PERKS.some((p) => p.id === id));
+  return {
+    ...saved,
+    version: SAVE_VERSION,
+    buildings,
+    upgrades,
+    branches: {},
+    perks,
+    achievements: (saved.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)),
+    migratedFrom: saved.version || 1,
+  };
 }
 
-/** Load a saved game (any version) and apply time away. Returns { state, offline }. */
+/** Load a saved game (any version) and apply the time away. Returns { state, offline }. */
 export function loadGame(saved, now = Date.now()) {
   const fresh = newGame(now);
   if (!saved || typeof saved !== 'object') return { state: fresh, offline: null };
-  const state = { ...fresh, ...saved, buildings: { ...(saved.buildings || {}) }, upgrades: [...(saved.upgrades || [])], achievements: [...(saved.achievements || [])], perks: [...(saved.perks || [])], effects: [...(saved.effects || [])].filter((e) => e && e.until > now), spawn: null, cooldowns: {}, prismaticHires: [...(saved.prismaticHires || [])], log: [...(saved.log || [])].slice(0, 12) };
+  const from = migrate(saved);
+  const state = {
+    ...fresh,
+    ...from,
+    buildings: { ...(from.buildings || {}) },
+    upgrades: [...(from.upgrades || [])],
+    branches: { ...(from.branches || {}) },
+    achievements: [...(from.achievements || [])],
+    perks: [...(from.perks || [])],
+    effects: [...(from.effects || [])].filter((e) => e && e.until > now),
+    spawn: null,
+    cooldowns: {},
+    prismaticHires: [...(from.prismaticHires || [])],
+    log: [...(from.log || [])].slice(0, 12),
+  };
   state.version = SAVE_VERSION;
   const offline = applyOffline(state, now);
   state.lastSeen = now;
-  // A thank-you card waits for anyone who has been away half a day or more – a little reason to come back.
+  // Somebody who has been away half a day comes back to a card on the mat.
   if (offline && offline.seconds >= 4 * 3600) state.spawn = { type: 'card', name: pickName([], null, Math.random), x: 40, y: 30, until: now + 120000, born: now };
   return { state, offline };
 }
 
-/** Earn while the game was closed (half speed, or full with the Night shift perk), up to 8 hours. */
+/** Earn while the game was closed: half speed, or 80% with the on-call phone. */
 export function applyOffline(state, now) {
-  const seconds = Math.min(OFFLINE_CAP_SECONDS, Math.max(0, (now - (state.lastSeen || now)) / 1000));
+  const oncall = state.upgrades.includes('oncall');
+  const cap = oncall ? OFFLINE_CAP_ONCALL : (state.perks.includes('nightshift') ? OFFLINE_CAP_ONCALL : OFFLINE_CAP_SECONDS);
+  const seconds = Math.min(cap, Math.max(0, (now - (state.lastSeen || now)) / 1000));
   if (seconds < 30) return null;
-  const rate = productionPerSecond(state);
+  const rate = productionPerSecond(state, now);
   if (rate <= 0) return null;
-  const efficiency = state.perks.includes('nightshift') ? 1 : 0.5;
+  const efficiency = state.perks.includes('nightshift') ? 1 : oncall ? 0.8 : 0.5;
   const earned = rate * seconds * efficiency;
   const visits = visitsPerSecond(state) * seconds * efficiency;
   state.visits += visits;
-  if (collectionMode(state) === 'instant') credit(state, earned); else { state.invoices += earned; }
+  if (collectionMode(state) === 'instant') credit(state, earned); else state.invoices += earned;
   state.offlineReturns += 1;
   return { seconds, earned, visits, efficiency, needsCollect: collectionMode(state) !== 'instant' };
 }
 
-// ---------- Numbers ----------
+// ---------- The maths ----------
+
 export function collectionMode(state) {
   if (state.upgrades.includes('direct-debit')) return 'instant';
   if (state.upgrades.includes('admin')) return 'admin';
   return 'manual';
 }
 
+/** Everything you own, whether bought or chosen as a branch. */
+function ownedUpgrades(state) {
+  const out = [];
+  for (const id of state.upgrades) { const u = UPGRADES_BY_ID.get(id); if (u) out.push(u); }
+  for (const id of Object.values(state.branches || {})) { const u = UPGRADES_BY_ID.get(id); if (u) out.push(u); }
+  return out;
+}
+
+/** How much a milestone is worth: every tenth doubles, or more once you have paid for it. */
+export function milestoneFactor(state) {
+  if (state.upgrades.includes('mile-2')) return 2.5;
+  if (state.upgrades.includes('mile-1')) return 2.2;
+  return 2;
+}
+
+/** How many milestones a count has passed, and what that is worth. */
+export function milestonesPassed(count) {
+  let n = 0;
+  for (const m of MILESTONES) if (count >= m) n++;
+  return n;
+}
+
+/** The next milestone for a count: { at, remaining } or null when they are all passed. */
+export function nextMilestone(count) {
+  for (const m of MILESTONES) if (count < m) return { at: m, remaining: m - count };
+  return null;
+}
+
+/** What one of a thing delivers a second, after its own upgrades, milestones and synergies. */
 export function buildingRate(state, id) {
   const b = BUILDINGS_BY_ID.get(id);
-  if (!b) return 0;
-  let mult = 1;
-  for (const u of state.upgrades) { const def = UPGRADES_BY_ID.get(u); if (def && def.kind === 'building' && def.building === id) mult *= 2; }
+  if (!b || !b.rate) return 0;
+  const count = state.buildings[id] || 0;
+  let mult = Math.pow(milestoneFactor(state), milestonesPassed(count));
+  for (const u of ownedUpgrades(state)) {
+    if (u.kind === 'building' && u.building === id) mult *= 2;
+    if (u.kind === 'synergy') {
+      const applies = u.to === id || (u.to === '*') || (u.to === '*team' && b.side === 'team') || (u.to === '*work' && b.side === 'work');
+      if (applies) mult *= 1 + Math.min(u.cap, u.per * (state.buildings[u.from] || 0));
+    }
+  }
   return b.rate * mult;
 }
 
-export function visitValue(state) {
-  let v = 1;
-  for (const u of state.upgrades) { const def = UPGRADES_BY_ID.get(u); if (def && def.kind === 'value') v *= 2; }
-  return v;
-}
-
-/** Everything that multiplies all income: upgrades, achievements, stars, prismatic hires, active effects. */
-export function globalMultiplier(state, now = Date.now()) {
-  let m = 1;
-  for (const u of state.upgrades) { const def = UPGRADES_BY_ID.get(u); if (def && def.kind === 'global') m *= def.mult; }
-  m *= 1 + 0.01 * state.achievements.length;
-  m *= 1 + 0.02 * state.starsEarned;
-  m *= 1 + 0.03 * (state.prismaticHires ? state.prismaticHires.length : 0);
-  for (const e of state.effects) if (e.prodMult && e.until > now) m *= e.prodMult;
-  return m;
-}
-
-/** How many of a building are actually working: carers need a free client home each. */
-export function workingCount(state, id) {
-  const owned = state.buildings[id] || 0;
-  if (id === 'carer') return Math.min(owned, state.buildings.home || 0);
-  return owned;
-}
-
-/** Carers with nowhere to go until more client homes are bought. */
-export function carersWaiting(state) {
-  return Math.max(0, (state.buildings.carer || 0) - (state.buildings.home || 0));
-}
-
-export function visitsPerSecond(state) {
+/** Total visits a second wanted (work) or deliverable (team). */
+export function sideRate(state, side) {
   let total = 0;
-  for (const b of BUILDINGS) total += workingCount(state, b.id) * buildingRate(state, b.id);
+  for (const b of BUILDINGS) if (b.side === side) total += (state.buildings[b.id] || 0) * buildingRate(state, b.id);
   return total;
 }
 
-/** Seconds before house `index` can be visited by the player again (0 = ready). */
-export function houseCooldown(state, index, now = Date.now()) {
-  const until = state.cooldowns ? state.cooldowns[index] || 0 : 0;
-  return Math.max(0, (until - now) / 1000);
+/**
+ * Put the two sides together. Visits are the square root of work times team, so:
+ *  - both sides always help, and never make anything worse;
+ *  - whichever side is behind is worth more per pound, which is the whole decision;
+ *  - growing both together doubles the visits, which is what makes it run away.
+ */
+export function combineSides(work, team) {
+  if (work <= 0 || team <= 0) return 0;
+  return Math.sqrt(work * team);
 }
 
-/** The first of `count` houses that is ready to visit, or -1 if all are cooling down. */
-export function readyHouse(state, count, now = Date.now()) {
-  for (let i = 0; i < count; i++) if (houseCooldown(state, i, now) <= 0) return i;
-  return -1;
+/** How well the service is judged to be run. Derived, never stored. */
+export function ratingScore(state) {
+  let score = 0;
+  for (const [id, weight] of Object.entries(RATING_WEIGHTS)) score += (state.buildings[id] || 0) * weight;
+  for (const u of ownedUpgrades(state)) if (u.quality) score += RATING_UPGRADE_POINTS;
+  return score;
+}
+
+export function ratingIndex(state) {
+  const score = ratingScore(state);
+  let i = 0;
+  RATINGS.forEach((r, n) => { if (score >= r.score) i = n; });
+  return i;
+}
+
+export function ratingInfo(state) {
+  const i = ratingIndex(state);
+  const next = RATINGS[i + 1] || null;
+  return { ...RATINGS[i], index: i, score: ratingScore(state), next };
+}
+
+/** Everything about the board that the multipliers need, worked out once. */
+export function boardMetrics(state) {
+  const work = sideRate(state, 'work');
+  const team = sideRate(state, 'team');
+  return { work, team, visits: combineSides(work, team), ratingIndex: ratingIndex(state), ratingScore: ratingScore(state) };
+}
+
+export function visitsPerSecond(state, m = boardMetrics(state)) {
+  return m.visits;
+}
+
+/** What one visit is worth before the multipliers. */
+export function visitValue(state) {
+  let v = 1;
+  for (const u of ownedUpgrades(state)) if (u.kind === 'value') v *= u.mult;
+  return v;
+}
+
+/** How much of the total a scaling branch is worth right now. */
+function scalingBonus(state, u) {
+  const froms = Array.isArray(u.from) ? u.from : [u.from];
+  let count = 0;
+  for (const f of froms) count += state.buildings[f] || 0;
+  return Math.min(u.cap, u.per * count);
+}
+
+/** Everything that multiplies all income: upgrades, conditions, rating, morale, stars, effects. */
+export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state)) {
+  let mult = 1;
+  for (const u of ownedUpgrades(state)) {
+    if (u.kind === 'global') mult *= u.mult;
+    else if (u.kind === 'conditional' && u.test(state, m)) mult *= u.mult;
+    else if (u.kind === 'branch-council') mult *= u.mult;
+    else if (u.kind === 'branch-scaling') mult *= u.mult * (1 + scalingBonus(state, u));
+  }
+  mult *= RATINGS[m.ratingIndex].mult;
+  mult *= 1 + 0.01 * state.achievements.length;
+  mult *= 1 + 0.02 * state.starsEarned;
+  mult *= 1 + 0.03 * (state.prismaticHires ? state.prismaticHires.length : 0);
+  for (const e of state.effects) if (e.prodMult && e.until > now) mult *= e.prodMult;
+  return mult;
 }
 
 export function productionPerSecond(state, now = Date.now()) {
-  return visitsPerSecond(state) * visitValue(state) * globalMultiplier(state, now);
+  const m = boardMetrics(state);
+  return m.visits * visitValue(state) * globalMultiplier(state, now, m);
 }
 
 export function clickValue(state, now = Date.now()) {
   let v = visitValue(state);
   let pct = 0;
-  for (const u of state.upgrades) {
-    const def = UPGRADES_BY_ID.get(u);
-    if (def && def.kind === 'click') v *= 2;
-    if (def && def.kind === 'clickpct') pct += 0.01;
+  for (const u of ownedUpgrades(state)) {
+    if (u.kind === 'click') v *= u.mult || 2;
+    if (u.kind === 'clickpct') pct += 0.01;
   }
   if (state.perks.includes('legend')) v *= 10;
   let value = v * globalMultiplier(state, now) + pct * productionPerSecond(state, now);
@@ -167,8 +286,15 @@ export function clickValue(state, now = Date.now()) {
   return value;
 }
 
-export function costDiscount(state) {
-  return state.perks.includes('playbook') ? 0.9 : 1;
+// ---------- Prices ----------
+
+export function costDiscount(state, id) {
+  let f = state.perks.includes('playbook') ? 0.9 : 1;
+  for (const u of ownedUpgrades(state)) {
+    if (u.kind === 'discount' && u.building === id) f *= u.factor;
+    if (u.kind === 'branch-council') { const b = BUILDINGS_BY_ID.get(id); if (b && b.side === 'work') f *= u.discount; }
+  }
+  return f;
 }
 
 export function buildingCost(state, id, qty = 1) {
@@ -177,34 +303,117 @@ export function buildingCost(state, id, qty = 1) {
   const owned = state.buildings[id] || 0;
   let total = 0;
   for (let i = 0; i < qty; i++) total += b.baseCost * Math.pow(COST_GROWTH, owned + i);
-  return Math.ceil(total * costDiscount(state));
+  return Math.ceil(total * costDiscount(state, id));
 }
 
 export function maxAffordable(state, id) {
   let n = 0;
-  while (n < 1000 && buildingCost(state, id, n + 1) <= state.funds) n++;
+  while (n < 2000 && buildingCost(state, id, n + 1) <= state.funds) n++;
   return n;
 }
 
 export function upgradeCost(state, id) {
   const def = UPGRADES_BY_ID.get(id);
-  return def ? Math.ceil(def.cost * costDiscount(state)) : Infinity;
+  if (!def) return Infinity;
+  const f = state.perks.includes('playbook') ? 0.9 : 1;
+  return Math.ceil(def.cost * f);
+}
+
+// ---------- What is worth buying ----------
+
+/** Income if the board were slightly different. Used for "what would this be worth?". */
+function incomeWith(state, changes, now) {
+  const probe = { ...state, ...changes };
+  return productionPerSecond(probe, now);
+}
+
+/** Extra income a second from buying `qty` more of a thing. Always zero or more. */
+export function buildingGain(state, id, qty = 1, now = Date.now()) {
+  const before = productionPerSecond(state, now);
+  const after = incomeWith(state, { buildings: { ...state.buildings, [id]: (state.buildings[id] || 0) + qty } }, now);
+  return Math.max(0, after - before);
+}
+
+/** Extra income a second from owning an upgrade. */
+export function upgradeGain(state, id, now = Date.now()) {
+  const before = productionPerSecond(state, now);
+  const after = incomeWith(state, { upgrades: [...state.upgrades, id] }, now);
+  return Math.max(0, after - before);
+}
+
+/** Seconds for something to pay for itself. Infinity when it earns nothing extra. */
+export function paybackSeconds(cost, gain) {
+  if (!(gain > 0)) return Infinity;
+  return cost / gain;
+}
+
+/** Everything about a shop row, worked out once for the view. */
+export function buildingOffer(state, id, qty = 1, now = Date.now()) {
+  const b = BUILDINGS_BY_ID.get(id);
+  const count = state.buildings[id] || 0;
+  const cost = buildingCost(state, id, qty);
+  const gain = buildingGain(state, id, qty, now);
+  return {
+    ...b, count, cost, gain,
+    payback: paybackSeconds(cost, gain),
+    each: buildingRate(state, id) * visitValue(state) * globalMultiplier(state, now),
+    affordable: state.funds >= cost,
+    milestone: nextMilestone(count),
+    milestoneFactor: milestoneFactor(state),
+  };
+}
+
+export function upgradeOffer(state, u, now = Date.now()) {
+  const cost = upgradeCost(state, u.id);
+  const gain = upgradeGain(state, u.id, now);
+  return { ...u, cost, gain, payback: paybackSeconds(cost, gain), affordable: state.funds >= cost };
 }
 
 export function unlockedBuildings(state) {
   return BUILDINGS.filter((b) => b.level <= state.level);
 }
 
-/** The next building the player can't buy yet, for a "coming soon" hint. */
+/** The next thing that needs a bigger business, for a "coming soon" line. */
 export function nextLockedBuilding(state) {
   return BUILDINGS.find((b) => b.level > state.level) || null;
 }
 
 export function availableUpgrades(state) {
-  return UPGRADES.filter((u) => !state.upgrades.includes(u.id) && u.unlock(state)).map((u) => ({ ...u, cost: upgradeCost(state, u.id) })).sort((a, b) => a.cost - b.cost);
+  return UPGRADES.filter((u) => !state.upgrades.includes(u.id) && u.unlock(state));
 }
 
-// ---------- Actions ----------
+/**
+ * The upgrades to show, best value first. Things that earn nothing but save you a job (the office
+ * admin, direct debit) have no payback time, so they are ranked by how long it takes to afford
+ * them – otherwise they would sit at the bottom for ever and nobody would find them.
+ */
+export function upgradeShop(state, now = Date.now(), limit = 12) {
+  const income = Math.max(productionPerSecond(state, now), 1e-9);
+  const rank = (u) => (Number.isFinite(u.payback) ? u.payback : (u.cost / income) * 1.5);
+  return availableUpgrades(state)
+    .map((u) => upgradeOffer(state, u, now))
+    .sort((a, b) => (rank(a) - rank(b)) || (a.cost - b.cost))
+    .slice(0, limit);
+}
+
+/** Which side of the business is holding you back, in words. */
+export function bottleneck(state, m = boardMetrics(state)) {
+  if (m.work <= 0) return { side: 'work', ratio: 0, advice: 'Take somebody on – there is nobody to visit yet.' };
+  if (m.team <= 0) return { side: 'team', ratio: 0, advice: 'You need a carer before anybody gets a visit.' };
+  const ratio = m.team / m.work;
+  if (ratio < 0.85) return { side: 'team', ratio, advice: 'More work than the team can cover. Another pair of hands goes furthest.' };
+  if (ratio > 1.18) return { side: 'work', ratio, advice: 'The team has room to spare. Taking on more people goes furthest.' };
+  return { side: 'balanced', ratio, advice: 'Nicely balanced – either side is worth about the same.' };
+}
+
+/** The little round you always keep when you hand over, so a new run is never dead. */
+export function startingKit(level) {
+  const n = Math.min(30, 2 + level * 3);
+  return { client: n, carer: n };
+}
+
+// ---------- Doing things ----------
+
 function credit(state, amount) {
   state.funds += amount;
   state.runEarned += amount;
@@ -215,7 +424,19 @@ function addLog(state, emoji, text, now) {
   state.log = [{ at: now, emoji, text }, ...(state.log || [])].slice(0, 12);
 }
 
-/** The player does a visit themselves. */
+/** Seconds before door `index` can be knocked on again (0 = ready). */
+export function houseCooldown(state, index, now = Date.now()) {
+  const until = state.cooldowns ? state.cooldowns[index] || 0 : 0;
+  return Math.max(0, (until - now) / 1000);
+}
+
+/** The first of `count` doors that is ready, or -1 if they are all resting. */
+export function readyHouse(state, count, now = Date.now()) {
+  for (let i = 0; i < count; i++) if (houseCooldown(state, i, now) <= 0) return i;
+  return -1;
+}
+
+/** You do a visit yourself. */
 export function click(state, now = Date.now(), house = 0) {
   if (houseCooldown(state, house, now) > 0) return 0;
   if (!state.cooldowns) state.cooldowns = {};
@@ -227,7 +448,7 @@ export function click(state, now = Date.now(), house = 0) {
   return earned;
 }
 
-/** Collect unpaid invoices by hand. */
+/** Collect the unpaid invoices by hand. */
 export function collect(state) {
   const amount = state.invoices;
   if (amount <= 0) return 0;
@@ -238,19 +459,22 @@ export function collect(state) {
 }
 
 export function buyBuilding(state, id, qty = 1) {
-  if (!BUILDINGS_BY_ID.get(id) || BUILDINGS_BY_ID.get(id).level > state.level) return { bought: 0, spent: 0 };
+  const b = BUILDINGS_BY_ID.get(id);
+  if (!b || b.level > state.level) return { bought: 0, spent: 0 };
   const n = qty === 'max' ? maxAffordable(state, id) : qty;
   if (n <= 0) return { bought: 0, spent: 0 };
   const cost = buildingCost(state, id, n);
   if (cost > state.funds) return { bought: 0, spent: 0 };
+  const before = milestonesPassed(state.buildings[id] || 0);
   state.funds -= cost;
   state.buildings[id] = (state.buildings[id] || 0) + n;
-  return { bought: n, spent: cost };
+  const after = milestonesPassed(state.buildings[id]);
+  return { bought: n, spent: cost, milestone: after > before ? MILESTONES[after - 1] : 0 };
 }
 
 export function buyUpgrade(state, id) {
   const def = UPGRADES_BY_ID.get(id);
-  if (!def || state.upgrades.includes(id) || !def.unlock(state)) return false;
+  if (!def || state.upgrades.includes(id) || !def.unlock || !def.unlock(state)) return false;
   const cost = upgradeCost(state, id);
   if (cost > state.funds) return false;
   state.funds -= cost;
@@ -259,7 +483,31 @@ export function buyUpgrade(state, id) {
   return true;
 }
 
-// ---------- Legacy (prestige) ----------
+/** The big either/or choices. One per slot per run, free, and permanent until you hand over. */
+export function branchChoices(state) {
+  return BRANCHES.filter((b) => b.level <= state.level).map((b) => ({
+    ...b,
+    chosen: (state.branches || {})[b.slot] || null,
+    options: b.options.map((o) => ({ ...o, picked: (state.branches || {})[b.slot] === o.id })),
+  }));
+}
+
+/** A slot the player can choose right now but has not, or null. */
+export function pendingBranch(state) {
+  return branchChoices(state).find((b) => !b.chosen) || null;
+}
+
+export function pickBranch(state, slot, optionId) {
+  const group = BRANCHES_BY_SLOT.get(slot);
+  if (!group || group.level > state.level) return false;
+  if ((state.branches || {})[slot]) return false;
+  if (!group.options.some((o) => o.id === optionId)) return false;
+  state.branches = { ...(state.branches || {}), [slot]: optionId };
+  return true;
+}
+
+// ---------- Legacy (handing over and starting again) ----------
+
 export function starsForLifetime(lifetimeEarned) {
   return Math.floor(Math.cbrt(Math.max(0, lifetimeEarned) / 1e3));
 }
@@ -285,21 +533,39 @@ export function canExpand(state) {
   return state.runEarned >= nextLevel(state).threshold;
 }
 
-/** Stars the player would gain by expanding now. */
 export function starsOnExpand(state) {
   return Math.max(0, starsForLifetime(state.lifetimeEarned) - state.starsEarned);
 }
 
-/** Grow to the next stage: the run resets, stars and perks stay. */
+/** Apply the starting bonuses from perks to a fresh run. */
+function applyStartPerks(state) {
+  if (state.perks.includes('perk-admin') && !state.upgrades.includes('admin')) state.upgrades.push('admin');
+  if (state.perks.includes('alumni')) { state.buildings.carer = Math.max(state.buildings.carer || 0, 5); state.buildings.client = Math.max(state.buildings.client || 0, 5); }
+  if (state.perks.includes('momentum')) {
+    state.buildings.carer = Math.max(state.buildings.carer || 0, 25);
+    state.buildings.client = Math.max(state.buildings.client || 0, 25);
+    state.buildings.car = Math.max(state.buildings.car || 0, 5);
+  }
+}
+
+/** Hand the patch over and start again bigger. Stars, perks and badges stay. */
 export function expand(state, now = Date.now()) {
   if (!canExpand(state)) return null;
   const gained = starsOnExpand(state);
-  const keep = { startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements, level: state.level + 1, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent, perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet, cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate, clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log };
+  const keep = {
+    startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,
+    level: state.level + 1, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
+    perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet,
+    cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
+    clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
+  };
   const fresh = newGame(now);
   Object.assign(state, fresh, keep, { runStartedAt: now, lastSeen: now });
+  const kit = startingKit(state.level);
+  state.buildings = { ...state.buildings, ...kit };
   applyStartPerks(state);
-  addLog(state, levelInfo(state.level).emoji, `Expanded to ${levelInfo(state.level).name.toLowerCase()} – ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} earned`, now);
-  return { gained, level: state.level };
+  addLog(state, levelInfo(state.level).emoji, `Handed over and grew to ${levelInfo(state.level).name.toLowerCase()} – ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} earned`, now);
+  return { gained, level: state.level, kit };
 }
 
 export function buyPerk(state, id) {
@@ -311,7 +577,8 @@ export function buyPerk(state, id) {
   return true;
 }
 
-// ---------- Random events ----------
+// ---------- Surprises ----------
+
 function pickWeighted(list, rng) {
   const total = list.reduce((n, e) => n + e.weight, 0);
   let r = rng() * total;
@@ -319,14 +586,14 @@ function pickWeighted(list, rng) {
   return list[list.length - 1];
 }
 
-/** A name for a prismatic carer or a hire, drawn from the real team when there is one. */
+/** A name for a prismatic carer or a new hire, from the real team when there is one. */
 export function pickName(names, index, rng) {
   const pool = names && names.length ? names : FALLBACK_NAMES;
   if (typeof index === 'number') return pool[index % pool.length];
   return pool[Math.floor(rng() * pool.length)];
 }
 
-/** Click the floating prismatic carer or thank-you card. Returns what happened, or null. */
+/** Catch the prismatic carer or the thank-you card. Returns what happened, or null. */
 export function clickSpawn(state, now = Date.now(), rng = Math.random) {
   const spawn = state.spawn;
   if (!spawn || spawn.until < now) { state.spawn = null; return null; }
@@ -353,17 +620,25 @@ export function clickSpawn(state, now = Date.now(), rng = Math.random) {
   return { type: spawn.type, effect, amount, name: spawn.name, message };
 }
 
+/** Which part of the round the street is in. Scenery and flavour only. */
+export function dayPart(fraction) {
+  let part = DAY_PARTS[0];
+  for (const p of DAY_PARTS) if (fraction >= p.from) part = p;
+  return part;
+}
+
 // ---------- Time ----------
+
 /**
- * Advance the game by dt seconds. Returns an array of things the view might want to announce:
+ * Advance the game by dt seconds. Returns things the view might announce:
  * { kind: 'achievement', achievement } | { kind: 'spawn', spawn } | { kind: 'collected', amount }
  */
 export function tick(state, dt, now = Date.now(), rng = Math.random, names = []) {
   const events = [];
   dt = Math.max(0, Math.min(dt, 5));
-  const rate = productionPerSecond(state, now);
-  const visits = visitsPerSecond(state) * dt;
-  state.visits += visits;
+  const m = boardMetrics(state);
+  const rate = m.visits * visitValue(state) * globalMultiplier(state, now, m);
+  state.visits += m.visits * dt;
   const mode = collectionMode(state);
   if (mode === 'instant') credit(state, rate * dt);
   else {
@@ -383,7 +658,7 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
   if (state.spawn && state.spawn.until < now) state.spawn = null;
   if (!state.spawn && dt > 0) {
     const pChance = PRISMATIC_CHANCE_PER_SECOND * (state.perks.includes('magnet') ? 2 : 1) * dt;
-    // Nobody should wait long for their first surprise of a run: after 40 seconds without one, cards come thick and fast.
+    // Nobody waits long for their first surprise of a run.
     const firstSurprise = state.spawnsThisRun === 0 && now - state.runStartedAt > 40000 ? 12 : 1;
     const cChance = CARD_CHANCE_PER_SECOND * (state.perks.includes('cards') ? 2 : 1) * firstSurprise * dt;
     const r = rng();
@@ -393,10 +668,11 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
   }
   const hour = new Date(now).getHours();
   if (hour >= 22 || hour < 5) state.playedLate = true;
+  const after = boardMetrics(state);
   for (const a of ACHIEVEMENTS) {
-    if (!state.achievements.includes(a.id) && a.test(state)) {
+    if (!state.achievements.includes(a.id) && a.test(state, after)) {
       state.achievements.push(a.id);
-      addLog(state, a.emoji, `Achievement: ${a.name}`, now);
+      addLog(state, a.emoji, `Badge earned: ${a.name}`, now);
       events.push({ kind: 'achievement', achievement: a });
     }
   }
@@ -417,7 +693,8 @@ export function teamNames(state, names) {
 }
 
 export function achievementList(state) {
-  return ACHIEVEMENTS.map((a) => ({ ...a, done: state.achievements.includes(a.id) }));
+  const m = boardMetrics(state);
+  return ACHIEVEMENTS.map((a) => ({ ...a, done: state.achievements.includes(a.id), close: !state.achievements.includes(a.id) && a.test(state, m) }));
 }
 
 export function perkList(state) {
