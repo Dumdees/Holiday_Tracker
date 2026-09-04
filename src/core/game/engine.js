@@ -898,6 +898,29 @@ export function teamNames(state, names) {
   return out;
 }
 
+/**
+ * The badge to put on screen as the next thing to aim for: the one that would come first if the
+ * business grew a little. Without this the same far-off badge sits there for hours.
+ */
+export function nextGoal(state, now = Date.now()) {
+  const undone = ACHIEVEMENTS.filter((a) => !state.achievements.includes(a.id));
+  if (!undone.length) return null;
+  for (const k of [1.05, 1.2, 1.5, 2, 3, 5, 10, 50]) {
+    const probe = {
+      ...state,
+      buildings: Object.fromEntries(Object.entries(state.buildings).map(([id, n]) => [id, Math.ceil(n * k)])),
+      clicks: Math.ceil(state.clicks * k),
+      visits: state.visits * k,
+      runEarned: state.runEarned * k,
+      lifetimeEarned: state.lifetimeEarned * k,
+      starsEarned: Math.ceil(state.starsEarned * k),
+    };
+    const m = boardMetrics(probe);
+    for (const a of undone) if (a.test(probe, m, now)) return a;
+  }
+  return undone[0];
+}
+
 export function achievementList(state, now = Date.now()) {
   const m = boardMetrics(state);
   return ACHIEVEMENTS.map((a) => ({ ...a, done: state.achievements.includes(a.id), close: !state.achievements.includes(a.id) && a.test(state, m, now) }));

@@ -232,7 +232,7 @@ export function Game() {
   const activeEffects = s.effects.filter((e) => e.until > now);
   const frenzy = activeEffects.some((e) => e.clickMult);
   const spawnBox = s.spawn ? sceneRef.current?.spawnPos() : null;
-  const nextBadge = G.achievementList(s).find((a) => !a.done);
+  const nextBadge = G.nextGoal(s, now);
   const upgrades = G.upgradeShop(s, now, 12);
   const firstRender = firstSeen.current.size === 0;
   for (const u of upgrades) if (!firstSeen.current.has(u.id)) firstSeen.current.set(u.id, firstRender ? 0 : now);
@@ -534,8 +534,8 @@ export function Game() {
               <p class="soft">Earn {fmtMoney(G.expandRequirement(s, now))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, progress * 100)}%` }} /></div>
               <div class="row-between"><span class="muted">{fmtMoney(s.runEarned)} earned this run</span><strong>{Math.floor(progress * 100)}%</strong></div>
-              <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s, now)} class="mt" data-test="expand">
-                {G.canExpand(s, now) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
+              <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">
+                {G.canExpand(s) ? `Hand over · +${G.starsOnExpand(s)} ⭐` : 'Keep growing…'}
               </Button>
               {nextBadge ? <p class="small mt next-goal">🎯 <strong>Next badge:</strong> {nextBadge.emoji} {nextBadge.name} – {nextBadge.blurb}</p> : null}
               {G.branchChoices(s).filter((b) => b.chosen).length ? (

@@ -54,6 +54,14 @@ export const BUILDINGS = [
  * something new that is worth buying and the late game never runs out of road.
  */
 const BEYOND_NAMES = ['Ring station', 'Deep space round', 'Colony ward', 'Wandering hospice', 'Long-haul round', 'Home from home'];
+const BEYOND_BLURBS = [
+  'A whole ring of front doors, and a warden who knows every one of them.',
+  'Further out than anyone has taken a hot meal, and still on time.',
+  'A ward with windows, where the light comes on when you knock.',
+  'It goes where it is needed and stays until it is not.',
+  'Three weeks between calls, and the kettle already on when you arrive.',
+  'Not a facility. A home, with the good biscuits in the tin.',
+];
 /** Two new rungs at every stage past the printed ladder, the same as the stages in the table. */
 export const BEYOND_PER_LEVEL = 2;
 export function beyondBuilding(n) {
@@ -63,7 +71,7 @@ export function beyondBuilding(n) {
     id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural: `${name}s`, emoji: n % 2 ? '🪐' : '✨',
     baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n),
     level: 9 + Math.ceil(n / BEYOND_PER_LEVEL),
-    blurb: 'Further out than anyone has taken a hot meal, and still on time.',
+    blurb: BEYOND_BLURBS[(n - 1) % BEYOND_BLURBS.length],
     visual: 'Another light joins the ones on the horizon.',
   };
 }
@@ -86,10 +94,27 @@ export const LEVELS = [
 
 /** Stages beyond the table keep going forever, and each one is 200 times the last – the same
  * step up as the stages in the table, so the pace never suddenly quickens at the end. */
+/** Names and lines for the stages past the printed table, so the far game still sounds like a place. */
+const FAR_STAGES = [
+  { name: 'The asteroid run', emoji: '☄️', tagline: 'Nine hundred rocks, and somebody on every one of them.' },
+  { name: 'The quiet arm', emoji: '🌌', tagline: 'Out where the post takes a fortnight and the tea still gets there.' },
+  { name: 'The long orbit', emoji: '🪐', tagline: 'A year to go round once, and a call four times a day.' },
+  { name: 'The deep round', emoji: '🌑', tagline: 'Nobody out here has ever waited on their own.' },
+  { name: 'The far shore', emoji: '🌠', tagline: 'The furthest doorstep anyone has ever knocked on. So far.' },
+  { name: 'The old light', emoji: '💫', tagline: 'Care that set off before the office had a kettle.' },
+  { name: 'The wide dark', emoji: '🌃', tagline: 'Every light out there is somebody you look after.' },
+  { name: 'The slow turn', emoji: '🌀', tagline: 'Long rounds, long lives, and a very long shopping list.' },
+];
 export function levelInfo(level) {
   if (level < LEVELS.length) return LEVELS[level];
   const n = level - LEVELS.length + 1;
-  return { level, name: `Star system ${n}`, emoji: '✨', threshold: LEVELS[LEVELS.length - 1].threshold * Math.pow(200, n), tagline: 'Further than anyone has ever brought a hot meal.' };
+  const far = FAR_STAGES[(n - 1) % FAR_STAGES.length];
+  const lap = Math.ceil(n / FAR_STAGES.length);
+  return {
+    level, emoji: far.emoji, tagline: far.tagline,
+    name: lap > 1 ? `${far.name} ${lap}` : far.name,
+    threshold: LEVELS[LEVELS.length - 1].threshold * Math.pow(200, n),
+  };
 }
 
 /** How good the service is judged to be. Derived from what you invest in, never from luck. */
