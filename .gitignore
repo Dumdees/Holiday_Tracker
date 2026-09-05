@@ -9,3 +9,4 @@ build/
 installer/MicrosoftEdgeWebview2Setup.exe
 installer/host/bin/
 installer/host/obj/
+scratch-review/
