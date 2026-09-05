@@ -586,7 +586,9 @@ export function Game() {
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
                   {outlook.seconds === null
-                    ? 'Just getting going – give it a minute and it will say how long this run should take.'
+                    ? s.invoices > 0
+                      ? 'Nothing counts towards this until the payments are collected – there is money waiting.'
+                      : 'Just getting going – give it a minute and it will say how long this run should take.'
                     : Number.isFinite(outlook.seconds)
                       ? `About ${fmtSeconds(outlook.seconds)} at the rate you are growing.${outlook.seconds > 1800 ? ' Something bigger is worth buying.' : ''}`
                       : 'Nothing is coming in yet – take somebody on.'}
