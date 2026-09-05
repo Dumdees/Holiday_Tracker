@@ -782,9 +782,12 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   // Only mention a bonus that pulls the same way as the advice, or the strip argues with itself.
   const pulls = (c) => (/team|rushed|same carer|tidy|led/i.test(`${c.name} ${c.label}`) ? 'team' : 'work');
   const agrees = behind && (side === 'balanced' || pulls(behind) === side) ? behind : null;
+  // Said the way the rating card says it: the name, then a finished sentence. "Nobody is rushed is
+  // paying in full" reads like a word is missing.
+  const full = live.find((c) => c.share >= 0.999);
   const holding = agrees
-    ? ` ${agrees.name} would pay ${Math.round((1 - agrees.share) * (agrees.mult - 1) * 100)}% more ${agrees.label}.`
-    : (live.some((c) => c.share >= 0.999) ? ` ${live.find((c) => c.share >= 0.999).name} is paying in full.` : '');
+    ? ` Your bonus "${agrees.name}" would pay more ${agrees.label}.`
+    : (full ? ` Your bonus "${full.name}" is paying in full.` : '');
   if (!worth.work && !worth.team) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
   return { side, ratio, advice: `${state_}${holding}${tip}` };
 }

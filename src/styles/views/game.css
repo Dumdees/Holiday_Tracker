@@ -91,7 +91,7 @@
 .building-name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .building-owned { background: var(--peach-100); color: var(--peach-800); border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 800; }
 .building-sub { font-size: 12.5px; }
-.building-buy { display: flex; flex-direction: column; align-items: flex-end; }
+.building-buy { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: 0 0 auto; max-width: 42%; text-align: right; overflow-wrap: break-word; }
 .building-cost { font-weight: 800; font-variant-numeric: tabular-nums; }
 .building-row.affordable .building-cost { color: var(--sage-ink); }
 .building-locked { padding: 12px 16px; border-top: 1px dashed var(--line-strong); color: var(--ink-soft); font-size: 13.5px; }

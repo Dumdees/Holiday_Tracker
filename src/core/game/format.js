@@ -8,7 +8,6 @@
 const NAMES = ['', 'thousand', 'million', 'billion', 'trillion'];
 const BILLION = 1e9;
 const STACK_FROM = 1e15;      // where the names people know run out
-const MOST_BILLIONS = 7;      // and where even this stops being worth reading
 
 /** Anything up to a thousand trillion, in the words everybody knows. */
 function inWordsWeKnow(n, digits) {
@@ -27,7 +26,7 @@ export function fmtNum(n, { short = false } = {}) {
   const digits = short ? 1 : undefined;
   if (n < STACK_FROM) return neg + inWordsWeKnow(n, digits);
   let stacked = 0, rest = n;
-  while (rest >= STACK_FROM && stacked < MOST_BILLIONS) { rest /= BILLION; stacked++; }
+  while (rest >= STACK_FROM) { rest /= BILLION; stacked++; }
   return neg + inWordsWeKnow(rest, digits) + ' billion'.repeat(stacked);
 }
 
@@ -79,4 +78,16 @@ export function fmtTimes(mult) {
   const words = ['', '', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
   const whole = Math.round(mult);
   return `${words[whole] || fmtNum(whole)} times as good`;
+}
+
+/**
+ * A price for a narrow column. The long money words are fine as one big figure at the top of the
+ * screen, but in a shop row "£954 trillion billion billion billion" is wider than the row and shoves
+ * everything else onto its own line – so once the words get that long, the price is said in what it
+ * would take to earn it instead, which is shorter and easier to weigh up anyway.
+ */
+export function fmtPrice(n, income) {
+  const money = fmtMoney(n, { short: true });
+  if (money.length <= 22 || !(income > 0)) return money;
+  return `${fmtSeconds(n / income)} of takings`;
 }

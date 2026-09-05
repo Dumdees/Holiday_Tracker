@@ -16,7 +16,7 @@ import { Icon } from '../components/Icon.jsx';
 import { carers, settings } from '../../store/store.js';
 import * as G from '../../core/game/engine.js';
 import { TICKER, SIDES, levelInfo } from '../../core/game/data.js';
-import { fmtMoney, fmtNum, fmtRate, fmtSeconds, fmtPercent, fmtTimes } from '../../core/game/format.js';
+import { fmtMoney, fmtNum, fmtRate, fmtSeconds, fmtPercent, fmtTimes, fmtPrice } from '../../core/game/format.js';
 import { game, offlineReport, startGame, saveGame, scheduleSave, mutate, resetGame } from '../game/gameStore.js';
 import { createScene } from '../game/scene.js';
 
@@ -80,20 +80,25 @@ function listNames(names) {
  * can picture, so it says it the way you would say it out loud.
  */
 function howFar(outlook) {
-  const p = outlook.progress;
   if (outlook.fraction >= 1) return 'you have done it';
-  if (p >= 0.9) return 'nearly there';
-  if (p >= 0.72) return 'most of the way';
-  if (p >= 0.55) return 'over halfway';
-  if (p >= 0.45) return 'about halfway';
-  if (p >= 0.28) return 'about a third of the way';
-  if (p >= 0.12) return 'made a start';
-  return 'just getting going';
+  // Counted in how many times the takings still have to double, not as a share of the money. A share
+  // of the money reads as "nearly there" when you have six thousand pounds of a hundred and twenty
+  // thousand, because the last double is most of the money – and that is a lie to anybody reading
+  // the figure printed next to it.
+  const earned = Math.max(outlook.earned, 1);
+  const jumps = Math.max(0, Math.ceil(Math.log2(outlook.target / earned)));
+  if (jumps <= 1) return 'one more big jump';
+  if (jumps <= 2) return 'two more big jumps';
+  if (jumps <= 3) return 'three more big jumps';
+  if (jumps <= 6) return `${jumps} more big jumps`;
+  if (jumps <= 12) return 'a good few big jumps to go';
+  return 'a long way to go yet';
 }
 
 /** How much more a row would bring in, said the way a person would say it. */
 function gainWords(share) {
-  if (share >= 4) return `${fmtNum(Math.round(share))} times what you earn now`;
+  if (share >= 12) return 'far more than you earn now';
+  if (share >= 4) return `${Math.round(share)} times what you earn now`;
   if (share >= 0.9) return 'about twice what you earn now';
   if (share >= 0.55) return 'about half as much again';
   if (share >= 0.25) return 'about a third as much again';
@@ -132,11 +137,14 @@ function gainPct(u) {
   return '';
 }
 
-/** How much more you would earn, in plain words, for the top of a tooltip. */
+/**
+ * How much more you would earn, for the top of a tooltip or the buy dialog. The same words the tile
+ * face uses – a percentage was the last thing anybody read before spending their money, and it was
+ * the one line on the whole panel that told them nothing.
+ */
 function gainLine(u) {
   if (!(u.gain > 0) || !(u.income > 0)) return '';
-  const pct = (u.gain / u.income) * 100;
-  return `${pct >= 1 ? `+${Math.round(pct)}%` : `+${pct.toFixed(1)}%`} more coming in. `;
+  return `${gainWords(u.gain / u.income)}. `;
 }
 
 /** Restart a CSS animation on an element without going through state. */
@@ -386,8 +394,8 @@ export function Game() {
     sceneRef.current?.celebrate('buy');
     if (r.milestone) {
       const line = offer.side === 'work'
-        ? `${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – a proper round now, and it all runs ${offer.milestoneFactor} times smoother.`
-        : `${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – they work ${offer.milestoneFactor} times better together.`;
+        ? `${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – a proper round now, and it all runs ${fmtTimes(offer.milestoneFactor)}.`
+        : `${offer.emoji} That is ${fmtNum(r.milestone)} ${offer.plural.toLowerCase()} – they all get ${fmtTimes(offer.milestoneFactor)} together.`;
       toast(line, { kind: 'success', duration: 6000 });
       setConfetti((c) => c + 1);
       sceneRef.current?.celebrate('achievement');
@@ -440,7 +448,14 @@ export function Game() {
     if (s.level < 3) {
       const ok = await confirm({
         title: `Hand over and grow to ${next.name.toLowerCase()} ${next.emoji}?`,
-        message: `Your people, your kit and your money start again – but you keep every badge, gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 3% to everything, for ever) and begin with ${kit.carer} carers and ${kit.client} people to look after. Bigger things unlock at the next stage.`,
+        message: (
+          <>
+            You lose your carers, your kit and your money.<br /><br />
+            You keep every badge. You get <strong>{gained} Legacy {gained === 1 ? 'Star' : 'Stars'}</strong> – they
+            make everything you ever earn a little better, for good.<br /><br />
+            You start again with {kit.carer} carers and {kit.client} people to look after, and bigger things to buy.
+          </>
+        ),
         confirmLabel: `Hand over`, icon: 'trending-up',
       });
       if (!ok) return;
@@ -475,7 +490,7 @@ export function Game() {
           <div class="world-hud" ref={hudRef}>
             <div class="game-funds-main">{fmtMoney(s.funds, { short: narrow })}</div>
             <div class="world-rate">{fmtRate(rate, { short: narrow })} · {fmtMoney(perClick, { short: narrow })} per visit</div>
-            {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? `${Math.round(tapShare * 100)}% of everything you earn` : 'worth little yet – knocking upgrades change that'}</div> : null}
+            {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? tapShare >= 0.5 ? 'more than half of what you earn' : tapShare >= 0.25 ? 'a good part of what you earn' : tapShare >= 0.08 ? 'a fair bit of what you earn' : 'a small part of what you earn' : 'worth little yet – knocking upgrades change that'}</div> : null}
           </div>
           <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
           {activeEffects.length ? (
@@ -578,14 +593,14 @@ export function Game() {
                   title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${gainLine(u)}${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
-                  <span class="upgrade-cost">{fmtMoney(u.cost, { short: true })}</span>
+                  <span class="upgrade-cost">{fmtPrice(u.cost, earning)}</span>
                   <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'when it fits' : 'saves a job')}</span>
                 </button>
               ))}
             </div>
             {upgrades.total > upgrades.length || showAllUpgrades ? (
               <button type="button" class="shop-more" onClick={() => setShowAllUpgrades((v) => !v)}>
-                {showAllUpgrades ? 'Just the best twelve' : `Show ${fmtNum(upgrades.total - upgrades.length)} more`}
+                {showAllUpgrades ? 'Just the best twelve' : `Show ${fmtNum(upgrades.total - upgrades.length)} more upgrades`}
               </button>
             ) : null}
           </Card>
@@ -616,7 +631,7 @@ export function Game() {
                         {b.milestone ? <span class="milestone-pip"> · buy {fmtNum(b.milestone.remaining)} more and they all get {fmtTimes(b.milestoneFactor)}</span> : null}
                       </span>
                     </span>
-                    <span class="building-buy"><span class="building-cost">{fmtMoney(b.cost)}</span><span class="muted small">+{fmtRate(b.gain)}</span></span>
+                    <span class="building-buy"><span class="building-cost">{fmtPrice(b.cost, earning)}</span></span>
                   </button>
                 </li>
               ))}
@@ -627,7 +642,7 @@ export function Game() {
             {folded.length ? (
               <button type="button" class="shop-more" onClick={() => setShowOld((v) => !v)}>
                 {showOld ? 'Hide the rest'
-                  : `Show ${fmtNum(folded.length)} more things to buy`}
+                  : folded.length === 1 ? 'Show 1 more thing to buy' : `Show ${fmtNum(folded.length)} more things to buy`}
               </button>
             ) : null}
           </Card>
@@ -690,7 +705,7 @@ export function Game() {
           ) : null}
 
           {rightTab === 'badges' ? (
-            <Card title="Badges" icon="heart" subtitle={`${s.achievements.length} of ${G.achievementList(s).length} · each one adds 1% to everything`}>
+            <Card title="Badges" icon="heart" subtitle={`${s.achievements.length} of ${G.achievementList(s).length} · every badge makes everything a little better`}>
               <div class="badge-grid">
                 {G.achievementList(s).map((a) => <span key={a.id} class={`badge-tile ${a.done ? 'done' : ''}`} title={`${a.name} – ${a.blurb}`}>{a.done ? a.emoji : '🔒'}<span class="badge-name">{a.done ? a.name : '???'}</span></span>)}
               </div>
@@ -702,11 +717,11 @@ export function Game() {
               <dl class="game-stats">
                 <div><dt>Visits done by you</dt><dd>{fmtNum(s.clicks)}</dd></div>
                 <div><dt>Visits altogether</dt><dd>{fmtNum(Math.floor(s.visits))}</dd></div>
-                <div><dt>Work wanted</dt><dd>{fmtNum(metrics.work)}/s</dd></div>
-                <div><dt>Care you can deliver</dt><dd>{fmtNum(metrics.team)}/s</dd></div>
+                <div><dt>Visits wanted</dt><dd>{fmtNum(metrics.work)} a second</dd></div>
+                <div><dt>Visits your team can do</dt><dd>{fmtNum(metrics.team)} a second</dd></div>
                 <div><dt>Earned this run</dt><dd>{fmtMoney(s.runEarned)}</dd></div>
                 <div><dt>Earned ever</dt><dd>{fmtMoney(s.lifetimeEarned)}</dd></div>
-                <div><dt>Per second</dt><dd>{fmtRate(rate)}</dd></div>
+                <div><dt>Coming in</dt><dd>{fmtRate(rate)}</dd></div>
                 <div><dt>Brilliant shifts you saw</dt><dd>{s.prismaticsMet}</dd></div>
                 <div><dt>Thank-you cards opened</dt><dd>{s.cardsOpened}</dd></div>
                 <div><dt>Payments chased by hand</dt><dd>{s.collections}</dd></div>
