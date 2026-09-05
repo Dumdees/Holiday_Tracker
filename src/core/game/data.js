@@ -537,6 +537,7 @@ export function stageUpgrades(level) {
       id: `stage-${level}-${key}`,
       icon: rest.icon || rest.emoji,
       costSeconds: seconds,
+      along,                      // how far along the run it turns up, which is also what it costs
       // How far the takings have to have climbed before this one is on the shelf.
       unlock: (s) => Math.log10(1 + Math.max(0, s.runEarned)) >= Math.log10(1 + runTargetOf(s)) * along,
     };

@@ -488,14 +488,27 @@ export function maxAffordable(state, id) {
   return maxAffordableFor(state, id, state.funds);
 }
 
+/**
+ * What a shelf item is priced against: the rate you are earning at the moment it appears. The run
+ * has to have earned a set share of the way to the finish line before the item is on the shelf, and
+ * a round that is doubling steadily is earning about that much divided by the doubling rate – so
+ * this is a fixed figure for the run rather than something that runs away from the player.
+ */
+export function shelfReference(state, def) {
+  const target = expandRequirement(state);
+  const at = Math.pow(10, Math.log10(1 + target) * (def.along || 0)) - 1;   // takings when it appears
+  return Math.max(1, at * RUN_DOUBLING);
+}
+
 export function upgradeCost(state, id) {
   const def = upgradeById(id);
   if (!def) return Infinity;
   const f = state.perks.includes('playbook') ? 0.9 : 1;
-  // A stage's own shelf is priced in seconds of what you are earning right now, so it always costs a
-  // legible amount of saving whatever shape the run is in. The printed list keeps its printed
-  // prices, lifted as the runs get bigger, or the whole of it is pocket money by the third stage.
-  if (def.costSeconds) return Math.ceil(def.costSeconds * Math.max(1, steadyIncome(state)) * f);
+  // A stage's own shelf is priced in seconds of what you are earning when it turns up – worked out
+  // from the finish line, not read live. A run's takings double every half minute or so, so a price
+  // that followed them was a treadmill: anything costing more than about half a minute of income
+  // could never be saved for, and nine of the twelve were never once affordable.
+  if (def.costSeconds) return Math.ceil(def.costSeconds * shelfReference(state, def) * f);
   const climbed = def.cost * Math.pow(Math.max(1, expandRequirement(state) / FIRST_TARGET), PRICE_CLIMB);
   return Math.ceil(climbed * f);
 }
@@ -862,7 +875,7 @@ export const RUN_BEAT = 6;
 /** What the earliest stages ask for instead, easing back to the figure above by stage eight. */
 export const RUN_BEAT_EARLY = 9;
 /** ...and never more than this many times, however far a lucky run overshot. */
-export const RUN_BEAT_MAX = 25;
+export const RUN_BEAT_MAX = 60;
 /** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
 export const PRICE_CLIMB = 0.4;
 const FIRST_TARGET = 1.2e5;
@@ -874,11 +887,18 @@ const FIRST_TARGET = 1.2e5;
  * starts, and never moves again, so the bar only ever goes forwards, a lucky rainbow cannot push the
  * finish line away, and the whole shop can be priced against it.
  */
+/**
+ * The least a stage may ask for, as a multiple of the last one. The early stages ask for more,
+ * easing back as the runs get long enough on their own, so a new player is not wiping the board
+ * every ninety seconds before they know what any of it does.
+ */
+export function beatFor(level) {
+  return Math.max(RUN_BEAT, RUN_BEAT_EARLY - level * 0.4);
+}
+
 export function runTargetFor(level, lastPeak, lastTarget) {
   const first = lastTarget || lastPeak ? 0 : levelInfo(1).threshold;   // only the very first run
-  // The early stages ask for more, easing back as the runs get long enough on their own, so a new
-  // player is not wiping the board every ninety seconds before they know what any of it does.
-  const beat = Math.max(RUN_BEAT, RUN_BEAT_EARLY - level * 0.4);
+  const beat = beatFor(level);
   const byTarget = (lastTarget || 0) * beat;
   const byPeak = (lastPeak || 0) * RUN_SECONDS;
   // A run that overshoots hugely would otherwise set the next one an impossible figure, so the
@@ -898,6 +918,7 @@ export function expandRequirement(state) {
 }
 
 /** The plain fraction of the way there, and how long the rest looks like taking. */
+export const RUN_DOUBLING = 0.3;    // how fast a run's takings grow, per second
 export const PACE_EVERY = 5;       // how often the trail takes a reading, in seconds
 export const PACE_TRAIL = 40;      // how far back it looks
 export const PACE_SETTLE = 20;     // no forecast until a run has had this long to get going
@@ -997,6 +1018,7 @@ export function expand(state, now = Date.now()) {
   // trade rather than something for nothing.
   const crossed = state.peakAtTarget || Math.max(state.runPeak || 0, steadyIncome(state));
   const peak = Math.max(crossed, STAY_LIFTS * steadyIncome(state));
+
   const bestRun = Math.max(state.bestRun || 0, state.runEarned);
   const level = state.level + 1;
   const overshoot = Math.max(0, state.runEarned - expandRequirement(state));
@@ -1010,7 +1032,8 @@ export function expand(state, now = Date.now()) {
     upgrades: state.upgrades.filter((id) => KEEPS_ITS_SYSTEMS.has(id)),
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
     // The next run's finish line, worked out now and left alone until it is crossed.
-    lastPeak: peak, runPeak: 0, peakAtTarget: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)), pace: [],
+    lastPeak: peak, runPeak: 0, peakAtTarget: 0, pace: [],
+    runTarget: runTargetFor(level, peak, expandRequirement(state)),
     // What you are known for is a decision about the agency, not about one round, so it stays with
     // you. Every third hand-over it is opened up again, in case you want to be known for something
     // else now the patch is bigger.

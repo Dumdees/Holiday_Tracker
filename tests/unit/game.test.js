@@ -588,9 +588,17 @@ describe('the rule that everything you buy changes the street', () => {
       assert.equal(shelf.length, 12, `stage ${level} has a shelf of twelve`);
       const s = { ...board(), level, runTarget: 1e12 };
       const income = g.steadyIncome(s);
+      // Each is priced in seconds of what you will be earning at the moment it turns up, worked out
+      // from the finish line, so the price holds still while the run's takings run away from it.
+      for (const u of shelf) {
+        const seconds = g.upgradeCost(s, u.id) / g.shelfReference(s, u);
+        assert.ok(Math.abs(seconds - u.costSeconds) < 1, `${u.id} costs ${u.costSeconds} seconds of the takings it appears at`);
+      }
       const costs = shelf.map((u) => g.upgradeCost(s, u.id));
-      assert.ok(Math.abs(Math.min(...costs) / income - 2) < 0.5, 'the first is a couple of seconds of takings');
-      assert.ok(Math.abs(Math.max(...costs) / income - 60) < 2, 'and the last is a minute of them');
+      assert.ok(Math.min(...costs) >= 1, 'nothing is free');
+      // The top of the shelf is a genuine stretch – reached on a run you carry on with, missed on
+      // one you hand over the moment the button lights up – but never out of all proportion.
+      assert.ok(Math.max(...costs) < s.runTarget * 10, 'and the dearest is a stretch, not a wall');
       // They appear a fixed way along the run, measured by how far the takings have climbed.
       const along = (u) => {
         for (let f = 0; f <= 1.0001; f += 0.02) {
