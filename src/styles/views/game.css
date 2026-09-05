@@ -29,7 +29,7 @@
 .floater { position: absolute; pointer-events: none; font-weight: 800; color: var(--peach-800); font-size: 20px; transform: translate(-50%, -50%); animation: floatUp .9s ease-out forwards; text-shadow: 0 1px 0 #fff, 0 0 6px #fff; z-index: 3; white-space: nowrap; }
 .floater.big { font-size: 26px; color: var(--sage-ink); }
 @keyframes floatUp { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.9); } 100% { opacity: 0; transform: translate(-50%, -160%) scale(1.15); } }
-.ticker-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; color: var(--ink-soft); background: var(--paper); border-top: 1px solid var(--line); overflow: hidden; white-space: nowrap; }
+.ticker-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; color: var(--ink-soft); background: var(--paper); border-top: 1px solid var(--line); }
 .ticker-text { animation: tickerIn .5s ease-out; overflow: hidden; text-overflow: ellipsis; }
 @keyframes tickerIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 /* On a phone the loop has to be within a thumb's reach of the street: upgrades and shop first,
@@ -80,19 +80,19 @@
 .qty { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; font: inherit; font-weight: 700; color: var(--ink-soft); cursor: pointer; min-height: 36px; }
 .qty.active { background: var(--paper); color: var(--peach-800); box-shadow: var(--shadow-sm); }
 .building-list { list-style: none; margin: 0; padding: 0; }
-.building-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 0; border-top: 1px solid var(--line); background: var(--paper); text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: 66px; transition: background .12s; }
+.building-row { width: 100%; display: flex; align-items: center; gap: 10px; max-height: 108px; overflow: hidden; padding: 10px 16px; border: 0; border-top: 1px solid var(--line); background: var(--paper); text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: 66px; transition: background .12s; }
 .building-list li:first-child .building-row { border-top: 0; }
 .building-row.affordable { background: linear-gradient(90deg, var(--sage-soft) 0, var(--paper) 40%); }
 .building-row.affordable:hover { background: var(--sage-soft); }
 .building-row:disabled { cursor: default; color: var(--ink-muted); }
 .building-row:disabled .building-emoji { filter: grayscale(.6); opacity: .6; }
 .building-emoji { font-size: 34px; line-height: 1; width: 44px; text-align: center; flex: 0 0 auto; }
-.building-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.building-name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.building-main { flex: 1 1 auto; min-width: 45%; display: flex; flex-direction: column; gap: 1px; }
+.building-name { font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .building-owned { background: var(--peach-100); color: var(--peach-800); border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 800; }
-.building-sub { font-size: 12.5px; }
-.building-buy { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: 0 0 auto; max-width: 42%; text-align: right; overflow-wrap: break-word; }
-.building-cost { font-weight: 800; font-variant-numeric: tabular-nums; }
+.building-sub { font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.building-buy { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: 0 1 auto; min-width: 0; max-width: 34%; text-align: right; overflow-wrap: anywhere; }
+.building-cost { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .building-row.affordable .building-cost { color: var(--sage-ink); }
 .building-locked { padding: 12px 16px; border-top: 1px dashed var(--line-strong); color: var(--ink-soft); font-size: 13.5px; }
 
@@ -186,3 +186,6 @@ body.game-open .toast-host .toast:nth-last-child(n+3) { display: none; }
 
 /* The second chip: the row that moves you furthest, when payback stops discriminating. */
 .best-chip.step-chip { background: var(--sage-soft, #e8f1e9); color: var(--sage-ink, #2f6b45); border-color: var(--sage, #6fa582); }
+
+/* The finish line, said in money rather than drawn as a bar. */
+.expand-figures { margin: 8px 0 2px; font-size: 14px; }

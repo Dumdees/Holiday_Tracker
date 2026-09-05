@@ -84,13 +84,6 @@ function bigJumpsLeft(outlook) {
   return Math.max(0, Math.ceil(Math.log2(outlook.target / earned)));
 }
 
-/** The last few jumps, so the bar and the words beside it are drawn from the same counting. */
-const JUMPS_SHOWN = 8;
-function barFill(outlook) {
-  if (outlook.fraction >= 1) return 1;
-  return 1 - Math.min(bigJumpsLeft(outlook), JUMPS_SHOWN) / JUMPS_SHOWN;
-}
-
 function howFar(outlook) {
   if (outlook.fraction >= 1) return 'you have done it';
   // Counted in how many times the takings still have to double, not as a share of the money. A share
@@ -98,12 +91,9 @@ function howFar(outlook) {
   // thousand, because the last double is most of the money – and that is a lie to anybody reading
   // the figure printed next to it.
   const jumps = bigJumpsLeft(outlook);
-  if (jumps <= 1) return 'one more big jump';
-  if (jumps <= 2) return 'two more big jumps';
-  if (jumps <= 3) return 'three more big jumps';
-  if (jumps <= 6) return `${jumps} more big jumps`;
-  if (jumps <= 12) return 'a good few big jumps to go';
-  return 'a long way to go yet';
+  if (jumps <= 1) return 'Your money has to double once more.';
+  if (jumps <= 12) return `Your money has to double ${['', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times', 'ten times', 'eleven times', 'twelve times'][jumps]} more.`;
+  return 'Your money has a long way to double yet.';
 }
 
 /** How much more a row would bring in, said the way a person would say it. */
@@ -399,7 +389,27 @@ export function Game() {
     saveGame();
   }
 
-  function onBuy(offer) {
+  async function onBuy(offer) {
+    if (narrow) {
+      const ok = await confirm({
+        title: `${offer.emoji} ${offer.name}`,
+        message: (
+          <>
+            {offer.blurb}<br /><br />
+            <span class="muted">You will see: {offer.visual}</span><br /><br />
+            <strong>{offer.gain > 0 && offer.income > 0 ? `${gainWords(offer.gain / offer.income)}. ` : ''}
+              {(fmtPayback(offer.payback, offer.side) || 'It earns nothing extra just now').replace(/^./, (c) => c.toUpperCase())}.</strong>
+          </>
+        ),
+        confirmLabel: `Buy ${buyQty === 'max' ? 'as many as I can' : buyQty === 1 ? 'one' : `${buyQty}`} for ${fmtMoney(offer.cost, { short: true })}`,
+        icon: 'briefcase',
+      });
+      if (!ok) return;
+    }
+    buyBuildingNow(offer);
+  }
+
+  function buyBuildingNow(offer) {
     const r = mutate((st) => G.buyBuilding(st, offer.id, buyQty));
     if (!r.bought) return;
     sceneRef.current?.celebrate('buy');
@@ -604,7 +614,7 @@ export function Game() {
                   title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${gainLine(u)}${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
-                  <span class="upgrade-cost">{fmtPrice(u.cost, earning)}</span>
+                  <span class="upgrade-cost">{fmtPrice(u.cost)}</span>
                   <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'when it fits' : 'saves a job')}</span>
                 </button>
               ))}
@@ -616,7 +626,7 @@ export function Game() {
             ) : null}
           </Card>
 
-          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="The best thing to spend your money on is at the top." actions={
+          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="The green chip shows the best value right now." actions={
             <div class="qty-picker" role="group" aria-label="How many to buy">
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => { chosenQty.current = true; setBuyQty(q); }}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
@@ -631,7 +641,7 @@ export function Game() {
                         <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
                         {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
                         {bestBuy && bestBuy.id === b.id && b.gain / b.income >= 0.005 ? <span class="best-chip">Best buy</span> : null}
-                        {biggestStep && biggestStep.id === b.id && (!bestBuy || bestBuy.id !== b.id) ? <span class="best-chip step-chip">Biggest jump</span> : null}
+                        {biggestStep && biggestStep.id === b.id && (!bestBuy || bestBuy.id !== b.id) ? <span class="best-chip step-chip">Biggest lift</span> : null}
                       </span>
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0
@@ -642,7 +652,7 @@ export function Game() {
                         {b.milestone ? <span class="milestone-pip"> · buy {fmtNum(b.milestone.remaining)} more and they all get {fmtTimes(b.milestoneFactor)}</span> : null}
                       </span>
                     </span>
-                    <span class="building-buy"><span class="building-cost">{fmtPrice(b.cost, earning)}</span></span>
+                    <span class="building-buy"><span class="building-cost">{fmtPrice(b.cost)}</span></span>
                   </button>
                 </li>
               ))}
@@ -668,23 +678,26 @@ export function Game() {
               <p class="soft">{outlook.fraction >= 1
                 ? 'You have earned enough to hand this patch over whenever you like. You start again with a small round, keep every badge, and unlock bigger things to buy.'
                 : `Earn ${fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.`}</p>
-              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(barFill(outlook) * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, barFill(outlook) * 100)}%` }} /></div>
-              <div class="row-between">
-                <span class="muted" title={`${fmtMoney(outlook.earned)} of ${fmtMoney(outlook.target)}`}>{fmtMoney(outlook.earned)} earned so far</span>
-                <strong title="A big jump is your takings doubling.">{howFar(outlook)}</strong>
-              </div>
+              {/* No bar. A bar drawn off the money sits on nothing for most of a run; one drawn off the
+                  doublings says "half way" beside a figure that is a sixteenth of the target. Either
+                  way it argued with the money printed under it, so the money says it on its own. */}
+              <p class="expand-figures">
+                <strong>{fmtMoney(outlook.earned)}</strong> earned so far.
+                {outlook.fraction >= 1 ? ' That is enough.' : <> You need <strong>{fmtMoney(outlook.target)}</strong>.</>}
+              </p>
+              {outlook.fraction >= 1 ? null : <p class="muted small">{howFar(outlook)}</p>}
               {outlook.fraction >= 1 ? (
                 <p class="small mt expand-slow">
                   You have done it. Hand over now, or stay on a while – the longer you leave it, the more
                   Legacy Stars you get, and everything you earn from now on goes up a little too.
-                  {s.stayBonus > 0 ? <> Staying on has made everything you earn <strong>{fmtTimes(1 + s.stayBonus)}</strong>, for good.</> : null}
+                  {s.stayBonus > 0 ? <> Staying on has made everything you earn <strong>{fmtTimes(1 + s.stayBonus)}</strong>, and it never goes away.</> : null}
                 </p>
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
                   {outlook.seconds === null
                     ? s.invoices > 0 && outlook.earned <= 0
                       ? 'Nothing counts towards this until the payments are collected – there is money waiting.'
-                      : 'Just getting going – give it a minute and it will say how long this run should take.'
+                      : 'Still working out how fast this round is growing – it will say how long soon.'
                     : Number.isFinite(outlook.seconds)
                       ? `About ${fmtSeconds(outlook.seconds)} at the rate you are growing.${outlook.seconds > 1800 ? ' Something bigger is worth buying.' : ''}`
                       : 'Nothing is coming in yet – take somebody on.'}
@@ -701,7 +714,7 @@ export function Game() {
           ) : null}
 
           {rightTab === 'stars' ? (
-            <Card title="Legacy Stars" icon="star" subtitle={s.starsEarned ? `${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · they make everything ${fmtTimes(G.starBonus(s.starsEarned))}, for good` : 'None yet. Hand a patch over and they start making everything better, for good.'}>
+            <Card title="Legacy Stars" icon="star" subtitle={s.starsEarned ? `${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · they make everything ${fmtTimes(G.starBonus(s.starsEarned))}, and they never go away` : 'None yet. Hand a patch over and they start making everything better, for good.'}>
               <ul class="perk-list">
                 {G.perkList(s).map((p) => (
                   <li key={p.id} class={`perk ${p.owned ? 'owned' : p.affordable ? 'affordable' : ''}`}>
@@ -718,7 +731,7 @@ export function Game() {
           {rightTab === 'badges' ? (
             <Card title="Badges" icon="heart" subtitle={`${s.achievements.length} of ${G.achievementList(s).length} · every badge makes everything a little better`}>
               <div class="badge-grid">
-                {G.achievementList(s).map((a) => <span key={a.id} class={`badge-tile ${a.done ? 'done' : ''}`} title={`${a.name} – ${a.blurb}`}>{a.done ? a.emoji : '🔒'}<span class="badge-name">{a.done ? a.name : '???'}</span></span>)}
+                {G.achievementList(s).map((a) => <span key={a.id} class={`badge-tile ${a.done ? 'done' : ''}`} title={`${a.name} – ${a.blurb}`}>{a.done ? a.emoji : '🔒'}<span class="badge-name">{a.name}</span></span>)}
               </div>
             </Card>
           ) : null}

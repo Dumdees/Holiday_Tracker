@@ -87,10 +87,11 @@ export function fmtTimes(mult) {
  * everything else onto its own line – so once the words get that long, the price is said in what it
  * would take to earn it instead, which is shorter and easier to weigh up anyway.
  */
-export function fmtPrice(n, income) {
-  const money = fmtMoney(n, { short: true });
-  if (money.length <= 22 || !(income > 0)) return money;
-  return fmtTakings(n / income);
+export function fmtPrice(n) {
+  // A price stays a price. Swapping it for "pocket change" past a certain length put the same two
+  // words on eleven rows at once and left nothing to compare – and the stacked billions were chosen
+  // precisely so that two prices can be told apart by counting the word.
+  return fmtMoney(n, { short: true });
 }
 
 /** A price said as how long it would take you to earn it, in words rather than on a stopwatch. */

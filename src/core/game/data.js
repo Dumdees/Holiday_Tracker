@@ -57,8 +57,10 @@ export const BUILDINGS = [
 // people who do the visits (the team side). A name has to match the side it is on, or a thing with
 // a little team symbol beside it is called a round.
 const BEYOND_NAMES = ['Ring station', 'Orbit crew', 'Colony ward', 'Flight nurse', 'Long-haul round', 'Live-in carer'];
-/** Each time round the same six names come back, further out, rather than with a number after them. */
-const FURTHER_OUT = ['', 'further out', 'further out still', 'right out at the edge', 'past the edge', 'further than the maps go', 'further than anybody has been'];
+/** Where each time round happens, so two of the same thing are told apart by a place not a number. */
+const FURTHER_OUT = ['', 'on the Halley Ring', 'in the Deep Field', 'out at the Rim', 'beyond the Rim', 'off the maps', 'where nobody has been'];
+/** ...and for the stages themselves, which come round again rather than moving further out. */
+const AGAIN = ['second time round', 'third time round', 'fourth time round', 'fifth time round', 'and further out than ever'];
 const BEYOND_BLURBS = [
   'A whole ring of front doors, and a warden who knows every one of them.',
   'They work a shift out in orbit and are home in time for their tea.',
@@ -121,7 +123,7 @@ export function levelInfo(level) {
   const lap = Math.ceil(n / FAR_STAGES.length);
   return {
     level, emoji: far.emoji, tagline: far.tagline,
-    name: lap > 1 ? `${far.name}, ${FURTHER_OUT[Math.min(lap - 1, FURTHER_OUT.length - 1)]}` : far.name,
+    name: lap > 1 ? `${far.name}, ${AGAIN[Math.min(lap - 2, AGAIN.length - 1)]}` : far.name,
     threshold: LEVELS[LEVELS.length - 1].threshold * Math.pow(200, n),
   };
 }
@@ -246,7 +248,7 @@ const CONDITIONALS = [
   { id: 'cond-covered', name: 'Nobody is rushed', emoji: '🫶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / m.work)) : 1), label: 'the more of the work your team can cover', blurb: 'Everything earns up to a third more, in full once your team can cover the work.', question: 'Choose one of these two: this one, or the one called A full round. Take this if you like having enough carers for the work.', unlock: (s) => s.runEarned >= 6000 && !s.upgrades.includes('cond-busy') },
   { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.45, cost: 3e6, archetype: 'conditional', side: 'team', sideDiscount: 0.75, share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / (m.work * 1.8))) : 1), label: 'the further your team is ahead of the work', blurb: 'Everything earns up to half as much again, in full once your team is nearly twice the work – and everything on the team side costs a quarter less, for good.', question: 'Choose one of these two: this one, or the one called People ask for you first. Keep more carers than you need and it pays.', unlock: (s) => (s.upgrades.includes('cond-covered') || s.level >= 8) && !s.upgrades.includes('cond-waiting') },
   { id: 'cond-busy', name: 'A full round', emoji: '🚶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / m.team)) : 1), label: 'the fuller the rounds are', blurb: 'Everything earns up to a third more, in full once there is a full round of work for everybody.', question: 'Choose one of these two: this one, or the one called Nobody is rushed. Take this if you like taking work on and hiring after.', unlock: (s) => s.runEarned >= 6000 && !s.upgrades.includes('cond-covered') },
-  { id: 'cond-waiting', name: 'People ask for you first', emoji: '📖', mult: 1.45, cost: 3e6, archetype: 'conditional', side: 'work', sideDiscount: 0.75, clickBoost: 2, share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / (m.team * 1.8))) : 1), label: 'the more people are asking for you than you can take on yet', blurb: 'Everything earns up to half as much again, in full once there is nearly twice the work your team can carry – taking work on costs a quarter less, and your own visits are worth twice as much.', question: 'Choose one of these two: this one, or the one called The same carer, every time. Take more work than you can do and it pays.', unlock: (s) => (s.upgrades.includes('cond-busy') || s.level >= 8) && !s.upgrades.includes('cond-continuity') },
+  { id: 'cond-waiting', name: 'People ask for you first', emoji: '📖', mult: 1.45, cost: 3e6, archetype: 'conditional', side: 'work', sideDiscount: 0.75, clickBoost: 2, share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / (m.team * 1.8))) : 1), label: 'the more work you take on than you can cover', blurb: 'Everything earns up to half as much again, in full once there is nearly twice the work your team can carry – taking work on costs a quarter less, and your own visits are worth twice as much.', question: 'Choose one of these two: this one, or the one called The same carer, every time. Take more work than you can do and it pays.', unlock: (s) => (s.upgrades.includes('cond-busy') || s.level >= 8) && !s.upgrades.includes('cond-continuity') },
   { id: 'cond-tidy', name: 'A tidy patch', emoji: '🧰', mult: 1.25, cost: 250000, archetype: 'conditional', share: (s) => Math.min(1, kitCount(s) / KIT_FOR_TIDY), label: 'the more of your kit is out on the patch', blurb: 'Everything earns up to a quarter more, in full once you have twelve bits of kit out on the patch.', question: 'Every little bit of kit you buy counts twice – once on its own, and once for the whole patch.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
   { id: 'cond-wellled', name: 'Well led', emoji: '🌟', mult: 1.35, cost: 4e8, archetype: 'conditional', share: (s, m) => Math.min(1, Math.max(0, m.ratingIndex - 1) / 3), label: 'the higher your rating climbs', blurb: 'Everything earns up to a third more, in full once your service is talked about nationally.', question: 'Turns the rating from a nice badge into a reason to keep training people.', unlock: (s) => (s.buildings.academy || 0) >= 1 },
 ];
@@ -312,9 +314,9 @@ export const BRANCHES = [
     slot: 'buyer', name: 'Who do you work for?', emoji: '🤝', level: 1,
     blurb: 'Most of your work is going to come from one place. Which?',
     options: [
-      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.55, blurb: 'Everything earns half as much again.', question: 'Flat, simple, and the most you can earn in the first few minutes of a run.' },
-      { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.45, discount: 0.45, blurb: 'Everything earns half as much again, and taking on work costs about half as much.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
-      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Everything earns half as much again, and more again for every care package you run – NHS-funded ones count too. It builds up over your first minute or two on a patch.', question: 'Least of the three for the first few minutes, most of them by the end of a long run.' },
+      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.55, blurb: 'Every visit is worth half as much again, from the first minute.', question: 'Simple, and the most you can earn in the first few minutes of a run.' },
+      { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.45, discount: 0.45, blurb: 'Taking work on costs about half as much, and everything earns half as much again.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
+      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Slow to start, then it grows: a little more for every care package you run, NHS-funded ones included. It builds up over your first minute or two on a patch.', question: 'Least of the three for the first few minutes, most of them by the end of a long run.' },
     ],
   },
   {
@@ -322,7 +324,7 @@ export const BRANCHES = [
     blurb: 'Everybody grows differently. What is your way?',
     options: [
       { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.15, per: 0.02, from: 'carer', cap: 5, blurb: 'Everything earns a bit more, and more again for every carer you have. It builds up over your first minute or two on a patch.', question: 'Slow to start and nothing beats it late. Best when you mean to stay on this patch a while.' },
-      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.8, discount: 0.3, blurb: 'Everything earns nearly twice as much, and carers, key safes, cars and offices all cost about a third of the price.', question: 'Not a bonus but a discount: everything on the team side costs 70% less, for ever.' },
+      { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.8, discount: 0.3, blurb: 'Everything earns nearly twice as much, and carers, key safes, cars and offices all cost about a third of the price.', question: 'Not more money coming in – cheaper going out. Everybody and everything on the team side, for good.' },
       { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.4, clickBoost: 3, blurb: 'Every visit is worth nearly two and a half times as much, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
   },
@@ -739,7 +741,7 @@ export const ACHIEVEMENTS = [
   { id: 'earn-1k', name: 'The first thousand', emoji: '💷', blurb: 'Earn £1,000 in one run.', test: (s) => s.runEarned >= 1e3 },
   { id: 'earn-1m', name: 'A million pounds of care', emoji: '💰', blurb: 'Earn £1 million in one run.', test: (s) => s.runEarned >= 1e6 },
   { id: 'earn-1b', name: 'A billion', emoji: '🏦', blurb: 'Earn £1 billion in one run.', test: (s) => s.runEarned >= 1e9 },
-  { id: 'earn-1t', name: 'A trillion', emoji: '🪙', blurb: 'Earn £1 trillion in one run.', test: (s) => s.runEarned >= 1e12 },
+  { id: 'earn-1t', name: 'A thousand billion', emoji: '🪙', blurb: 'Earn a thousand billion pounds in one run.', test: (s) => s.runEarned >= 1e12 },
   { id: 'collector', name: 'Chasing invoices', emoji: '🧾', blurb: 'Collect the payments by hand 25 times.', test: (s) => s.collections >= 25 },
   { id: 'prismatic-1', name: 'Over the rainbow', emoji: '🌈', blurb: 'Meet a prismatic carer.', test: (s) => s.prismaticsMet >= 1 },
   { id: 'prismatic-7', name: 'Rainbow collector', emoji: '🦄', blurb: 'Meet 7 prismatic carers.', test: (s) => s.prismaticsMet >= 7 },
@@ -782,7 +784,7 @@ export const PRISMATIC_EFFECTS = [
   { id: 'rainbow-rush', weight: 30, name: 'Rainbow rush', emoji: '🌈', seconds: 30, prodMult: 7, describe: (n) => `${n} is flying today – everything earns 7 times as much for 30 seconds!` },
   { id: 'click-frenzy', weight: 22, name: 'Everyone is in', emoji: '⚡', seconds: 15, clickMult: 77, describe: (n) => `${n} says the kettle is on at every house – your own visits are worth 77 times as much for 15 seconds!` },
   { id: 'care-burst', weight: 28, name: 'A good week', emoji: '💝', instant: true, describe: (n) => `${n}’s round went so well the council released extra hours – paid in full.` },
-  { id: 'lucky-hire', weight: 20, name: 'Something worth keeping', emoji: '🦄', permanent: true, describe: (n) => `Everyone picked something up from ${n}’s shift, and it stuck – everything earns 3% more, for good.` },
+  { id: 'lucky-hire', weight: 20, name: 'Something worth keeping', emoji: '🦄', permanent: true, describe: (n) => `Everyone picked something up from ${n}’s shift, and it stuck – everything earns a little more, for good.` },
 ];
 
 /** What a thank-you card can do. */

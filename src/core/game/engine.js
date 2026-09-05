@@ -774,8 +774,12 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   const side = (!worth.work && !worth.team) ? 'balanced' : gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
   // Where the side that is already ahead is also the cheaper pound, say why, or the strip reads as
   // nonsense: "your team could cover three times the work – put it into the team".
-  const tip = side === 'work' ? ' Spend the next minute taking work on.'
-    : side === 'team' ? ' Spend the next minute on the team.'
+  const ahead = ratio > 1.1 ? 'team' : ratio < 0.9 ? 'work' : 'balanced';
+  const odd = side !== 'balanced' && side === ahead;   // the cheaper pound is on the fuller side
+  const tip = side === 'work'
+    ? (odd ? ' Even so, front doors are cheap just now – keep taking work on.' : ' Spend the next minute taking work on.')
+    : side === 'team'
+      ? (odd ? ' Even so, carers are cheap just now – keep hiring.' : ' Spend the next minute on the team.')
       : ' Either side is worth about the same just now.';
   // Only mention a bonus that pulls the same way as the advice, or the strip argues with itself.
   const pulls = (c) => (/team|rushed|same carer|tidy|led/i.test(`${c.name} ${c.label}`) ? 'team' : 'work');
