@@ -40,7 +40,7 @@ function fmtPaybackAs(seconds, lead) {
   if (seconds < 90) { const n = Math.max(1, Math.round(seconds)); return `${lead} ${n} second${n === 1 ? '' : 's'}`; }
   if (seconds < 5400) return `${lead} about ${Math.round(seconds / 60)} minutes`;
   if (seconds < 60 * 3600) return `${lead} about ${Math.round(seconds / 3600)} hours`;
-  return 'takes a very long time to come good';
+  return 'one to save the run for';
 }
 
 /** Why something shows no payback time – never "saves a job" unless it really does. */
@@ -84,6 +84,17 @@ function gainWords(share) {
   return 'a trickle more coming in';
 }
 
+/** True on a phone-sized screen, so the big figures can be shortened rather than clipped. */
+function usePhoneWidth() {
+  const [narrow, setNarrow] = useState(typeof window !== 'undefined' && window.innerWidth <= 760);
+  useEffect(() => {
+    const on = () => setNarrow(window.innerWidth <= 760);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return narrow;
+}
+
 /**
  * The one figure on the face of an upgrade tile. Things that earn more say how much more; things
  * that do something else say what they do, in the same shape, so tiles can be compared at a glance.
@@ -97,6 +108,7 @@ function gainPct(u) {
   if (u.kind === 'discount') return `−${Math.round((1 - u.factor) * 100)}% to buy`;
   if (u.kind === 'clickpct') { const add = u.clickAdd || 0; return add > 0 ? `+${(add * 100).toFixed(add < 0.01 ? 1 : 0)}% a tap` : 'nothing more, you are at the limit'; }
   if (u.kind === 'click') return `×${u.mult || 2} a tap`;
+  if (u.clickBoost) return `×${u.clickBoost} a tap`;
   return '';
 }
 
@@ -224,6 +236,7 @@ export function Game() {
         <div class="confirm-icon"><Icon name="sun" size={28} /></div>
         <h2>Welcome back!</h2>
         <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}.{away.needsCollect ? ' The payments are waiting to be collected.' : ''}</p>
+        {away.reach >= 0.15 ? <p class="soft">That is <strong>{away.reach >= 0.75 ? 'most of the way' : away.reach >= 0.55 ? 'about halfway' : away.reach >= 0.35 ? 'about a third of the way' : 'a good start'}</strong> to {G.nextLevel(game.value).name}.</p> : null}
         <div class="modal-actions"><Button variant="primary" onClick={() => close()}>Lovely</Button></div>
       </div>
     ), { size: 'sm', ariaLabel: 'Welcome back' });
@@ -235,6 +248,8 @@ export function Game() {
   const metrics = G.boardMetrics(s);
   const rate = G.productionPerSecond(s, now);
   const perClick = G.clickValue(s, now);
+  const tapShare = G.tapShare(s, now);
+  const narrow = usePhoneWidth();
   const mode = G.collectionMode(s);
   const level = levelInfo(s.level);
   const next = G.nextLevel(s);
@@ -258,9 +273,9 @@ export function Game() {
   const outgrown = shop.filter((b) => b !== bestBuy && b.count > 0 && earning > 0 && b.gain < earning * 0.001);
   const rows = showOld ? shop : shop.filter((b) => !outgrown.includes(b));
   const hint = nextStep(s, shop);
-  // Ten at a time is the sensible way to shop – but not for the very first purchase, when ten
-  // carers cost twenty times a tap and nothing is coming in yet.
-  const goingConcern = (s.buildings.carer || 0) >= 1 && rate > 0;
+  // Ten at a time is the sensible way to shop – but only once ten of something is twenty seconds
+  // of takings. Before that it turns the opening into a long wait with nothing to press.
+  const goingConcern = rate > 0 && shop.length > 0 && Math.min(...shop.map((b) => G.buildingCost(s, b.id, 10))) <= rate * 20;
   useEffect(() => { if (!chosenQty.current && goingConcern) setBuyQty(10); }, [goingConcern]);
   const pending = G.pendingBranch(s);
   const outlook = G.expandOutlook(s, now);
@@ -367,12 +382,16 @@ export function Game() {
   async function onExpand() {
     const gained = G.starsOnExpand(s);
     const kit = G.startingKit(s.level + 1);
-    const ok = await confirm({
-      title: `Hand over and grow to ${next.name.toLowerCase()} ${next.emoji}?`,
-      message: `Your people, your kit and your money start again – but you keep every badge, gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 3% to everything, for ever) and begin with ${kit.carer} carers and ${kit.client} people to look after. Bigger things unlock at the next stage.`,
-      confirmLabel: `Hand over`, icon: 'trending-up',
-    });
-    if (!ok) return;
+    // The first few hand-overs are explained; after that the button says what it does and asking
+    // again every three minutes is just something in the way.
+    if (s.level < 3) {
+      const ok = await confirm({
+        title: `Hand over and grow to ${next.name.toLowerCase()} ${next.emoji}?`,
+        message: `Your people, your kit and your money start again – but you keep every badge, gain ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} (each one adds 3% to everything, for ever) and begin with ${kit.carer} carers and ${kit.client} people to look after. Bigger things unlock at the next stage.`,
+        confirmLabel: `Hand over`, icon: 'trending-up',
+      });
+      if (!ok) return;
+    }
     const r = mutate((st) => G.expand(st, Date.now()));
     if (r) {
       toast(`${levelInfo(r.level).emoji} ${levelInfo(r.level).name}! +${r.gained} Legacy ${r.gained === 1 ? 'Star' : 'Stars'}`, { kind: 'success', duration: 7000 });
@@ -401,8 +420,9 @@ export function Game() {
         <div class={`world ${frenzy ? 'frenzy' : ''}`} ref={worldRef} role="button" tabIndex={0} aria-label={`Do a visit with ${starName}`} data-test="clicker" onClick={onWorldClick} onKeyDown={onWorldKey}>
           <canvas ref={canvasRef} aria-hidden="true" />
           <div class="world-hud" ref={hudRef}>
-            <div class="game-funds-main">{fmtMoney(s.funds)}</div>
+            <div class="game-funds-main">{fmtMoney(s.funds, { short: narrow })}</div>
             <div class="world-rate">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div>
+            <div class="world-taps">Your own visits: {tapShare >= 0.005 ? `${Math.round(tapShare * 100)}% of everything you earn` : 'worth little yet – knocking upgrades change that'}</div>
           </div>
           <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
           {activeEffects.length ? (
@@ -556,18 +576,20 @@ export function Game() {
           {rightTab === 'grow' ? (
             <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
               <p class="soft">Earn {fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
-              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.fraction * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.fraction * 100)}%` }} /></div>
+              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.progress * 100)}%` }} /></div>
               <div class="row-between">
-                <span class="muted">{fmtMoney(outlook.earned)} of {fmtMoney(outlook.target)}</span>
-                <strong>{outlook.fraction >= 0.01 ? Math.floor(outlook.fraction * 100) : (outlook.fraction * 100).toFixed(1)}%</strong>
+                <span class="muted">{fmtMoney(outlook.earned)} of {fmtMoney(outlook.target)} earned</span>
+                <strong>{Math.floor(outlook.progress * 100)}% of the way</strong>
               </div>
               {outlook.fraction >= 1 ? (
                 <p class="small mt expand-slow">You are well past what this stage asked for – hand over whenever you like.</p>
               ) : (
-                <p class={`small mt ${outlook.seconds > 1200 ? 'expand-slow' : 'muted'}`}>
-                  {Number.isFinite(outlook.seconds)
-                    ? `About ${fmtSeconds(outlook.seconds)} at the rate you are earning now.${outlook.seconds > 1200 ? ' Something bigger is worth buying.' : ''}`
-                    : 'Nothing is coming in yet – take somebody on.'}
+                <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
+                  {outlook.seconds === null
+                    ? 'Just getting going – give it a minute and it will say how long this run should take.'
+                    : Number.isFinite(outlook.seconds)
+                      ? `About ${fmtSeconds(outlook.seconds)} at the rate you are growing.${outlook.seconds > 1800 ? ' Something bigger is worth buying.' : ''}`
+                      : 'Nothing is coming in yet – take somebody on.'}
                 </p>
               )}
               <Button variant="primary" full size="lg" icon="trending-up" onClick={onExpand} disabled={!G.canExpand(s)} class="mt" data-test="expand">

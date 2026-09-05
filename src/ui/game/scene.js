@@ -681,8 +681,8 @@ export function createScene(canvas, { onCoin } = {}) {
     shown.forEach((id, i) => {
       const b = BUILDINGS.find((x) => x.id === id) || { emoji: Number(id.split('-')[1]) % 2 ? '🪐' : '✨' };
       const row = rows - 1 - Math.floor(i / inRow);      // newest along the front row
-      const x = right - (i % inRow) * gap;
-      if (x < left) return;
+      const x = left + (i % inRow) * gap;                // and read left to right, in ladder order
+      if (x > right) return;
       const n = world.counts[id] || 0;
       const bob = Math.sin(world.t * 0.6 + i) * 1.5 - row * 30;
       ctx.font = `${22 - row * 3}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';

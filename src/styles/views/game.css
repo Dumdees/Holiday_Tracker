@@ -15,8 +15,8 @@
 .world-hud { position: absolute; top: 10px; left: 12px; background: rgba(255,255,255,.9); border-radius: 14px; padding: 8px 14px; box-shadow: var(--shadow-sm); pointer-events: none; min-width: 110px; z-index: 2; }
 .world-hud.pulse { animation: hudPulse .4s ease-out; }
 @keyframes hudPulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 197, 66, .9); } 40% { transform: scale(1.07); } 100% { transform: scale(1); box-shadow: 0 0 0 14px rgba(245, 197, 66, 0); } }
-.game-funds-main { font-family: var(--font-display); font-size: 30px; font-weight: 750; color: var(--peach-800); letter-spacing: -0.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.world-rate { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; white-space: nowrap; }
+.game-funds-main { font-family: var(--font-display); font-size: 30px; font-weight: 750; color: var(--peach-800); letter-spacing: -0.02em; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.world-rate { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .world-level { position: absolute; top: 10px; right: 12px; background: rgba(255,255,255,.9); border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 700; color: var(--peach-800); box-shadow: var(--shadow-sm); pointer-events: none; z-index: 2; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .world-effects { position: absolute; top: 70px; left: 12px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; z-index: 2; }
 .effect-chip { background: #fff; border: 1.5px solid var(--peach-400); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 650; box-shadow: var(--shadow-sm); }
@@ -40,7 +40,7 @@
   .collect-first, .collect-auto { order: 3; } .game-right { order: 4; }
   .team-card { order: 5; } .rating-card { order: 6; }
 }
-@media (max-width: 760px) { .world { height: 340px; } .world-frame { margin-left: -4px; margin-right: -4px; } .world-level { top: 8px; bottom: auto; right: 8px; font-size: 11.5px; max-width: 58%; } .world-hint { bottom: 6px; font-size: 12.5px; padding: 7px 12px; } .game-funds-main { font-size: 26px; } }
+@media (max-width: 760px) { .world { height: 340px; } .world-frame { margin-left: -4px; margin-right: -4px; } .world-level { top: 8px; bottom: auto; right: 8px; font-size: 11.5px; max-width: 40%; } .world-hint { bottom: 6px; font-size: 12.5px; padding: 7px 12px; } .game-funds-main { font-size: 22px; } .world-hud { top: 8px; left: 8px; padding: 6px 10px; min-width: 0; max-width: 56%; } .world-rate, .world-taps { font-size: 10.5px; } }
 
 /* Collecting */
 .collect-btn { width: 100%; min-height: 64px; border-radius: var(--radius); border: 2px dashed var(--line-strong); background: var(--paper); cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; font: inherit; color: var(--ink-muted); transition: all .15s; }
@@ -127,7 +127,11 @@
 /* While the game is open, pop-up messages sit in the bottom-right corner so they never cover the shop. */
 body.game-open .toast-host { left: auto; right: 16px; transform: none; width: min(380px, calc(100vw - 32px)); }
 body.game-open .toast { min-height: 44px; padding: 8px 6px 8px 12px; font-size: 14px; }
-@media (max-width: 760px) { body.game-open .toast-host { right: 8px; bottom: 88px; width: calc(100vw - 16px); } }
+@media (max-width: 760px) {
+  body.game-open .toast-host { right: 8px; bottom: 88px; width: calc(100vw - 16px); }
+  /* Two badges at once would otherwise cover the whole shop on a phone. */
+  body.game-open .toast-host .toast:not(:last-child) { display: none; }
+}
 .expand-slow { background: #fff4c2; border: 1.5px solid #e6b800; border-radius: 10px; padding: 8px 10px; color: #6b4a00; font-weight: 650; }
 
 /* Which side of the business is behind – the one number that drives every decision */
@@ -165,3 +169,15 @@ body.game-open .toast { min-height: 44px; padding: 8px 6px 8px 12px; font-size: 
 /* Keep the three newest messages on screen while the game is open: the oldest step aside. */
 body.game-open .toast-host .toast:nth-last-child(n+3) { display: none; }
 @media (min-width: 1200px) { body.game-open .toast-host { right: auto; left: 280px; bottom: 16px; max-width: 360px; } }
+
+/* What your own visits are worth, under the rate in the HUD. */
+.world-taps {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft, #5b6b7a);
+  opacity: 0.9;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

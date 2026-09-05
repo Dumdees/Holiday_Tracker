@@ -20,6 +20,8 @@ import { fmtMoney } from './format.js';
 export const SAVE_VERSION = 2;
 const OFFLINE_CAP_SECONDS = 8 * 3600;
 const OFFLINE_CAP_ONCALL = 12 * 3600;
+const OFFLINE_PACE = 0.15;        // an hour away carries the round this far towards the finish line
+const OFFLINE_REACH = 0.8;        // and never further than this, so there is always something left to do
 const ADMIN_COLLECT_EVERY = 5;
 const SPAWN_LIFETIME = 13;
 const PRISMATIC_CHANCE_PER_SECOND = 1 / 210;
@@ -32,6 +34,20 @@ const COST_EASE_AT = 1000;        // after this many, prices climb more gently s
 const COST_GROWTH_LATE = 1.04;
 /** One visit of your own is never worth more than this much of a second's takings. */
 export function clickShareCap(level) { return 0.1 + 0.03 * level; }
+export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
+export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
+export const BRANCH_RETHINK = 3;   // how often a hand-over reopens what you are known for
+export const TAPS_A_SECOND = 2;    // what a brisk round of door-knocking looks like, for scoring
+
+/** What your own visits are worth a second if you keep knocking. */
+export function tapIncome(state, now = Date.now()) { return clickValue(state, now) * TAPS_A_SECOND; }
+
+/** The share of everything coming in that your own visits would account for at that pace. */
+export function tapShare(state, now = Date.now()) {
+  const tap = tapIncome(state, now);
+  const all = productionPerSecond(state, now) + tap;
+  return all > 0 ? tap / all : 0;
+}
 export const MILESTONES_BEYOND = 8;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
@@ -44,6 +60,7 @@ export function newGame(now = Date.now()) {
     funds: 0,
     invoices: 0,
     runEarned: 0,
+    pace: [],                   // a short trail of (seconds into the run, earned so far)
     lifetimeEarned: 0,
     visits: 0,
     clicks: 0,
@@ -144,12 +161,22 @@ export function applyOffline(state, now) {
   const rate = productionPerSecond(state, now);
   if (rate <= 0) return null;
   const efficiency = state.perks.includes('nightshift') ? 1 : oncall ? 0.8 : 0.5;
-  const earned = rate * seconds * efficiency;
+  // A round grows by multiplying, so how far through a run you are is a matter of how many times
+  // the takings have doubled, not of how much money is on the table. Time away carries the round
+  // that far along, which comes to the same share of the run whatever stage you are at.
+  const reach = Math.min(OFFLINE_REACH, (seconds / 3600) * OFFLINE_PACE * efficiency);
+  const logTarget = Math.log10(1 + expandRequirement(state));
+  const logEarned = Math.log10(1 + Math.max(0, state.runEarned || 0));
+  const wanted = Math.pow(10, logEarned + reach * Math.max(0, logTarget - logEarned)) - 1;
+  const earned = Math.max(rate * seconds * efficiency, wanted - (state.runEarned || 0), 0);
   const visits = visitsPerSecond(state) * seconds * efficiency;
   state.visits += visits;
   if (collectionMode(state) === 'instant') credit(state, earned); else state.invoices += earned;
   state.offlineReturns += 1;
-  return { seconds, earned, visits, efficiency, needsCollect: collectionMode(state) !== 'instant' };
+  // The hours away are not part of the run, and nothing was measured during them.
+  state.runStartedAt = (state.runStartedAt || now) + seconds * 1000;
+  state.pace = [];
+  return { seconds, earned, visits, efficiency, reach, needsCollect: collectionMode(state) !== 'instant' };
 }
 
 // ---------- The maths ----------
@@ -484,6 +511,15 @@ export function upgradeGain(state, id, now = Date.now(), income = null) {
     if (cheaper <= plain) return 0;
     return buildingGain(state, def.building, cheaper, now, before) - buildingGain(state, def.building, plain, now, before);
   }
+  if (def && (def.kind === 'click' || def.kind === 'clickpct' || def.clickBoost)) {
+    // Your own visits earn nothing unless you make them, so these were scored at nothing and sank
+    // to the bottom of the shop – which quietly steered everybody away from the strongest way to
+    // play. Judge them on what a brisk round of knocking would really bring in.
+    const with_ = { ...state, upgrades: [...state.upgrades, id] };
+    const add = (clickValue(with_, now) - clickValue(state, now)) * TAPS_A_SECOND;
+    if (def.kind === 'clickpct' || def.kind === 'click') return Math.max(0, add);
+    return Math.max(0, add) + (incomeWith(state, { upgrades: [...state.upgrades, id] }, now) - before);
+  }
   const after = incomeWith(state, { upgrades: [...state.upgrades, id] }, now);
   return after - before;
 }
@@ -570,7 +606,14 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
   // on-call phone, a share of your own visits – so a whole kind of upgrade is never pushed off the
   // shelf by things with a payback time.
   const quiet = all.filter((u) => !(u.gain > 0)).slice(0, 2);
-  const rest = all.filter((u) => !quiet.includes(u));
+  let rest = all.filter((u) => !quiet.includes(u));
+  // Pennies are folded away with the outgrown rungs. A shelf half full of things worth a hundredth
+  // of a percent reads as a shelf with nothing on it, however cheap they are. The bar is raised as
+  // far as it will go while there is still a proper shelf to shop from.
+  for (const bar of PENNY_BARS) {
+    const worthwhile = rest.filter((u) => !(u.gain > 0) || u.gain >= income * bar);
+    if (worthwhile.length >= Math.min(rest.length, SHELF_KEEP)) { rest = worthwhile; break; }
+  }
   const shown = [...rest.slice(0, Math.max(0, limit - quiet.length)), ...quiet].sort(order);
   return Object.assign(shown, { total: all.length });
 }
@@ -756,6 +799,8 @@ export function nextLevel(state) {
 export const RUN_SECONDS = 420;
 /** ...and this many times what the last run was asked for, so the stages lengthen a little each time. */
 export const RUN_BEAT = 6;
+/** The first few stages ask for rather more, so they last long enough to learn anything. */
+export const RUN_BEAT_EARLY = 9;
 /** ...and never more than this many times, however far a lucky run overshot. */
 export const RUN_BEAT_MAX = 200;
 /** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
@@ -771,7 +816,10 @@ const FIRST_TARGET = 1.2e5;
  */
 export function runTargetFor(level, lastPeak, lastTarget) {
   const first = lastTarget || lastPeak ? 0 : levelInfo(1).threshold;   // only the very first run
-  const byTarget = (lastTarget || 0) * RUN_BEAT;
+  // The first few stages ask for more, so a new player is not wiping the board every ninety
+  // seconds before they have worked out what any of it does.
+  const beat = level < 5 ? RUN_BEAT_EARLY : RUN_BEAT;
+  const byTarget = (lastTarget || 0) * beat;
   const byPeak = (lastPeak || 0) * RUN_SECONDS;
   // A run that overshoots hugely would otherwise set the next one an impossible figure, so the
   // step up is held between six and sixty times what the last run was asked for.
@@ -790,16 +838,65 @@ export function expandRequirement(state) {
 }
 
 /** The plain fraction of the way there, and how long the rest looks like taking. */
+export const PACE_EVERY = 10;      // how often the trail takes a reading, in seconds
+export const PACE_TRAIL = 90;      // how far back it looks
+export const PACE_SETTLE = 45;     // no forecast until a run has had this long to get going
+
+/**
+ * Keep a short trail of how much this run has earned, so the finish line can be worked out from
+ * how fast the money is growing rather than from what is coming in this second. A round grows by
+ * multiplying, not by adding, so "what is left divided by the rate" is wrong by orders of
+ * magnitude for most of a run.
+ */
+export function notePace(state, now = Date.now()) {
+  const t = Math.max(0, (now - (state.runStartedAt || now)) / 1000);
+  const trail = state.pace || (state.pace = []);
+  const last = trail[trail.length - 1];
+  if (last && t - last.t < PACE_EVERY) return;
+  if (last && t < last.t) trail.length = 0;          // the clock went backwards; start again
+  trail.push({ t, e: Math.max(0, state.runEarned) });
+  while (trail.length > 2 && t - trail[0].t > PACE_TRAIL) trail.shift();
+}
+
+/**
+ * How long the rest of the run is likely to take. Measured from the trail: if the run has been
+ * doubling its takings every so often, it will keep doing that, so the answer is how many of those
+ * doublings are left. Falls back to the flat sum when there is nothing to measure yet.
+ */
+export function paceGrowth(state, now = Date.now()) {
+  const t = Math.max(0, (now - (state.runStartedAt || now)) / 1000);
+  const earned = Math.max(0, state.runEarned || 0);
+  const old = (state.pace || []).filter((p) => t - p.t >= PACE_SETTLE * 0.6 && p.e > 0)[0];
+  if (!old || !(earned > old.e) || !(t > old.t)) return 0;
+  const g = Math.log(earned / old.e) / (t - old.t);
+  return g > 1e-4 ? g : 0;
+}
+
+export function forecastSeconds(state, target, earned, rate, now = Date.now()) {
+  const left = Math.max(0, target - earned);
+  if (left <= 0) return 0;
+  if (!(rate > 0)) return Infinity;                 // nothing coming in at all
+  const flat = left / rate;
+  const growth = paceGrowth(state, now);
+  if (growth > 0 && earned > 0) return Math.min(flat, Math.max(0, Math.log(target / earned) / growth));
+  // Nothing measured yet. Better to say so than to quote a number that is wrong by a mile.
+  return flat > 1800 ? null : flat;
+}
+
 export function expandOutlook(state, now = Date.now()) {
   const target = expandRequirement(state);
   const earned = Math.max(0, state.runEarned);
   const rate = productionPerSecond(state, now);
-  const left = Math.max(0, target - earned);
+  // A run's takings multiply rather than add up, so a bar drawn on the money sits on nothing for
+  // most of the run and then jumps. Counting doublings instead tracks how far through you really
+  // are, which is what the bar is for.
+  const progress = target > 0 ? Math.min(1, Math.log10(1 + earned) / Math.log10(1 + target)) : 0;
   return {
     target,
     earned,
     fraction: target > 0 ? Math.min(1, earned / target) : 0,
-    seconds: rate > 0 ? left / rate : Infinity,
+    progress,
+    seconds: forecastSeconds(state, target, earned, rate, now),
   };
 }
 
@@ -841,8 +938,12 @@ export function expand(state, now = Date.now()) {
     cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
     // The next run's finish line, worked out now and left alone until it is crossed.
-    lastPeak: peak, runPeak: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)),
+    lastPeak: peak, runPeak: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)), pace: [],
     funds: banked,
+    // What you are known for is a decision about the agency, not about one round, so it stays with
+    // you. Every third hand-over it is opened up again, in case you want to be known for something
+    // else now the patch is bigger.
+    branches: level % BRANCH_RETHINK === 0 ? {} : { ...(state.branches || {}) },
   };
   const fresh = newGame(now);
   Object.assign(state, fresh, keep, { runStartedAt: now, lastSeen: now });
@@ -956,6 +1057,7 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
       }
     }
   }
+  notePace(state, now);
   state.effects = state.effects.filter((e) => e.until > now);
   if (state.spawn && state.spawn.until < now) state.spawn = null;
   if (!state.spawn && dt > 0) {

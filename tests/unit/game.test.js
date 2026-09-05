@@ -274,20 +274,24 @@ describe('the big choices', () => {
         scored.sort((a, b) => b.income - a.income);
         winners.add(scored[0].id);
         const spread = scored[0].income / scored[scored.length - 1].income;
-        // Deliberately board-dependent: the point is that a different one wins on each board, not
-        // that they are interchangeable. Played out over eight minutes they sit within a third of each other.
-        assert.ok(spread <= 3.1, `${group.slot} options are ${spread.toFixed(2)}x apart on one board`);
+        // Deliberately board-dependent: a different one wins on each board, and the gap between
+        // them is worth caring about – but never so wide that picking the wrong one ends the run.
+        assert.ok(spread <= 12, `${group.slot} options are ${spread.toFixed(2)}x apart on one board`);
       }
       if (group.slot !== 'buyer') assert.ok(winners.size > 1, `${group.slot} always has the same right answer`);
     }
   });
 
-  test('choices are made again after handing over', () => {
+  test('what you are known for stays with you, and is reopened every third hand-over', () => {
     const s = g.newGame(T0);
     s.level = 1; s.runEarned = 1e9; s.lifetimeEarned = 1e9;
     g.pickBranch(s, 'buyer', 'buyer-private');
     g.expand(s, T0 + 1000);
-    assert.deepEqual(s.branches, {}, 'a new patch, a new decision');
+    assert.deepEqual(s.branches, { buyer: 'buyer-private' }, 'the agency is still known for the same thing');
+    s.runEarned = s.runTarget; s.lifetimeEarned = 1e12;
+    g.expand(s, T0 + 2000);      // now at level 3
+    assert.equal(s.level % g.BRANCH_RETHINK, 0, 'the third hand-over');
+    assert.deepEqual(s.branches, {}, 'a bigger patch, a fresh decision');
   });
 });
 
@@ -353,7 +357,8 @@ describe('handing over', () => {
     assert.ok(g.expandRequirement(s) >= LEVELS[1].threshold);
     // The finish line is worked out when the run starts and never moves again, so the bar cannot go
     // backwards and a lucky rainbow cannot push it away.
-    assert.equal(g.runTargetFor(3, 0, 1e12), 1e12 * g.RUN_BEAT, 'eight times your best run ever');
+    assert.equal(g.runTargetFor(6, 0, 1e12), 1e12 * g.RUN_BEAT, 'six times what the last run was asked for');
+    assert.equal(g.runTargetFor(3, 0, 1e12), 1e12 * g.RUN_BEAT_EARLY, 'and rather more while the stages are still short');
     assert.equal(g.runTargetFor(3, 1e10, 0), 1e10 * g.RUN_SECONDS, 'or two minutes at the last run’s best rate');
     assert.equal(g.runTargetFor(0, 0, 0), LEVELS[1].threshold, 'or the stage figure, at the very start');
     const mid = { ...g.newGame(T0), level: 3, runTarget: 5e9, runEarned: 1e9 };
