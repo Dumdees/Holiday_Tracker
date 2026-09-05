@@ -143,7 +143,11 @@ describe('what makes things better', () => {
     assert.equal(g.ratingIndex(board({ coordinator: 6 })), 1, 'Good');
     assert.equal(g.ratingIndex(board({ academy: 20 })), 2, 'Outstanding');
     assert.equal(g.ratingIndex(board({ academy: 300 })), 3);
-    assert.equal(g.ratingScore({ ...board(), upgrades: ['qual-cert', 'qual-plans'] }), 12, 'quality upgrades count');
+    // The key safes and care folders on the board count a little too: a well-run service is not
+    // only its managers. The two quality upgrades add six each on top.
+    const plain = g.ratingScore(board());
+    assert.equal(g.ratingScore({ ...board(), upgrades: ['qual-cert', 'qual-plans'] }), plain + 12, 'quality upgrades count');
+    assert.ok(plain > 0, 'the everyday things count for something');
     const info = g.ratingInfo(board({ coordinator: 6 }));
     assert.equal(info.name, 'Good');
     assert.equal(info.next.name, 'Outstanding');
@@ -161,7 +165,12 @@ describe('what makes things better', () => {
 
 describe('prices and what is worth buying', () => {
   test('each one costs 15% more, and the discounts apply', () => {
-    const s = { ...g.newGame(T0), level: 9 };
+    // Prices are the printed ones on the first street, and climb by exactly what a stage is worth.
+    const first = { ...g.newGame(T0), level: 0 };
+    assert.equal(g.buildingCost(first, 'carer', 1), 15);
+    const later = { ...first, level: 3 };
+    assert.equal(g.buildingCost(later, 'carer', 1), Math.ceil(15 * Math.pow(1.6, 3)));
+    const s = { ...g.newGame(T0), level: 0 };
     assert.equal(g.buildingCost(s, 'carer', 1), 15);
     assert.equal(g.buildingCost(s, 'carer', 2), Math.ceil(15 + 15 * 1.15));
     const cheap = { ...s, upgrades: ['disc-recruit'] };
@@ -358,7 +367,8 @@ describe('handing over', () => {
     assert.ok(g.starBonus(0) === 1 && g.starBonus(50) > 1.5);
     const r = g.expand(s, T0 + 1000);
     assert.equal(r.level, 1);
-    assert.equal(s.funds, 0);
+    // What the run earned beyond its figure comes with you, up to twice the figure itself.
+    assert.equal(s.funds, Math.min(6e5 - 1.2e5, 1.2e5 * 2));
     assert.deepEqual(s.upgrades, []);
     assert.deepEqual(s.buildings, g.startingKit(1), 'you keep a little round to start again with');
     assert.ok(g.productionPerSecond(s, T0 + 1000) > 0, 'a new run is never dead');

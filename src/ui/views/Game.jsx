@@ -74,6 +74,16 @@ function listNames(names) {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
+/** How much more a row would bring in, said the way a person would say it. */
+function gainWords(share) {
+  if (share >= 4) return `${fmtNum(Math.round(share))} times what you earn now`;
+  if (share >= 0.9) return 'about twice what you earn now';
+  if (share >= 0.4) return 'another half of everything you earn';
+  if (share >= 0.01) return `+${Math.round(share * 100)}% more coming in`;
+  if (share >= 0.0001) return `+${(share * 100).toFixed(2)}% more coming in`;
+  return 'a trickle more coming in';
+}
+
 /**
  * The one figure on the face of an upgrade tile. Things that earn more say how much more; things
  * that do something else say what they do, in the same shape, so tiles can be compared at a glance.
@@ -120,7 +130,8 @@ function useCarerNames() {
 export function Game() {
   const names = useCarerNames();
   const [floaters, setFloaters] = useState([]);
-  const [buyQty, setBuyQty] = useState(10);   // buying one at a time is a trap; ten is the sensible default
+  const [buyQty, setBuyQty] = useState(1);
+  const chosenQty = useRef(false);   // ×10 is the sensible default, but not for the first purchase
   const [showOld, setShowOld] = useState(false);
   const [showAllUpgrades, setShowAllUpgrades] = useState(false);
   const [rightTab, setRightTab] = useState('grow');
@@ -247,6 +258,10 @@ export function Game() {
   const outgrown = shop.filter((b) => b !== bestBuy && b.count > 0 && earning > 0 && b.gain < earning * 0.001);
   const rows = showOld ? shop : shop.filter((b) => !outgrown.includes(b));
   const hint = nextStep(s, shop);
+  // Ten at a time is the sensible way to shop – but not for the very first purchase, when ten
+  // carers cost twenty times a tap and nothing is coming in yet.
+  const goingConcern = (s.buildings.carer || 0) >= 1 && rate > 0;
+  useEffect(() => { if (!chosenQty.current && goingConcern) setBuyQty(10); }, [goingConcern]);
   const pending = G.pendingBranch(s);
   const outlook = G.expandOutlook(s, now);
   const nextLocked = G.nextLockedBuilding(s);
@@ -497,7 +512,7 @@ export function Game() {
 
           <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="Whichever side is behind is worth more." actions={
             <div class="qty-picker" role="group" aria-label="How many to buy">
-              {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => setBuyQty(q)}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
+              {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => { chosenQty.current = true; setBuyQty(q); }}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
             <ul class="building-list">
               {rows.map((b) => (
@@ -512,7 +527,9 @@ export function Game() {
                         {bestBuy && bestBuy.id === b.id ? <span class="best-chip">Best value</span> : null}
                       </span>
                       <span class="building-sub muted">
-                        {fmtPayback(b.payback, b.side) || (metrics.team <= 0 ? 'nobody to do the visits yet – take on a carer first' : metrics.work <= 0 ? 'nobody to visit yet – take somebody on first' : 'earns nothing extra just now')}
+                        {b.gain > 0 && b.income > 0
+                          ? <>{gainWords(b.gain / b.income)}<span class="muted"> · {fmtPayback(b.payback, b.side)}</span></>
+                          : (metrics.team <= 0 ? 'nobody to do the visits yet – take on a carer first' : metrics.work <= 0 ? 'nobody to visit yet – take somebody on first' : 'earns nothing extra just now')}
                         {b.milestone ? <span class="milestone-pip"> · {fmtNum(b.milestone.remaining)} more and every one is {b.milestoneFactor}× better</span> : null}
                       </span>
                     </span>

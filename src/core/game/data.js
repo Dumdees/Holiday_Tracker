@@ -121,12 +121,12 @@ export function levelInfo(level) {
 export const RATINGS = [
   { id: 'new', name: 'Newly registered', emoji: '🆕', mult: 1, score: 0, blurb: 'Registered and ready. The rating comes with the work.' },
   { id: 'good', name: 'Good', emoji: '✅', mult: 1.2, score: 6, blurb: 'Safe, caring, well led. Everything earns 20% more.' },
-  { id: 'great', name: 'Outstanding', emoji: '🌟', mult: 1.6, score: 120, blurb: 'Outstanding in one of the five questions. Everything earns 60% more.' },
-  { id: 'best', name: 'Outstanding, every question', emoji: '🏆', mult: 2.4, score: 2000, blurb: 'Outstanding across the board. Everything earns 140% more.' },
+  { id: 'great', name: 'Outstanding', emoji: '🌟', mult: 1.6, score: 40, blurb: 'Outstanding in one of the five questions. Everything earns 60% more.' },
+  { id: 'best', name: 'Outstanding, every question', emoji: '🏆', mult: 2.4, score: 400, blurb: 'Outstanding across the board. Everything earns 140% more.' },
 ];
 
 /** What counts towards the rating: the things a real service invests in to be well led. */
-export const RATING_WEIGHTS = { coordinator: 1, supervisor: 3, academy: 8, nurse: 12, office: 2 };
+export const RATING_WEIGHTS = { keysafe: 0.05, package: 0.2, coordinator: 1, supervisor: 3, academy: 8, nurse: 12, office: 2 };
 export const RATING_UPGRADE_POINTS = 6; // each quality upgrade owned
 
 /** Permanent perks bought with Legacy Stars. */
@@ -464,11 +464,11 @@ export function stageUpgrades(level) {
     { key: 'hands', seconds: 3.5, name: 'Still on the round yourself', emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
       blurb: 'Your own visits earn another 1% of the team’s income every second.', question: 'Cheap, and it keeps your own tapping worth doing.',
       visual: 'Your own carer keeps walking the round with everybody else.' },
-    { key: 'syn', seconds: 5.5, name: `More ${settled.plural.toLowerCase()} than anybody`, emoji: settled.emoji, kind: 'synergy', archetype: 'synergy',
-      from: settled.id, to: `*${settled.side}`, per: 0.006, cap: 2,
-      blurb: `Every ${settled.name.toLowerCase()} makes all of your ${settled.side} 0.6% better, up to +200%.`,
-      question: `Grows with how many ${settled.plural.toLowerCase()} you keep buying, and stops if you stop.`,
-      visual: `More ${settled.plural.toLowerCase()} than anybody thought sensible.` },
+    { key: 'syn', seconds: 5.5, name: 'Whatever you have most of', emoji: settled.emoji, kind: 'synergy', archetype: 'synergy',
+      fromSide: side, to: `*${side}`, per: 0.006, cap: 2,
+      blurb: `Whichever part of your ${side} you own most of makes all the rest 0.6% better for each one, up to +200%.`,
+      question: 'Rewards going deep on one thing rather than a little of everything.',
+      visual: 'The thing you have the most of, everywhere you look.' },
     { key: 'team', seconds: 8, name: 'The whole team lifts', emoji: '👥', kind: 'side', archetype: 'synergy', side: 'team', flat: 0.6,
       blurb: `${where}: your whole team is 60% better.`, question: 'Lifts every pair of hands you own at once.',
       visual: 'Everybody on the street works a little quicker.' },

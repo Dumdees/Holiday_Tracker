@@ -31,7 +31,7 @@ const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
 /** One visit of your own is never worth more than this much of a second's takings. */
-export function clickShareCap(level) { return Math.min(0.6, 0.1 + 0.02 * level); }
+export function clickShareCap(level) { return 0.1 + 0.03 * level; }
 export const MILESTONES_BEYOND = 8;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
@@ -204,6 +204,21 @@ export function nextMilestone(count) {
   return { at, remaining: at - count };
 }
 
+/**
+ * How many things a synergy is counting. A named rung counts itself; `fromSide` counts whatever you
+ * own most of on that side, so a stage's own synergy is never worth nothing because you happen to
+ * own none of the rung it was named after.
+ */
+function synergyCount(state, u) {
+  if (u.from) return state.buildings[u.from] || 0;
+  let best = 0;
+  for (const [id, n] of Object.entries(state.buildings)) {
+    const def = buildingDef(state, id);
+    if (def && def.side === u.fromSide && n > best) best = n;
+  }
+  return best;
+}
+
 /** What one of a thing delivers a second, after its own upgrades, milestones and synergies. */
 export function buildingRate(state, id) {
   const b = buildingDef(state, id);
@@ -215,7 +230,7 @@ export function buildingRate(state, id) {
     if (u.kind === 'side' && u.side === b.side) mult *= 1 + u.flat;
     if (u.kind === 'synergy') {
       const applies = u.to === id || (u.to === '*') || (u.to === '*team' && b.side === 'team') || (u.to === '*work' && b.side === 'work');
-      if (applies) mult *= 1 + Math.min(u.cap, u.per * (state.buildings[u.from] || 0));
+      if (applies) mult *= 1 + Math.min(u.cap, u.per * synergyCount(state, u));
     }
   }
   return b.rate * mult;
@@ -377,12 +392,13 @@ function unitCost(base, n) {
 }
 
 /**
- * What a rung costs at this stage. The printed prices are for the very first run; every run after it
- * is bigger, so they climb with it – otherwise the whole printed ladder is loose change by the
- * fourth stage and every row in the shop says "pays for itself in one second".
+ * What a rung costs at this stage. The printed prices are for the very first run, and every stage
+ * you have reached makes everything earn more, so the rungs climb by exactly that much – no more.
+ * Tying them to the finish line instead compounds: the line grows twenty-fold a stage while the
+ * income a run *starts* with grows about twice, and by the eighth stage nothing is affordable.
  */
 export function rungPrice(state, b) {
-  return b.baseCost * Math.pow(Math.max(1, expandRequirement(state) / FIRST_TARGET), RUNG_CLIMB);
+  return b.baseCost * Math.pow(STAGE_BONUS, state.level);
 }
 
 export function buildingCost(state, id, qty = 1) {
@@ -425,20 +441,12 @@ export function upgradeCost(state, id) {
   const def = upgradeById(id);
   if (!def) return Infinity;
   const f = state.perks.includes('playbook') ? 0.9 : 1;
-  // A stage's own shelf is priced as a share of what this run has to earn, so it is worth the same
-  // effort at every stage: a minute's takings for the first, most of the run for the last.
-  // A stage's own shelf is priced as a share of what this run has to earn. The printed list keeps its
-  // printed prices, lifted as the runs get bigger – otherwise the whole of it is pocket money by the
-  // third stage and every run afterwards is over in ninety seconds.
   // A stage's own shelf is priced in seconds of what you are earning right now, so it always costs a
   // legible amount of saving whatever shape the run is in. The printed list keeps its printed
-  // prices, lifted as the runs get bigger.
+  // prices, lifted as the runs get bigger, or the whole of it is pocket money by the third stage.
   if (def.costSeconds) return Math.ceil(def.costSeconds * Math.max(1, steadyIncome(state)) * f);
-  const target = expandRequirement(state);
-  const base = def.costShare
-    ? def.costShare * target
-    : def.cost * Math.pow(Math.max(1, target / FIRST_TARGET), PRICE_CLIMB);
-  return Math.ceil(base * f);
+  const climbed = def.cost * Math.pow(Math.max(1, expandRequirement(state) / FIRST_TARGET), PRICE_CLIMB);
+  return Math.ceil(climbed * f);
 }
 
 // ---------- What is worth buying ----------
@@ -752,8 +760,6 @@ export const RUN_BEAT = 6;
 export const RUN_BEAT_MAX = 200;
 /** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
 export const PRICE_CLIMB = 0.4;
-/** ...and how hard the rungs themselves climb. */
-export const RUNG_CLIMB = 0.6;
 const FIRST_TARGET = 1.2e5;
 
 /**
@@ -824,6 +830,10 @@ export function expand(state, now = Date.now()) {
   const peak = Math.max(state.runPeak || 0, steadyIncome(state));
   const bestRun = Math.max(state.bestRun || 0, state.runEarned);
   const level = state.level + 1;
+  // Anything the run earned beyond what it was asked for comes with you, up to twice the figure
+  // itself – so a night away, or a run you left going, is money in the new patch's pocket rather
+  // than money thrown in the bin.
+  const banked = Math.min(Math.max(0, state.runEarned - expandRequirement(state)), expandRequirement(state) * 2);
   const keep = {
     startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,
     bestRun, level, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
@@ -832,6 +842,7 @@ export function expand(state, now = Date.now()) {
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
     // The next run's finish line, worked out now and left alone until it is crossed.
     lastPeak: peak, runPeak: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)),
+    funds: banked,
   };
   const fresh = newGame(now);
   Object.assign(state, fresh, keep, { runStartedAt: now, lastSeen: now });
