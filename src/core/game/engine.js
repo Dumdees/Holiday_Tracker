@@ -37,8 +37,8 @@ export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level);
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
 export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
-export const STAY_BONUS = 1;    // extra stars for every ten times over the finish line you go
-export const STAY_BONUS_MAX = 5;  // and never more than five times, however long you stay
+export const STAY_BONUS = 1.5;    // extra stars for every ten times over the finish line you go
+export const STAY_BONUS_MAX = 12; // and never more than twelve times, however long you stay
 export const STAY_LIFTS = 0.15;   // and a long stay lifts the next figure by this much of where you got to
 export const KEEPS_ITS_SYSTEMS = new Set(['admin', 'direct-debit', 'oncall']);
 export const CHIP_QTY = 10;        // the quantity the shop's Best value chip is judged at
