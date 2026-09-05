@@ -235,7 +235,7 @@ export function Game() {
       <div class="confirm">
         <div class="confirm-icon"><Icon name="sun" size={28} /></div>
         <h2>Welcome back!</h2>
-        <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}.{away.needsCollect ? ' The payments are waiting to be collected.' : ''}</p>
+        <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}. It is already in the bank.</p>
         {away.reach >= 0.15 ? <p class="soft">That is <strong>{away.reach >= 0.75 ? 'most of the way' : away.reach >= 0.55 ? 'about halfway' : away.reach >= 0.35 ? 'about a third of the way' : 'a good start'}</strong> to {G.nextLevel(game.value).name}.</p> : null}
         <div class="modal-actions"><Button variant="primary" onClick={() => close()}>Lovely</Button></div>
       </div>

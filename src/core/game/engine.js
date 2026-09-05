@@ -172,12 +172,14 @@ export function applyOffline(state, now) {
   const earned = Math.max(rate * seconds * efficiency, wanted - (state.runEarned || 0), 0);
   const visits = visitsPerSecond(state) * seconds * efficiency;
   state.visits += visits;
-  if (collectionMode(state) === 'instant') credit(state, earned); else state.invoices += earned;
+  // The office banks what came in while you were away, whether or not you collect by hand when you
+  // are here – otherwise a night away shows on no figure at all until you find the right button.
+  credit(state, earned);
   state.offlineReturns += 1;
   // The hours away are not part of the run, and nothing was measured during them.
   state.runStartedAt = (state.runStartedAt || now) + seconds * 1000;
   state.pace = [];
-  return { seconds, earned, visits, efficiency, reach, needsCollect: collectionMode(state) !== 'instant' };
+  return { seconds, earned, visits, efficiency, reach };
 }
 
 // ---------- The maths ----------
