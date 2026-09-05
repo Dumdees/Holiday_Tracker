@@ -59,6 +59,8 @@ export const BUILDINGS = [
 const BEYOND_NAMES = ['Ring station', 'Orbit crew', 'Colony ward', 'Flight nurse', 'Long-haul round', 'Live-in carer'];
 /** Where each time round happens, so two of the same thing are told apart by a place not a number. */
 const FURTHER_OUT = ['', 'on the Halley Ring', 'in the Deep Field', 'out at the Rim', 'beyond the Rim', 'off the maps', 'where nobody has been'];
+/** The same places with the preposition dropped, for tiles too narrow to hold the long form. */
+const OUT_SHORT = ['', 'Halley Ring', 'Deep Field', 'the Rim', 'past the Rim', 'off the maps', 'the far dark'];
 /** ...and for the stages themselves, which come round again rather than moving further out. */
 const AGAIN = ['second time round', 'third time round', 'fourth time round', 'fifth time round', 'and further out than ever'];
 const BEYOND_BLURBS = [
@@ -81,8 +83,10 @@ export function beyondBuilding(n) {
   // The same name without the comma, for sentences. "Every one of your live-in carers, in the deep
   // field brings in..." opens a clause and never closes it, and it reads as a stumble.
   const plainPlural = lap ? `${base}s ${where}` : `${base}s`;
+  const basePlural = `${base}s`;
+  const shortWhere = OUT_SHORT[Math.min(lap, OUT_SHORT.length - 1)];
   return {
-    id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural, plainPlural, emoji: n % 2 ? '🪐' : '✨',
+    id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural, plainPlural, basePlural, shortWhere, emoji: n % 2 ? '🪐' : '✨',
     baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n),
     level: 9 + Math.ceil(n / BEYOND_PER_LEVEL),
     blurb: BEYOND_BLURBS[(n - 1) % BEYOND_BLURBS.length],
@@ -271,8 +275,8 @@ const CONDITIONALS = [
 
 /** The tenth of anything doubles it. These make that step bigger still. */
 const MILESTONE_UPS = [
-  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every tenth one you buy makes them all better. Now it makes them better still.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
-  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every tenth one you buy makes them all better. This lifts that again, by more.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
+  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every tenth one you buy makes them all better. Now it is a fifth better again.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
+  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every tenth one you buy makes them all better. Now it is a third better again.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
 ];
 
 /** What a visit is worth: who is paying, and what you are trusted to do. */
@@ -663,7 +667,7 @@ export function stageUpgrades(level) {
           // Named after what it goes on, never after a number: "Warm boxes 16" told nobody anything.
           // The rung comes first in the name. Two tiles called "Quiet engines for the ..." differ only
           // in words the box cuts off, and then they read as the same tile twice.
-          id: `${b.id}-t${i + 1}`, name: `${b.plainPlural}: ${name.toLowerCase()}`, emoji: b.emoji, kind: 'building', building: b.id,
+          id: `${b.id}-t${i + 1}`, name: `${b.basePlural}: ${name.toLowerCase()}${b.shortWhere ? `, ${b.shortWhere}` : ''}`, emoji: b.emoji, kind: 'building', building: b.id,
           costSeconds: [5, 18, 55][i] * (r + 1), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
           blurb: `${eachSubject(b)} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
           visual: `${name} on every one of them, out on the horizon.`,
@@ -762,8 +766,8 @@ export const ACHIEVEMENTS = [
   { id: 'earn-1b', name: 'A billion', emoji: '🏦', blurb: 'Earn £1 billion in one run.', test: (s) => s.runEarned >= 1e9 },
   { id: 'earn-1t', name: 'A thousand billion', emoji: '🪙', blurb: 'Earn a thousand billion pounds in one run.', test: (s) => s.runEarned >= 1e12 },
   { id: 'collector', name: 'Chasing invoices', emoji: '🧾', blurb: 'Collect the payments by hand 25 times.', test: (s) => s.collections >= 25 },
-  { id: 'prismatic-1', name: 'Over the rainbow', emoji: '🌈', blurb: 'Meet a prismatic carer.', test: (s) => s.prismaticsMet >= 1 },
-  { id: 'prismatic-7', name: 'Rainbow collector', emoji: '🦄', blurb: 'Meet 7 prismatic carers.', test: (s) => s.prismaticsMet >= 7 },
+  { id: 'prismatic-1', name: 'Over the rainbow', emoji: '🌈', blurb: 'Catch a brilliant shift.', test: (s) => s.prismaticsMet >= 1 },
+  { id: 'prismatic-7', name: 'Rainbow collector', emoji: '🦄', blurb: 'Catch 7 brilliant shifts.', test: (s) => s.prismaticsMet >= 7 },
   { id: 'cards-5', name: 'A fridge full of cards', emoji: '💌', blurb: 'Open 5 thank-you cards.', test: (s) => s.cardsOpened >= 5 },
   { id: 'cards-25', name: 'A local treasure', emoji: '🏅', blurb: 'Open 25 thank-you cards.', test: (s) => s.cardsOpened >= 25 },
   { id: 'branch-1', name: 'Made your mind up', emoji: '🤝', blurb: 'Choose who you work for.', test: (s) => !!(s.branches && s.branches.buyer) },
@@ -836,7 +840,7 @@ export const TICKER = [
   'Weather update: it is raining sideways. {n} brought spare socks for everyone.',
   'The care cars have had their signs put on straight. Finally.',
   '{n} completed a round, a crossword and a jigsaw before lunch.',
-  'Rumour has it a prismatic carer was seen shimmering near the tea trolley.',
+  'Rumour has it a brilliant shift was seen shimmering near the tea trolley.',
   'Thank-you cards now cover the whole fridge door. A second fridge has been ordered.',
   '{n} has been voted most likely to remember everybody’s birthday.',
   'The training academy graduated its first class. Cake was involved.',

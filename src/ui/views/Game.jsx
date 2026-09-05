@@ -48,7 +48,8 @@ function noPaybackReason(u, share) {
   if (u.kind === 'conditional') return share >= 0.999 ? 'no extra income just now' : `pays more ${u.label}`;
   if (u.kind === 'click' || u.kind === 'clickpct') return 'makes your own visits worth more';
   if (u.kind === 'discount') return 'makes them cheaper, not faster';
-  if (u.kind === 'collect' || u.kind === 'offline') return 'saves you a job';
+  if (u.kind === 'offline') return 'keeps them going while you are away';
+  if (u.kind === 'collect') return 'saves you a job';
   return 'no extra income just now';
 }
 
@@ -98,7 +99,7 @@ function howFar(outlook) {
   const jumps = bigJumpsLeft(outlook);
   if (jumps <= 1) return 'Your money has to double once more.';
   if (jumps <= 12) return `Your money has to double ${['', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times', 'ten times', 'eleven times', 'twelve times'][jumps]} more.`;
-  return 'Your money has a long way to double yet.';
+  return 'You have barely started. Keep going.';
 }
 
 /** How much more a row would bring in, said the way a person would say it. */
@@ -323,7 +324,9 @@ export function Game() {
     && b.count === 0 && b.cost > earning * 600 && shop.indexOf(b) > 2);
   // When everything on the shelf pays for itself in a second, payback stops telling you anything,
   // so the row that moves you furthest is named as well.
-  const biggestStep = shop.reduce((a, b) => (b.affordable && b.gain > (a ? a.gain : 0) ? b : a), null);
+  const biggestStep0 = shop.reduce((a, b) => (b.affordable && b.gain > (a ? a.gain : 0) ? b : a), null);
+  const biggestStep = biggestStep0 && biggestStep0.income > 0 && biggestStep0.gain / biggestStep0.income >= 0.005
+    && Number.isFinite(biggestStep0.payback) && biggestStep0.payback < NEVER_PAYS ? biggestStep0 : null;
   const folded = [...outgrown, ...tooDear];
   const rows = showOld ? shop : shop.filter((b) => !folded.includes(b));
   const hint = nextStep(s, shop);
@@ -526,7 +529,7 @@ export function Game() {
             <div class="world-rate">{fmtRate(rate, { short: narrow })} · {fmtMoney(perClick, { short: narrow })} per visit</div>
             {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? tapShare >= 0.5 ? 'more than half of what you earn' : tapShare >= 0.25 ? 'a good part of what you earn' : tapShare >= 0.08 ? 'a fair bit of what you earn' : 'a small part of what you earn' : 'worth little yet – the upgrades about your own visits change that'}</div> : null}
           </div>
-          <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
+          <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? <span title={`${s.prismaticHires.length} brilliant ${s.prismaticHires.length === 1 ? 'shift' : 'shifts'} you caught`}> · {s.prismaticHires.length} 🌈</span> : null}</div>
           {activeEffects.length ? (
             <div class="world-effects">
               {activeEffects.map((e) => <span key={e.id} class={`effect-chip effect-${e.id}`}>{e.emoji} {e.name} · {fmtSeconds((e.until - now) / 1000)}</span>)}
@@ -655,13 +658,14 @@ export function Game() {
                         <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
                         {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
                         {bestBuyShown && bestBuyShown.id === b.id ? <span class="best-chip">Best buy</span> : null}
-                        {biggestStep && biggestStep.id === b.id && (!bestBuyShown || bestBuyShown.id !== b.id) ? <span class="best-chip step-chip">Biggest lift</span> : null}
+                        {biggestStep && biggestStep.id === b.id && (!bestBuyShown || bestBuyShown.id !== b.id) ? <span class="best-chip step-chip">Biggest jump</span> : null}
                       </span>
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0
                           ? <>{gainWords(b.gain / b.income)}<span class="muted"> · {fmtPayback(b.payback, b.side)}</span></>
                           : (metrics.team <= 0 && b.side === 'work' ? 'nobody to do the visits yet – take on a carer first'
                             : metrics.work <= 0 && b.side === 'team' ? 'nobody to visit yet – take somebody on first'
+                            : b.count > 0 ? 'barely anything now, but it all counts'
                             : b.side === 'team' ? 'gets the visits started' : 'earns nothing extra just now')}
 
                       </span>
