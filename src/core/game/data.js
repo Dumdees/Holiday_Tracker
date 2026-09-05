@@ -237,9 +237,9 @@ const CONDITIONALS = [
   // `share` returns 0..1: how much of the bonus is paying. It slides rather than switching off, so
   // taking on more work can never make you poorer, only dilute a bonus you were holding.
   { id: 'cond-covered', name: 'Nobody is rushed', emoji: '🫶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / m.work)) : 1), label: 'the more of the work your team can cover', blurb: 'Everything earns up to 30% more, in full once your team can cover the work.', question: 'Rewards staffing ahead of the work – the opposite of chasing volume.', unlock: (s) => s.runEarned >= 6000 },
-  { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.45, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / (m.work * 1.8))) : 1), label: 'the further your team is ahead of the work', blurb: 'Everything earns up to 45% more, in full once your team is nearly twice the work.', question: 'Deliberate slack, held on purpose. Taking this closes off People ask for you first.', unlock: (s) => s.upgrades.includes('cond-covered') && !s.upgrades.includes('cond-waiting') },
+  { id: 'cond-continuity', name: 'The same carer, every time', emoji: '🤝', mult: 1.45, cost: 3e6, archetype: 'conditional', side: 'team', sideDiscount: 0.75, share: (s, m) => (m.work > 0 ? Math.min(1, Math.sqrt(m.team / (m.work * 1.8))) : 1), label: 'the further your team is ahead of the work', blurb: 'Everything earns up to 45% more, in full once your team is nearly twice the work – and everything on the team side costs a quarter less, for good.', question: 'Deliberate slack, held on purpose, and cheaper to hold. Taking this closes off People ask for you first.', unlock: (s) => s.upgrades.includes('cond-covered') && !s.upgrades.includes('cond-waiting') },
   { id: 'cond-busy', name: 'A full round', emoji: '🚶', mult: 1.3, cost: 12000, archetype: 'conditional', share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / m.team)) : 1), label: 'the fuller the rounds are', blurb: 'Everything earns up to 30% more, in full once there is a full round of work for everybody.', question: 'The other bet: nobody drives across town for one call. The opposite of staffing ahead.', unlock: (s) => s.runEarned >= 6000 },
-  { id: 'cond-waiting', name: 'People ask for you first', emoji: '📖', mult: 1.45, cost: 3e6, archetype: 'conditional', share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / (m.team * 1.8))) : 1), label: 'the more people are asking for you than you can take on yet', blurb: 'Everything earns up to 45% more, in full once there is nearly twice the work your team can carry.', question: 'Take the work on first and hire into it. Taking this closes off The same carer, every time.', unlock: (s) => s.upgrades.includes('cond-busy') && !s.upgrades.includes('cond-continuity') },
+  { id: 'cond-waiting', name: 'People ask for you first', emoji: '📖', mult: 1.45, cost: 3e6, archetype: 'conditional', side: 'work', sideDiscount: 0.75, clickBoost: 2, share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / (m.team * 1.8))) : 1), label: 'the more people are asking for you than you can take on yet', blurb: 'Everything earns up to 45% more, in full once there is nearly twice the work your team can carry – taking work on costs a quarter less, and your own visits are worth twice as much.', question: 'Take the work on first and hire into it, and knock the doors yourself. Taking this closes off The same carer, every time.', unlock: (s) => s.upgrades.includes('cond-busy') && !s.upgrades.includes('cond-continuity') },
   { id: 'cond-tidy', name: 'A tidy patch', emoji: '🧰', mult: 1.25, cost: 250000, archetype: 'conditional', share: (s) => Math.min(1, kitCount(s) / KIT_FOR_TIDY), label: 'the more of your kit is out on the patch', blurb: 'Everything earns up to 25% more, in full once you have twelve bits of kit out on the patch.', question: 'Makes every small bit of kit count twice: once for its own rung, and once for the whole patch.', unlock: (s) => (s.buildings.keysafe || 0) >= 10 },
   { id: 'cond-wellled', name: 'Well led', emoji: '🌟', mult: 1.35, cost: 4e8, archetype: 'conditional', share: (s, m) => Math.min(1, Math.max(0, m.ratingIndex - 1) / 3), label: 'more the higher your rating climbs', blurb: 'Everything earns up to 35% more, in full once your service is talked about nationally.', question: 'Turns the rating from a nice badge into a reason to keep training people.', unlock: (s) => (s.buildings.academy || 0) >= 1 },
 ];
@@ -307,14 +307,14 @@ export const BRANCHES = [
     options: [
       { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.55, blurb: 'Everything earns 55% more.', question: 'Flat, simple, and the most you can earn in the first few minutes of a run.' },
       { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.45, discount: 0.45, blurb: 'Everything earns 45% more, and taking on work costs 55% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
-      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Everything earns 50% more, plus 1.2% for every care package you run, and every NHS-funded one counts too, up to +600%. The longer you stay on a patch, the more of it you get.', question: 'Least of the three for the first few minutes, most of them by the end of a long run.' },
+      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Everything earns 50% more, plus 1.2% for every care package you run, and every NHS-funded one counts too, up to +600%. It builds up over your first minute and a half on a patch.', question: 'Least of the three for the first few minutes, most of them by the end of a long run.' },
     ],
   },
   {
     slot: 'growth', name: 'How do you grow?', emoji: '🌱', level: 3,
     blurb: 'Everybody grows differently. What is your way?',
     options: [
-      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.15, per: 0.02, from: 'carer', cap: 5, blurb: 'Everything earns 15% more, plus 2% for every carer, up to +500%. The longer you stay on a patch, the more of it you get.', question: 'Slow to start and nothing beats it late. Best when you mean to stay on this patch a while.' },
+      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.15, per: 0.02, from: 'carer', cap: 5, blurb: 'Everything earns 15% more, plus 2% for every carer, up to +500%. It builds up over your first minute and a half on a patch.', question: 'Slow to start and nothing beats it late. Best when you mean to stay on this patch a while.' },
       { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.8, discount: 0.3, blurb: 'Everything earns 80% more, and carers, key safes, cars and offices all cost 70% less.', question: 'Not a bonus but a discount: everything on the team side costs 70% less, for ever.' },
       { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.4, clickBoost: 3, blurb: 'Every visit is worth 140% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
@@ -323,9 +323,9 @@ export const BRANCHES = [
     slot: 'known', name: 'What are you known for?', emoji: '🏅', level: 5,
     blurb: 'Every good agency is known for something.',
     options: [
-      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.35, per: 0.01, from: 'client', cap: 5, blurb: 'Everything earns 35% more, plus 1% for everybody you look after, up to +500%. The longer you stay on a patch, the more of it you get.', question: 'Rewards a long client list and life story work – the longer the better.' },
-      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2.6, discount: 0.4, blurb: 'Everything earns 160% more, and taking on work costs 60% less.', question: 'Short, intensive, and people leave you better than they arrived. Best on a quick run.' },
-      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.6, per: 0.05, from: ['chc', 'nurse'], cap: 6, blurb: 'Everything earns 60% more, plus 5% for every NHS package and nurse-led team, up to +600%. The longer you stay on a patch, the more of it you get.', question: 'The hardest work, and nothing else climbs as high.' },
+      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.35, per: 0.01, from: 'client', cap: 5, blurb: 'Everything earns 35% more, plus 1% for everybody you look after, up to +500%. It builds up over your first minute and a half on a patch.', question: 'Rewards a long client list and life story work – the longer the better.' },
+      { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2.2, discount: 0.45, blurb: 'Everything earns 120% more, and taking on work costs 55% less.', question: 'Short, intensive, and people leave you better than they arrived. Best on a quick run.' },
+      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.6, per: 0.05, from: ['chc', 'nurse'], cap: 6, blurb: 'Everything earns 60% more, plus 5% for every NHS package and nurse-led team, up to +600%. It builds up over your first minute and a half on a patch.', question: 'The hardest work, and nothing else climbs as high.' },
     ],
   },
 ];
@@ -362,7 +362,7 @@ const VISUALS = {
   'cond-covered': 'A green tick over the office whenever it is switched on.',
   'cond-busy': 'Every carer on the street has somewhere to be.',
   'cond-waiting': 'More front doors with the light on than there are carers to knock.',
-  'cond-continuity': 'Carers keep going back to the same doors.',
+  'cond-continuity': 'Carers keep going back to the same doors, and the minibus is always out.',
   'cond-tidy': 'The green tick over the office counts your kit in.',
   'cond-wellled': 'The rating sticker in the office window glows.',
   'mile-1': 'Bunting goes up along the office.',
@@ -451,8 +451,9 @@ export function stageUpgrades(level) {
     ? beyondBuilding((level - LEVELS.length + 1) * BEYOND_PER_LEVEL - 1)
     : BUILDINGS.filter((b) => b.level === level).slice(-1)[0]) || BUILDINGS[0];
   const side = own.side === 'team' ? 'team' : 'work';
-  // The synergy leans on the rung you got the hang of last stage – you own plenty of those. The
-  // discount is for the rung this stage brings, which is what you are about to start buying.
+  // The synergy and the discount both lean on the rung you got the hang of last stage: you own
+  // plenty of those and you are still buying them, so a discount on them is worth having. A
+  // discount on the rung this stage brings is worth nothing until you can afford the first one.
   const settled = (level > LEVELS.length + 1
     ? beyondBuilding(Math.max(1, (level - LEVELS.length - 1) * BEYOND_PER_LEVEL - 1))
     : BUILDINGS.filter((b) => b.level === Math.max(0, level - 2)).slice(-1)[0]) || BUILDINGS[0];
@@ -481,10 +482,10 @@ export function stageUpgrades(level) {
     { key: 'all1', seconds: 11, name: 'Everybody pulls together', emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
       blurb: `${where}: everything you own earns 80% more.`, question: 'Touches every single thing you own, whichever way you have played.',
       visual: 'The whole street lifts, and the office noticeboard fills up.' },
-    { key: 'disc', seconds: 15, name: `${own.plural} by the dozen`, emoji: '📦', kind: 'discount', archetype: 'discount', building: own.id, factor: 0.6,
-      blurb: `${own.plural} cost 40% less for the rest of this run.`,
-      question: `Not more income – more ${own.plural.toLowerCase()}. Worth it if you are going to keep buying them.`,
-      visual: `A crate of ${own.plural.toLowerCase()} waiting outside the office.` },
+    { key: 'disc', seconds: 15, name: side === 'team' ? 'Bought in bulk' : 'Signed off in one go', emoji: '📦', kind: 'discount', archetype: 'discount', side, sideDiscount: 0.75,
+      blurb: `Everything on the ${side} side costs a quarter less for the rest of this run.`,
+      question: 'Not more income – more of everything, sooner. It pays for itself the more you buy.',
+      visual: side === 'team' ? 'A delivery van unloading outside the office.' : 'A stack of signed contracts on the office desk.' },
     { key: 'work', seconds: 20, name: 'Every door on the books', emoji: '🏠', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.6,
       blurb: `${where}: all of your work is 60% better.`, question: 'The work-side twin. Which side are you feeding?',
       visual: 'The lights come on behind every door at once.' },
@@ -511,7 +512,7 @@ export function stageUpgrades(level) {
 
   const out = shelf.map((item, i) => {
     const { key, seconds, ...rest } = item;
-    const along = 0.12 + (0.92 - 0.12) * (i / (shelf.length - 1));
+    const along = 0.02 + (0.92 - 0.02) * (i / (shelf.length - 1));
     return {
       ...rest,
       id: `stage-${level}-${key}`,
@@ -549,11 +550,15 @@ export function stageUpgrades(level) {
  * six stages' worth of shelves would multiply its own income by more than the stage ever asked for.
  */
 export function upgradesFor(level) {
-  const out = [...UPGRADES];
+  // Past the sixth stage the first rungs' kit, the first two rounds of your own, and the first
+  // rate rise are things a patch this size has long outgrown. Buying them again every single run
+  // made the first minute of every run identical for ever.
+  const out = UPGRADES.filter((u) => level < 6 || !OUTGROWN.has(u.id));
   if (level >= 1) out.push(...stageUpgrades(level).filter((u) => !isFarKit(u)));
   for (let l = LEVELS.length; l <= level; l++) out.push(...stageUpgrades(l).filter(isFarKit));
   return out;
 }
+const OUTGROWN = new Set(['client-t1', 'carer-t1', 'keysafe-t1', 'package-t1', 'car-t1', 'click-1', 'click-2', 'val-private']);
 const isFarKit = (u) => u.archetype === 'kit' && u.id.startsWith('beyond-');
 
 /** Look up any upgrade by id, including the endless ones that are worked out on demand. */

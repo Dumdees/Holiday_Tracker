@@ -22,9 +22,9 @@ export function fmtMoney(n, opts) {
 }
 
 /** '£12.5/s' style. */
-export function fmtRate(n) {
+export function fmtRate(n, opts) {
   if (n < 10) return '£' + (Math.round(n * 10) / 10).toString() + '/s';
-  return fmtMoney(n) + '/s';
+  return fmtMoney(n, opts) + '/s';
 }
 
 export function fmtSeconds(s) {

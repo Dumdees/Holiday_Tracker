@@ -37,6 +37,7 @@ export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level);
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
 export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
+export const STAY_BONUS = 1;      // extra stars for every ten times over the finish line you go
 export const BRANCH_RETHINK = 3;   // how often a hand-over reopens what you are known for
 export const TAPS_A_SECOND = 2;    // what a brisk round of door-knocking looks like, for scoring
 
@@ -61,6 +62,8 @@ export function newGame(now = Date.now()) {
     funds: 0,
     invoices: 0,
     runEarned: 0,
+    peakAtTarget: 0,           // what you were earning when the finish line was crossed
+    bestRating: 0,             // the best the agency has ever been rated
     pace: [],                   // a short trail of (seconds into the run, earned so far)
     lifetimeEarned: 0,
     visits: 0,
@@ -304,7 +307,10 @@ export function ratingIndex(state) {
   const score = ratingScore(state);
   let i = 0;
   RATINGS.forEach((r, n) => { if (score >= r.score) i = n; });
-  return i;
+  // A reputation does not vanish because you took a bigger patch on. Whatever the agency has been
+  // rated before, it never drops more than one rung below it while the new round finds its feet.
+  const floor = Math.max(0, (state.bestRating || 0) - 1);
+  return Math.max(i, floor);
 }
 
 export function ratingInfo(state) {
@@ -338,8 +344,8 @@ export function conditionShare(u, state, m) {
 }
 
 /** How much of the total a scaling branch is worth right now. */
-export const SETTLE_IN = 300;      // how long a patch takes to get to know you, in seconds
-export const SETTLE_FROM = 0.4;    // and what the scaling choices pay before it does
+export const SETTLE_IN = 90;       // how long a patch takes to get to know you, in seconds
+export const SETTLE_FROM = 0.6;    // and what the scaling choices pay before it does
 
 /**
  * What a scaling choice is worth: the more of the thing you own, and the longer you have stayed on
@@ -420,6 +426,7 @@ export function costDiscount(state, id) {
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'discount' && u.building === id) f *= u.factor;
     if (u.kind === 'branch-council') { const b = buildingDef(state, id); if (b && b.side === (u.discountSide || 'work')) f *= u.discount; }
+    if (u.sideDiscount) { const b = buildingDef(state, id); if (b && b.side === u.side) f *= u.sideDiscount; }
   }
   return f;
 }
@@ -511,13 +518,30 @@ export function buildingGain(state, id, qty = 1, now = Date.now(), income = null
 export function upgradeGain(state, id, now = Date.now(), income = null) {
   const before = income === null ? productionPerSecond(state, now) : income;
   const def = upgradeById(id);
+  if (def && def.kind === 'discount' && def.sideDiscount) {
+    // The same question asked of a whole side: what does an armful buy now that it is cheaper?
+    const with_ = { ...state, upgrades: [...state.upgrades, id] };
+    const budget = Math.max(before * 60, state.funds);
+    let plainBest = 0, cheapBest = 0;
+    for (const rung of unlockedBuildings(state)) {
+      if (rung.side !== def.side) continue;
+      const n1 = maxAffordableFor(state, rung.id, budget);
+      const n2 = maxAffordableFor(with_, rung.id, budget);
+      if (n1 >= 1) plainBest = Math.max(plainBest, buildingGain(state, rung.id, n1, now, before));
+      if (n2 >= 1) cheapBest = Math.max(cheapBest, buildingGain(with_, rung.id, n2, now, before));
+    }
+    return Math.max(0, cheapBest - plainBest);
+  }
   if (def && def.kind === 'discount' && def.building) {
     // A discount earns nothing by itself, so it is judged on what it adds to an armful: the money
     // that would have bought ten of the rung buys several more once it is cheaper.
     // A discount earns nothing by itself, so it is judged on what a minute's takings buys with it
     // against what the same minute buys without. A discount on something a minute cannot reach is
     // worth nothing today, however grand the rung.
-    const budget = before * 60;
+    // A discount earns nothing by itself, so it is judged on what it adds to an armful: the money
+    // that would have bought so many of the rung buys more once it is cheaper. A discount on
+    // something a minute's takings cannot reach is worth nothing today, however grand the rung.
+    const budget = Math.max(before * 60, state.funds);
     const plain = maxAffordableFor(state, def.building, budget);
     if (plain < 1) return 0;
     const cheaper = maxAffordableFor({ ...state, upgrades: [...state.upgrades, id] }, def.building, budget);
@@ -656,7 +680,11 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
     if (gain > worth[b.side]) worth[b.side] = gain;
   }
   const ratio = m.team / m.work;
-  const state_ = ratio > 1.1 ? 'The team can cover the work.' : ratio < 0.9 ? 'There is more work than the team can cover.' : 'The two sides are level.';
+  // A plain description of the board, with no direction in it. The advice below is the only thing
+  // that points anywhere, so the two halves of the strip can never argue with each other.
+  const state_ = ratio > 1.1 ? `Your team could cover ${ratio < 2 ? 'more work than you have' : `${Math.round(ratio)} times the work you have`}.`
+    : ratio < 0.9 ? `There is ${ratio > 0.5 ? 'more work than the team can cover' : `${Math.round(1 / ratio)} times the work your team can cover`}.`
+    : 'The two sides are level.';
   // Name the bonus that is furthest from paying in full: that is the one the board is costing you.
   const live = activeConditionals(state, m);
   const behind = live.filter((c) => c.share < 0.98).sort((a, b) => a.share - b.share)[0];
@@ -857,9 +885,9 @@ export function expandRequirement(state) {
 }
 
 /** The plain fraction of the way there, and how long the rest looks like taking. */
-export const PACE_EVERY = 10;      // how often the trail takes a reading, in seconds
-export const PACE_TRAIL = 90;      // how far back it looks
-export const PACE_SETTLE = 45;     // no forecast until a run has had this long to get going
+export const PACE_EVERY = 5;       // how often the trail takes a reading, in seconds
+export const PACE_TRAIL = 40;      // how far back it looks
+export const PACE_SETTLE = 20;     // no forecast until a run has had this long to get going
 
 /**
  * Keep a short trail of how much this run has earned, so the finish line can be worked out from
@@ -923,9 +951,17 @@ export function canExpand(state) {
   return state.runEarned >= expandRequirement(state);
 }
 
+/** How much a run being carried on past its finish line is worth in stars. */
+export function stayingBonus(state) {
+  const want = expandRequirement(state);
+  if (!(want > 0) || !(state.runEarned > want)) return 1;
+  return 1 + STAY_BONUS * Math.log10(state.runEarned / want);
+}
+
 export function starsOnExpand(state) {
   const share = state.perks && state.perks.includes('founders') ? 1.25 : 1;
-  return Math.max(0, Math.floor((starsForLifetime(state.lifetimeEarned) - state.starsEarned) * share));
+  const due = (starsForLifetime(state.lifetimeEarned) - state.starsEarned) * share * stayingBonus(state);
+  return Math.max(0, Math.floor(due));
 }
 
 /** Apply the starting bonuses from perks to a fresh run. */
@@ -943,7 +979,7 @@ function applyStartPerks(state) {
 export function expand(state, now = Date.now()) {
   if (!canExpand(state)) return null;
   const gained = starsOnExpand(state);
-  const peak = Math.max(state.runPeak || 0, steadyIncome(state));
+  const peak = state.peakAtTarget || Math.max(state.runPeak || 0, steadyIncome(state));
   const bestRun = Math.max(state.bestRun || 0, state.runEarned);
   const level = state.level + 1;
   const overshoot = Math.max(0, state.runEarned - expandRequirement(state));
@@ -952,9 +988,10 @@ export function expand(state, now = Date.now()) {
     bestRun, level, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
     perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet,
     cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
+    bestRating: state.bestRating || 0,
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
     // The next run's finish line, worked out now and left alone until it is crossed.
-    lastPeak: peak, runPeak: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)), pace: [],
+    lastPeak: peak, runPeak: 0, peakAtTarget: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)), pace: [],
     // What you are known for is a decision about the agency, not about one round, so it stays with
     // you. Every third hand-over it is opened up again, in case you want to be known for something
     // else now the patch is bigger.
@@ -1060,6 +1097,9 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
   const rate = m.visits * visitValue(state) * globalMultiplier(state, now, m);
   const steady = m.visits * visitValue(state) * globalMultiplier(state, Number.MAX_SAFE_INTEGER, m);
   if (steady > (state.runPeak || 0)) state.runPeak = steady;   // the run's own best rate, luck excluded
+  // The rate at the moment the finish line was crossed. The next stage's figure is set from this,
+  // not from where the run finally got to, so staying on a patch is a choice and not a punishment.
+  if (!state.peakAtTarget && state.runEarned >= expandRequirement(state)) state.peakAtTarget = steady;
   state.visits += m.visits * dt;
   const mode = collectionMode(state);
   if (mode === 'instant') credit(state, rate * dt);
@@ -1077,6 +1117,16 @@ export function tick(state, dt, now = Date.now(), rng = Math.random, names = [])
     }
   }
   notePace(state, now);
+  if (m.ratingIndex > (state.bestRating || 0)) state.bestRating = m.ratingIndex;
+  // A run that has earned nothing at all after a minute is one where nobody has found the collect
+  // button yet. The office does it once, rather than letting the whole run go to waste.
+  if (state.runEarned <= 0 && state.invoices > 0 && now - (state.runStartedAt || now) > 60000) {
+    const amount = state.invoices;
+    state.invoices = 0;
+    state.collections += 1;
+    credit(state, amount);
+    events.push({ kind: 'collected', amount, byOffice: true });
+  }
   state.effects = state.effects.filter((e) => e.until > now);
   if (state.spawn && state.spawn.until < now) state.spawn = null;
   if (!state.spawn && dt > 0) {

@@ -368,8 +368,11 @@ describe('handing over', () => {
     assert.equal(g.expandRequirement(lucky), g.expandRequirement(mid), 'a lucky spell never moves the finish line');
     assert.ok(g.expandOutlook({ ...mid, runEarned: 2e9 }, T0).fraction > g.expandOutlook(mid, T0).fraction, 'and the bar only goes forwards');
     const gained = g.starsOnExpand(s);
-    assert.equal(gained, g.starsForLifetime(2e6));
-    assert.ok(gained >= 1 && gained <= 20, `a first hand-over should be worth a handful of stars, got ${gained}`);
+    // The run went five times past its figure, so it is worth more stars than the bare count.
+    assert.ok(g.stayingBonus(s) > 1, 'staying on past the line pays');
+    assert.equal(gained, Math.floor(g.starsForLifetime(2e6) * g.stayingBonus(s)));
+    assert.equal(g.starsOnExpand({ ...s, runEarned: g.expandRequirement(s) }), g.starsForLifetime(2e6));
+    assert.ok(gained >= 1 && gained <= 30, `a first hand-over should be worth a handful of stars, got ${gained}`);
     assert.ok(g.starsForLifetime(1e20) < 120, 'and the count can never run away');
     assert.ok(g.starBonus(0) === 1 && g.starBonus(50) > 1.5);
     const r = g.expand(s, T0 + 1000);

@@ -73,7 +73,7 @@ export function createScene(canvas, { onCoin } = {}) {
     prismatic: null, card: null, buildings: {}, effects: [], mode: 'manual', invoices: 0, teamSize: 0,
     names: [], starName: 'Sam', t: 0, now: Date.now(), lastFrame: 0, synced: false,
     counts: {}, tiers: {}, owned: new Set(), rating: 0, sign: '#E5734A', coinSize: 6, folk: [], badges: [],
-    refusedAt: -9, shake: 0, flashUntil: 0, expandFlash: 0, rocket: null, satelliteAngle: 0, rain: 0, rainCooldown: rand(60, 120), lit: 0, extraBadges: 0,
+    grand: { rate: 0, all: 0, mile: 0, broad: 0 }, refusedAt: -9, shake: 0, flashUntil: 0, expandFlash: 0, rocket: null, satelliteAngle: 0, rain: 0, rainCooldown: rand(60, 120), lit: 0, extraBadges: 0,
   };
   let raf = 0;
 
@@ -164,8 +164,12 @@ export function createScene(canvas, { onCoin } = {}) {
     for (const [id, colour] of Object.entries(SIGN_COLOURS)) if (world.owned.has(id)) world.sign = colour;
     world.coinSize = 6 + Math.min(6, Math.log10(1 + valueOf(state)) * 3);
     const icons = [...world.owned].map((id) => upgradeIcon(id)).filter(Boolean);
-    world.badges = icons.slice(0, 24);
-    world.extraBadges = Math.max(0, icons.length - 24);
+    world.badges = icons.slice(0, 12);
+    world.extraBadges = Math.max(0, icons.length - 12);
+    // The big buys off a stage's own shelf change the street, so a stage-20 rate rise does not look
+    // exactly like the Care Certificate did in the first minute.
+    const stage = (key) => [...world.owned].some((id) => new RegExp(`^stage-\\d+-${key}$`).test(id));
+    world.grand = { rate: stage('rate1') + stage('rate2'), all: stage('all1') + stage('all2'), mile: stage('mile'), broad: stage('broad') };
     syncFolk();
     world.effects = state.effects.filter((e) => e.until > now);
     world.mode = state.upgrades.includes('direct-debit') ? 'instant' : state.upgrades.includes('admin') ? 'admin' : 'manual';
@@ -886,6 +890,53 @@ export function createScene(canvas, { onCoin } = {}) {
     if (moreCarers > 0) chip(`+${fmtCount(moreCarers)} on the round`, officeX() + 46, pavementY() + 26);
   }
 
+  /**
+   * What the big buys off a stage's own shelf do to the street. Every one of them costs more than
+   * anything else on the shelf, so every one of them changes the picture rather than pinning
+   * another small badge to the office wall.
+   */
+  function drawGrand(day) {
+    const g = world.grand; if (!g) return;
+    const gy = pavementY();
+    // Better rates: a proper pay board over the office, one line for each rise.
+    if (g.rate) {
+      const x = officeX(), top = gy - 132;
+      ctx.fillStyle = day > 0.5 ? 'rgba(255,255,255,.9)' : 'rgba(40,34,60,.85)';
+      ctx.beginPath(); ctx.roundRect(x - 30, top, 60, 10 + g.rate * 9, 4); ctx.fill();
+      ctx.strokeStyle = '#E5A93B'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.font = `700 8px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = day > 0.5 ? '#7a5a10' : '#ffd98a';
+      for (let i = 0; i < g.rate; i++) ctx.fillText(i ? 'AND AGAIN' : 'RATES UP', x, top + 12 + i * 9);
+    }
+    // Everybody pulls together: strings of lights the length of the street.
+    for (let n = 0; n < g.all; n++) {
+      const y = gy - 118 - n * 12;
+      ctx.strokeStyle = day > 0.5 ? 'rgba(120,90,70,.35)' : 'rgba(255,255,255,.3)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(W / 2, y + 14, W, y); ctx.stroke();
+      for (let i = 0; i <= 16; i++) {
+        const p = i / 16, lx = p * W, ly = y + Math.sin(Math.PI * p) * 14;
+        const glow = 0.55 + 0.45 * Math.sin(world.t * 2 + i + n);
+        ctx.fillStyle = `hsla(${(i * 41 + n * 120) % 360} 85% ${58 + glow * 12}% / ${0.5 + glow * 0.5})`;
+        ctx.beginPath(); ctx.arc(lx, ly, 2.4, 0, TWO_PI); ctx.fill();
+      }
+    }
+    // Every tenth counts for more: a row of rosettes along the pavement edge.
+    if (g.mile) {
+      for (let i = 0; i < 9; i++) {
+        const x = 40 + i * ((W - 80) / 8), y = gy + 4 + Math.sin(world.t + i) * 0.6;
+        ctx.fillStyle = `hsl(${(i * 40) % 360} 70% 60%)`;
+        ctx.beginPath(); ctx.arc(x, y, 3.2, 0, TWO_PI); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(x, y, 1.2, 0, TWO_PI); ctx.fill();
+      }
+    }
+    // A bit of everything: window boxes on every drawn door.
+    if (g.broad) {
+      for (const h of world.houses) {
+        ctx.fillStyle = '#7a5a3a'; ctx.fillRect(h.x - 9, h.y - 22, 18, 4);
+        for (let i = 0; i < 3; i++) { ctx.fillStyle = `hsl(${(i * 90 + h.x) % 360} 70% 62%)`; ctx.beginPath(); ctx.arc(h.x - 5 + i * 5, h.y - 24, 2, 0, TWO_PI); ctx.fill(); }
+      }
+    }
+  }
+
   function fmtCount(n) {
     if (n < 1000) return String(n);
     if (n < 1e6) return `${(n / 1000).toFixed(2)}k`;      // enough figures that one more always shows
@@ -902,6 +953,7 @@ export function createScene(canvas, { onCoin } = {}) {
     drawOffice(day); drawLamps(day);
     world.houses.forEach((h, i) => drawHouse(h, i, day));
     for (const f of world.folk) drawFolk(f);
+    drawGrand(day);
     drawMore(day);
     const agents = [...world.agents].sort((a, b) => a.x - b.x);
     for (const a of agents) drawAgent(a, a.id === 0);

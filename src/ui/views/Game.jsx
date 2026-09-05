@@ -105,7 +105,7 @@ function gainPct(u) {
     if (pct >= 100000) return 'a step change';
     return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : pct >= 0.05 ? `+${pct.toFixed(1)}%` : 'a trickle';
   }
-  if (u.kind === 'discount') return `−${Math.round((1 - u.factor) * 100)}% to buy`;
+  if (u.kind === 'discount') return `−${Math.round((1 - (u.factor || u.sideDiscount || 1)) * 100)}% to buy`;
   if (u.kind === 'clickpct') { const add = u.clickAdd || 0; return add > 0 ? `+${(add * 100).toFixed(add < 0.01 ? 1 : 0)}% a tap` : 'nothing more, you are at the limit'; }
   if (u.kind === 'click') return `×${u.mult || 2} a tap`;
   if (u.clickBoost) return `×${u.clickBoost} a tap`;
@@ -195,6 +195,7 @@ export function Game() {
         for (const e of events) {
           if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 ${e.spawn.name} is having a brilliant shift – go and say hello!`, { kind: 'info', duration: 6000 });
           if (e.kind === 'spawn' && e.spawn.type === 'card') toast('💌 A thank-you card is floating down – click it!', { kind: 'info', duration: 5000 });
+          if (e.kind === 'collected' && e.byOffice) toast(`📥 The office sent the invoices off for you – ${fmtMoney(e.amount)} in. Press Collect payments yourself to keep it moving.`, { kind: 'info', duration: 7000 });
         }
       });
       scheduleSave();
@@ -362,7 +363,20 @@ export function Game() {
     scheduleSave();
   }
 
-  function onUpgrade(u) {
+  // On a phone there is nothing to hover over, so a tap opens what the tile does and asks first.
+  async function onUpgrade(u) {
+    if (narrow) {
+      const ok = await confirm({
+        title: `${u.emoji} ${u.name}`,
+        message: `${u.blurb}\n\n${u.question}\n\nYou will see: ${u.visual}\n\n${gainLine(u)}${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}`,
+        confirmLabel: `Buy for ${fmtMoney(u.cost, { short: true })}`, icon: 'zap',
+      });
+      if (!ok) return;
+    }
+    buyUpgradeNow(u);
+  }
+
+  function buyUpgradeNow(u) {
     if (mutate((st) => G.buyUpgrade(st, u.id))) {
       toast(`${u.emoji} ${u.name} – ${u.visual || u.blurb}`, { kind: 'success', duration: 5000 });
       sceneRef.current?.celebrate('upgrade');
@@ -421,7 +435,7 @@ export function Game() {
           <canvas ref={canvasRef} aria-hidden="true" />
           <div class="world-hud" ref={hudRef}>
             <div class="game-funds-main">{fmtMoney(s.funds, { short: narrow })}</div>
-            <div class="world-rate">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div>
+            <div class="world-rate">{fmtRate(rate, { short: narrow })} · {fmtMoney(perClick, { short: narrow })} per visit</div>
             {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? `${Math.round(tapShare * 100)}% of everything you earn` : 'worth little yet – knocking upgrades change that'}</div> : null}
           </div>
           <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
@@ -511,7 +525,7 @@ export function Game() {
 
         {/* ---------- Middle: what to buy ---------- */}
         <div class="game-mid">
-          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? 'Best value first. Hover for what it does.' : 'Keep going – upgrades appear as you grow.'}>
+          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? (narrow ? 'Best value first. Tap and hold for what it does.' : 'Best value first. Hover for what it does.') : 'Tap a few doors – the first upgrade is only a few pounds away.'}>
             <div class="upgrade-row">
               {upgrades.map((u) => (
                 <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
@@ -530,7 +544,7 @@ export function Game() {
             ) : null}
           </Card>
 
-          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="Whichever side is behind is worth more." actions={
+          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="What a minute of takings buys you most of." actions={
             <div class="qty-picker" role="group" aria-label="How many to buy">
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => { chosenQty.current = true; setBuyQty(q); }}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
@@ -544,7 +558,7 @@ export function Game() {
                       <span class="building-name">
                         <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
                         {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
-                        {bestBuy && bestBuy.id === b.id ? <span class="best-chip">Best value</span> : null}
+                        {bestBuy && bestBuy.id === b.id && b.gain / b.income >= 0.005 ? <span class="best-chip">Best value</span> : null}
                       </span>
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0
@@ -584,7 +598,11 @@ export function Game() {
                 <strong>{Math.floor(outlook.progress * 100)}% of the way</strong>
               </div>
               {outlook.fraction >= 1 ? (
-                <p class="small mt expand-slow">You are well past what this stage asked for – hand over whenever you like.</p>
+                <p class="small mt expand-slow">
+                  You have done what this stage asked for. Hand over now, or stay on this patch a while:
+                  every ten times over the figure is worth twice the Legacy Stars.
+                  {G.stayingBonus(s) > 1.02 ? <> Staying on so far has earned you <strong>{Math.round((G.stayingBonus(s) - 1) * 100)}% more</strong>.</> : null}
+                </p>
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
                   {outlook.seconds === null

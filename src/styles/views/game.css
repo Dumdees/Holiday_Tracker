@@ -128,7 +128,7 @@
 @keyframes confettiFall { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: 0; transform: translate(var(--dx), 260px) rotate(var(--rot)); } }
 
 /* While the game is open, pop-up messages sit in the bottom-right corner so they never cover the shop. */
-body.game-open .toast-host { left: auto; right: 16px; transform: none; width: min(380px, calc(100vw - 32px)); }
+body.game-open .toast-host { left: auto; right: 16px; bottom: 16px; transform: none; width: min(340px, calc(100vw - 32px)); }
 body.game-open .toast { min-height: 44px; padding: 8px 6px 8px 12px; font-size: 14px; }
 @media (max-width: 760px) {
   body.game-open .toast-host { right: 8px; bottom: 88px; width: calc(100vw - 16px); }
@@ -171,7 +171,7 @@ body.game-open .toast { min-height: 44px; padding: 8px 6px 8px 12px; font-size: 
 /* Never let a stack of messages hide a decision. */
 /* Keep the three newest messages on screen while the game is open: the oldest step aside. */
 body.game-open .toast-host .toast:nth-last-child(n+3) { display: none; }
-@media (min-width: 1200px) { body.game-open .toast-host { right: auto; left: 280px; bottom: 16px; max-width: 360px; } }
+@media (min-width: 1200px) { body.game-open .toast-host { right: 16px; left: auto; bottom: 16px; max-width: 340px; } }
 
 /* What your own visits are worth, under the rate in the HUD. */
 .world-taps {
