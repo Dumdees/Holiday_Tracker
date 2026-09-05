@@ -85,7 +85,10 @@ function bigJumpsLeft(outlook) {
 }
 
 function howFar(outlook) {
-  if (outlook.fraction >= 1) return 'you have done it';
+  if (outlook.fraction >= 1) return 'You have done it.';
+  if (outlook.fraction >= 0.85) return 'You are nearly there.';
+  if (outlook.fraction >= 0.5) return 'You are over halfway.';
+  if (outlook.fraction >= 0.2) return 'You are about a quarter of the way.';
   // Counted in how many times the takings still have to double, not as a share of the money. A share
   // of the money reads as "nearly there" when you have six thousand pounds of a hundred and twenty
   // thousand, because the last double is most of the money – and that is a lie to anybody reading
@@ -265,7 +268,8 @@ export function Game() {
       <div class="confirm">
         <div class="confirm-icon"><Icon name="sun" size={28} /></div>
         <h2>Welcome back!</h2>
-        <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}. It is already in the bank.</p>
+        <p class="soft">Your team kept going for the {fmtSeconds(away.seconds)} you were away. They did <strong>{fmtNum(Math.floor(away.visits))} visits</strong> and earned <strong>{fmtMoney(away.earned)}</strong>. It is already in the bank.</p>
+        {away.efficiency < 1 ? <p class="muted small">They work at half speed while nobody is here. The on-call phone speeds them up.</p> : null}
         {away.handovers ? (
           <p class="soft">The team handed the patch over <strong>{away.handovers === 1 ? 'once' : `${away.handovers} times`}</strong> while you were away, and earned <strong>{away.stars} Legacy {away.stars === 1 ? 'Star' : 'Stars'}</strong>. You are up to {levelInfo(game.value.level).name} now.</p>
         ) : away.reach >= 0.15 ? <p class="soft">That is <strong>{away.reach >= 0.75 ? 'most of the way' : away.reach >= 0.55 ? 'about halfway' : away.reach >= 0.35 ? 'about a third of the way' : 'a good start'}</strong> to {G.nextLevel(game.value).name}.</p> : null}
@@ -397,6 +401,7 @@ export function Game() {
           <>
             {offer.blurb}<br /><br />
             <span class="muted">You will see: {offer.visual}</span><br /><br />
+            {offer.milestone ? <>Buy {fmtNum(offer.milestone.remaining)} more and they all get {fmtTimes(offer.milestoneFactor)}.<br /><br /></> : null}
             <strong>{offer.gain > 0 && offer.income > 0 ? `${gainWords(offer.gain / offer.income)}. ` : ''}
               {(fmtPayback(offer.payback, offer.side) || 'It earns nothing extra just now').replace(/^./, (c) => c.toUpperCase())}.</strong>
           </>
@@ -615,7 +620,7 @@ export function Game() {
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtPrice(u.cost)}</span>
-                  <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'when it fits' : 'saves a job')}</span>
+                  <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'pays when your round suits it' : 'saves a job')}</span>
                 </button>
               ))}
             </div>
@@ -626,15 +631,15 @@ export function Game() {
             ) : null}
           </Card>
 
-          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="The green chip shows the best value right now." actions={
-            <div class="qty-picker" role="group" aria-label="How many to buy">
+          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="The one marked Best buy is the best value right now." actions={
+            <div class="qty-picker" role="group" aria-label="How many to buy"><span class="qty-label">Buy</span>
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => { chosenQty.current = true; setBuyQty(q); }}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
             <ul class="building-list">
               {rows.map((b) => (
                 <li key={b.id}>
-                  <button type="button" class={`building-row ${b.affordable ? 'affordable' : ''} ${bestBuy && bestBuy.id === b.id ? 'best' : ''}`} onClick={() => onBuy(b)} disabled={!b.affordable}
-                    title={`${b.name} – ${b.blurb}\nYou will see: ${b.visual}`} data-test={`buy-${b.id}`}>
+                  <button type="button" class={`building-row ${b.affordable ? 'affordable' : ''} ${bestBuy && bestBuy.id === b.id ? 'best' : ''} ${fmtPrice(b.cost).length > 18 ? 'wide-price' : ''}`} onClick={() => onBuy(b)} disabled={!b.affordable}
+                    title={`${b.name} – ${b.blurb}\nYou will see: ${b.visual}${b.milestone ? `\nBuy ${fmtNum(b.milestone.remaining)} more and they all get ${fmtTimes(b.milestoneFactor)}.` : ''}`} data-test={`buy-${b.id}`}>
                     <span class="building-emoji">{b.emoji}</span>
                     <span class="building-main">
                       <span class="building-name">
@@ -649,7 +654,7 @@ export function Game() {
                           : (metrics.team <= 0 && b.side === 'work' ? 'nobody to do the visits yet – take on a carer first'
                             : metrics.work <= 0 && b.side === 'team' ? 'nobody to visit yet – take somebody on first'
                             : b.side === 'team' ? 'gets the visits started' : 'earns nothing extra just now')}
-                        {b.milestone ? <span class="milestone-pip"> · buy {fmtNum(b.milestone.remaining)} more and they all get {fmtTimes(b.milestoneFactor)}</span> : null}
+
                       </span>
                     </span>
                     <span class="building-buy"><span class="building-cost">{fmtPrice(b.cost)}</span></span>
@@ -677,7 +682,7 @@ export function Game() {
             <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
               <p class="soft">{outlook.fraction >= 1
                 ? 'You have earned enough to hand this patch over whenever you like. You start again with a small round, keep every badge, and unlock bigger things to buy.'
-                : `Earn ${fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.`}</p>
+                : 'Earn enough in this run and you can hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.'}</p>
               {/* No bar. A bar drawn off the money sits on nothing for most of a run; one drawn off the
                   doublings says "half way" beside a figure that is a sixteenth of the target. Either
                   way it argued with the money printed under it, so the money says it on its own. */}
@@ -731,7 +736,12 @@ export function Game() {
           {rightTab === 'badges' ? (
             <Card title="Badges" icon="heart" subtitle={`${s.achievements.length} of ${G.achievementList(s).length} · every badge makes everything a little better`}>
               <div class="badge-grid">
-                {G.achievementList(s).map((a) => <span key={a.id} class={`badge-tile ${a.done ? 'done' : ''}`} title={`${a.name} – ${a.blurb}`}>{a.done ? a.emoji : '🔒'}<span class="badge-name">{a.name}</span></span>)}
+                {G.achievementList(s).map((a) => (
+                  <span key={a.id} class={`badge-tile ${a.done ? 'done' : ''}`} title={`${a.name} – ${a.blurb}`}>
+                    {a.done ? a.emoji : '🔒'}<span class="badge-name">{a.name}</span>
+                    <span class="badge-how">{a.blurb}</span>
+                  </span>
+                ))}
               </div>
             </Card>
           ) : null}

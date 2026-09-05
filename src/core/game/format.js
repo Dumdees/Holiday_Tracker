@@ -27,8 +27,11 @@ export function fmtNum(n, { short = false } = {}) {
   const digits = short ? 1 : undefined;
   if (n < STACK_FROM) return neg + inWordsWeKnow(n, digits);
   let stacked = 0, rest = n;
-  while (rest >= STACK_FROM) { rest /= BILLION; stacked++; }
-  return neg + inWordsWeKnow(rest, digits) + ' billion'.repeat(stacked);
+  while (rest >= BILLION) { rest /= BILLION; stacked++; }
+  const lead = rest >= 100 || Number.isInteger(rest)
+    ? Math.round(rest).toLocaleString('en-GB')
+    : rest.toFixed(digits === undefined ? (rest >= 10 ? 1 : 2) : digits).replace(/\.0+$/, '');
+  return neg + lead + ' billion'.repeat(stacked);
 }
 
 export function fmtMoney(n, opts) {
@@ -70,7 +73,7 @@ export function fmtTimes(mult) {
   if (!Number.isFinite(mult) || mult <= 1.02) return 'no better';
   if (mult < 1.15) return 'a little better';
   if (mult < 1.4) return 'a bit better';
-  if (mult < 1.75) return 'half as good again';
+  if (mult < 1.75) return 'half as much again';
   if (mult < 1.94) return 'nearly twice as good';
   if (mult < 2.3) return 'twice as good';
   if (mult < 2.7) return 'two and a half times as good';

@@ -132,7 +132,7 @@ export function levelInfo(level) {
 export const RATINGS = [
   { id: 'new', name: 'Newly registered', emoji: '🆕', mult: 1, score: 0, blurb: 'Registered and ready. The rating comes with the work.' },
   { id: 'good', name: 'Good', emoji: '✅', mult: 1.2, score: 6, blurb: 'Safe, caring, well led. Everything earns a fifth more.' },
-  { id: 'great', name: 'Outstanding', emoji: '🌟', mult: 1.6, score: 40, blurb: 'Outstanding in one of the five questions. Everything earns half as much again.' },
+  { id: 'great', name: 'Outstanding', emoji: '🌟', mult: 1.6, score: 40, blurb: 'Outstanding at one of the things they look at. Everything earns half as much again.' },
   { id: 'best', name: 'Outstanding, every question', emoji: '🏆', mult: 2.4, score: 400, blurb: 'Outstanding across the board. Everything earns nearly two and a half times as much.' },
   { id: 'flagship', name: 'A service others visit', emoji: '🎖️', mult: 3, score: 5000, blurb: 'Other agencies come to see how you do it. Everything earns three times as much.' },
   { id: 'national', name: 'Talked about nationally', emoji: '🏅', mult: 3.8, score: 40000, blurb: 'Your way of working is written up and taught. Everything earns nearly four times as much.' },
@@ -255,8 +255,8 @@ const CONDITIONALS = [
 
 /** The tenth of anything doubles it. These make that step bigger still. */
 const MILESTONE_UPS = [
-  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every ten you own is worth a bit more again than it already was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
-  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every ten you own is worth more again than it already was.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
+  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'The every-ten prize is a bit bigger than it was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
+  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'The every-ten prize is bigger again than it already was.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
 ];
 
 /** What a visit is worth: who is paying, and what you are trusted to do. */
@@ -316,7 +316,7 @@ export const BRANCHES = [
     options: [
       { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.55, blurb: 'Every visit is worth half as much again, from the first minute.', question: 'Simple, and the most you can earn in the first few minutes of a run.' },
       { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.45, discount: 0.45, blurb: 'Taking work on costs about half as much, and everything earns half as much again.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
-      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Slow to start, then it grows: a little more for every care package you run, NHS-funded ones included. It builds up over your first minute or two on a patch.', question: 'Least of the three for the first few minutes, most of them by the end of a long run.' },
+      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Slow to start, then it grows: a little more for every care package you run, NHS-funded ones included. It builds up over your first minute or two on a patch.', question: 'The weakest of the three at first, and the strongest by the end of a long run.' },
     ],
   },
   {
@@ -469,6 +469,7 @@ export function stageUpgrades(level) {
   if (STAGE_CACHE.has(level)) return STAGE_CACHE.get(level);
   const info = levelInfo(level);
   const where = info.name;
+  const lowerWhere = /^The /.test(info.name) ? info.name.replace(/^The /, 'the ') : info.name;
   // The rung this stage brings with it: what the stage's own synergy and discount are about.
   const own = (level >= LEVELS.length
     ? beyondBuilding((level - LEVELS.length + 1) * BEYOND_PER_LEVEL - 1)
@@ -496,24 +497,24 @@ export function stageUpgrades(level) {
     // Cheap and immediate: the first thing you buy on a new patch.
     [
       { key: 'rate1', seconds: 2, name: 'Better rates all round', emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
-        blurb: `${where}: every visit is worth twice as much.`, question: 'The first thing worth having here, and it is never wasted.',
+        blurb: `All across ${lowerWhere}, every visit is worth twice as much.`, question: 'The first thing worth having here, and it is never wasted.',
         visual: 'The coins coming into the office get bigger.' },
       { key: 'hands', seconds: 3.5, name: 'Still on the round yourself', emoji: '🤲', kind: 'clickpct', pct: 0.01, archetype: 'click',
         blurb: 'Your own visits keep earning a little on their own, even while you are not tapping.', question: 'Cheap, and it keeps your own tapping worth doing.',
         visual: 'Your own carer keeps walking the round with everybody else.' },
       { key: 'syn', seconds: 5.5, name: 'Whatever you have most of', emoji: settled.emoji, kind: 'synergy', archetype: 'synergy',
         fromSide: side, to: `*${side}`, per: 0.01, cap: 2,
-        blurb: `Whichever part of your ${side} you have most of makes all the rest better – the more of them you have, the bigger the lift.`,
+        blurb: `Whatever you have most of on your ${side} side makes everything else on it better. The more of them, the better.`,
         question: `It grows with whatever you have most of, so it keeps paying more all the way through a run.`,
         visual: 'The thing you have the most of, everywhere you look.' },
       { key: 'handover', seconds: 3, name: 'A proper handover', emoji: '📒', kind: 'side', archetype: 'synergy', side: 'team', flat: 0.35,
-        blurb: `${where}: your whole team gets a third more done.`, question: 'Ten minutes at the end of a shift that saves an hour the next morning.',
+        blurb: `All across ${lowerWhere}, your whole team gets a third more done.`, question: 'Ten minutes at the end of a shift that saves an hour the next morning.',
         visual: 'Two carers stop on the pavement to swap notes.' },
       { key: 'answered', seconds: 4, name: 'Every door answered', emoji: '🔔', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.35,
-        blurb: `${where}: all of your work brings in a third more.`, question: 'Nobody rings twice. The cheap one for the work side.',
+        blurb: `All across ${lowerWhere}, all of your work brings in a third more.`, question: 'Nobody rings twice. The cheap one for the work side.',
         visual: 'A light goes on behind every door as the round starts.' },
       { key: 'yearly', seconds: 4.5, name: 'Rates agreed for the year', emoji: '📅', kind: 'value', archetype: 'rate', mult: 1.8,
-        blurb: `${where}: every visit is worth nearly twice as much.`, question: 'Not the biggest, but it is signed and it does not move.',
+        blurb: `All across ${lowerWhere}, every visit is worth nearly twice as much.`, question: 'Not the biggest, but it is signed and it does not move.',
         visual: 'A calendar goes up in the office window.' },
       { key: 'rota', seconds: 5, name: 'The rota app learns your round', emoji: '📱', kind: 'clickpct', pct: 0.015, archetype: 'click',
         blurb: 'Your own visits keep earning a little on their own, even while you are not tapping.', question: 'The cheapest good one if you like doing the visits yourself.',
@@ -522,10 +523,10 @@ export function stageUpgrades(level) {
     // A minute or so of saving: the first real decision of a run.
     [
       { key: 'team', seconds: 8, name: 'The whole team lifts', emoji: '👥', kind: 'side', archetype: 'synergy', side: 'team', flat: 0.6,
-        blurb: `${where}: your whole team gets half as much again done.`, question: 'Lifts every pair of hands you own at once.',
+        blurb: `All across ${lowerWhere}, your whole team gets half as much again done.`, question: 'Lifts every pair of hands you own at once.',
         visual: 'Everybody on the street works a little quicker.' },
       { key: 'all1', seconds: 11, name: 'Everybody pulls together', emoji: '✨', kind: 'global', archetype: 'rate', mult: 1.8,
-        blurb: `${where}: everything you own earns nearly twice as much.`, question: 'Touches every single thing you own, whichever way you have played.',
+        blurb: `All across ${lowerWhere}, everything you own earns nearly twice as much.`, question: 'Touches every single thing you own, whichever way you have played.',
         visual: 'The whole street lifts, and the office noticeboard fills up.' },
       { key: 'disc', seconds: 15, name: side === 'team' ? 'Bought in bulk' : 'Signed off in one go', emoji: '📦', kind: 'discount', archetype: 'discount', side, sideDiscount: 0.75,
         blurb: `Everything on the ${side} side costs a quarter less for the rest of this run.`,
@@ -537,11 +538,11 @@ export function stageUpgrades(level) {
         question: 'The other side’s discount. Whichever side you are feeding, one of these is for you.',
         visual: 'A fuel card and a folder of receipts on the office desk.' },
       { key: 'eighth', seconds: 14, name: 'The rota holds', emoji: '🗓️', kind: 'milestone', archetype: 'milestone', milestoneEvery: 1.25,
-        blurb: 'Every ten you buy comes round a quarter sooner, for everything you own.',
-        question: 'It does not make the tens worth more – it brings them round sooner. Best when you buy in armfuls.',
+        blurb: 'You get the every-ten prize after eight instead of ten, on everything you own.',
+        question: 'The prize itself is no bigger – it just comes round sooner. Best when you buy in armfuls.',
         visual: 'The bunting over the office goes up earlier than it used to.' },
       { key: 'word', seconds: 10, name: 'Word gets round', emoji: '🗣️', kind: 'global', archetype: 'rate', mult: 1.6,
-        blurb: `${where}: everything you own earns half as much again.`, question: 'Cheaper than the big lift and it arrives sooner.',
+        blurb: `All across ${lowerWhere}, everything you own earns half as much again.`, question: 'Cheaper than the big lift and it arrives sooner.',
         visual: 'Neighbours stop to talk at the gate.' },
       { key: 'full', seconds: 13, name: 'Nobody drives across town', emoji: '🚶', kind: 'conditional', archetype: 'conditional', mult: 1.5,
         share: (s, m) => (m.team > 0 ? Math.min(1, Math.sqrt(m.work / m.team)) : 1), label: 'the fuller the rounds are',
@@ -552,13 +553,13 @@ export function stageUpgrades(level) {
     // Half a run of saving: the things you plan for.
     [
       { key: 'work', seconds: 20, name: 'Every door on the books', emoji: '🏠', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.6,
-        blurb: `${where}: all of your work brings in half as much again.`, question: 'The same thing for the front doors instead of the carers. Which half are you growing?',
+        blurb: `All across ${lowerWhere}, all of your work brings in half as much again.`, question: 'The same thing for the front doors instead of the carers. Which half are you growing?',
         visual: 'The lights come on behind every door at once.' },
       { key: 'rate2', seconds: 26, name: 'Paid what the work is worth', emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
-        blurb: `${where}: every visit is worth twice as much again.`, question: 'Doubles the value of everything a second time. Save for it.',
+        blurb: `All across ${lowerWhere}, every visit is worth twice as much again.`, question: 'Doubles the value of everything a second time. Save for it.',
         visual: 'The coins coming into the office get bigger again.' },
       { key: 'mile', seconds: 34, name: 'Every tenth counts for more', emoji: '🎖️', kind: 'milestone', archetype: 'milestone', add: 0.25,
-        blurb: 'Every ten of anything you own is worth a quarter more again.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.',
+        blurb: 'The every-ten prize is a quarter bigger than it was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.',
         visual: 'More bunting over the office than last time.' },
       { key: 'gaps', seconds: 24, name: 'Cover the gaps', emoji: '🫱', kind: 'conditional', archetype: 'conditional', sideFloor: 0.8, mult: 1,
         share: () => 1, label: 'whatever shape the round is in',
@@ -567,7 +568,7 @@ export function stageUpgrades(level) {
         visual: 'Carers walk from the full end of the street to the empty end.' },
       { key: 'syn2', seconds: 30, name: `And the other half of it`, emoji: '🔗', kind: 'synergy', archetype: 'synergy',
         fromSide: side === 'team' ? 'work' : 'team', to: side === 'team' ? '*work' : '*team', per: 0.01, cap: 2,
-        blurb: `Whichever part of your ${side === 'team' ? 'work' : 'team'} you have most of makes all the rest better – the more of them you have, the bigger the lift.`,
+        blurb: `Whatever you have most of on your ${side === 'team' ? 'work' : 'team'} side makes everything else on it better. The more of them, the better.`,
         question: 'The same deal for the side the stage did not bring.',
         visual: 'The other half of the street fills up to match.' },
       { key: 'allday', seconds: 22, name: 'Out on the round all day', emoji: '🥾', kind: 'click', archetype: 'click', mult: 3, pct: 0.005,
@@ -584,7 +585,7 @@ export function stageUpgrades(level) {
     // The top of the shelf: reached on a run you carry on with.
     [
       { key: 'work2', seconds: 43, name: 'The books keep filling', emoji: '📗', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.7,
-        blurb: `${where}: all of your work brings in two thirds more.`, question: 'The second big lift for the work side. You will not afford both of them and the shop below.',
+        blurb: `All across ${lowerWhere}, all of your work brings in two thirds more.`, question: 'The second big lift for the work side. You will not afford both of them and the shop below.',
         visual: 'Another light behind every door on the street.' },
       { key: 'broad', seconds: 51, name: 'A bit of everything', emoji: '🧩', kind: 'conditional', archetype: 'conditional', mult: 1.6,
         share: (s) => Math.min(1, Object.values(s.buildings).filter((n) => n >= 25).length / Math.max(6, Math.round(unlockedRungs(s) * 0.55))),
@@ -594,20 +595,20 @@ export function stageUpgrades(level) {
         question: 'Pays for going broad rather than deep. Nothing else in the game asks for that.',
         visual: 'A little of everything on the street at once.' },
       { key: 'all2', seconds: 60, name: 'The whole patch lifts again', emoji: '🌟', kind: 'global', archetype: 'rate', mult: 1.8,
-        blurb: `${where}: everything you own earns nearly twice as much again.`, question: 'The last thing on the shelf here, and the biggest.',
+        blurb: `All across ${lowerWhere}, everything you own earns nearly twice as much again.`, question: 'The last thing on the shelf here, and the biggest.',
         visual: 'Every light on the horizon burns a little brighter.' },
       { key: 'books', seconds: 47, name: 'On the books already', emoji: '📚', kind: 'discount', archetype: 'discount', bulkPrice: 25,
-        blurb: 'Everything is priced as though you owned twenty-five fewer of it, for the rest of this run.',
+        blurb: 'Everything goes back to about the price it was twenty-five buys ago, for the rest of this run.',
         question: 'The dearer the thing, the more this saves you. It never stops paying.',
         visual: 'The office filing cabinet gains a drawer.' },
       { key: 'team2', seconds: 45, name: 'Everybody trained up', emoji: '🎓', kind: 'side', archetype: 'synergy', side: 'team', flat: 0.7,
-        blurb: `${where}: your whole team gets two thirds more done.`, question: 'The team side’s second lift, and the dearer of the pair.',
+        blurb: `All across ${lowerWhere}, your whole team gets two thirds more done.`, question: 'The team side’s second lift, and the dearer of the pair.',
         visual: 'Certificates go up along the office wall.' },
       { key: 'rate3', seconds: 55, name: 'An agreement of your own', emoji: '🏛️', kind: 'value', archetype: 'rate', mult: 2.2,
-        blurb: `${where}: every visit is worth more than twice as much.`, question: 'The biggest single lift a stage ever offers. Save the run for it.',
+        blurb: `All across ${lowerWhere}, every visit is worth more than twice as much.`, question: 'The biggest single lift a stage ever offers. Save the run for it.',
         visual: 'A framed agreement hangs behind the office desk.' },
       { key: 'milebig', seconds: 58, name: 'Every tenth is a milestone', emoji: '🏅', kind: 'milestone', archetype: 'milestone', add: 0.35,
-        blurb: 'Every ten of anything you own is worth a third more again.',
+        blurb: 'The every-ten prize is a third bigger than it was.',
         question: 'The biggest milestone lift there is, and it touches everything you will ever buy.',
         visual: 'Bunting from the office all the way down the street.' },
     ],
