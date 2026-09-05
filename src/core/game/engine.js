@@ -39,6 +39,7 @@ const COST_GROWTH_LATE = 1.04;
 /** One visit of your own is never worth more than this much of a second's takings. */
 export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level); }
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
+export const KEEP_UNDER = 30;      // seconds: nothing that pays back this fast is ever folded away
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
 export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
 export const STAY_KEEPS = 0.03;    // what every ten times over the line is worth, for ever
@@ -718,7 +719,9 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
   // far as it will go while there is still a proper shelf to shop from.
   let folded = null;
   for (const bar of PENNY_BARS) {
-    const worthwhile = rest.filter((u) => !(u.gain > 0) || u.gain >= income * bar);
+    // Anything that pays for itself in half a minute is free money whatever share of your income it
+    // is, so it is never folded away – that emptied the shelf at the end of a long run.
+    const worthwhile = rest.filter((u) => !(u.gain > 0) || u.gain >= income * bar || u.payback < KEEP_UNDER);
     folded = worthwhile;
     if (worthwhile.length >= Math.min(rest.length, SHELF_KEEP)) break;
   }

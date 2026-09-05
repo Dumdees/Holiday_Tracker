@@ -810,14 +810,19 @@ export function createScene(canvas, { onCoin } = {}) {
     ctx.fillStyle = c.colour; ctx.beginPath(); ctx.roundRect(-20, -8, 40, 14, 4); ctx.fill(); ctx.beginPath(); ctx.roundRect(-11, -16, 22, 10, 4); ctx.fill();
     ctx.fillStyle = 'rgba(200,230,255,.9)'; ctx.fillRect(-8, -14, 7, 6); ctx.fillRect(2, -14, 7, 6);
     ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(-12, 7, 4, 0, TWO_PI); ctx.arc(12, 7, 4, 0, TWO_PI); ctx.fill();
+    // The body is mirrored so the car faces the way it is going; the writing on it must not be.
+    ctx.save(); ctx.scale(c.dir, 1);
     ctx.fillStyle = '#fff'; ctx.font = `700 7px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText('CARE', 0, 2);
+    ctx.restore();
     if (world.tiers.car >= 1) {                                   // sat nav: a lit screen on the dash
       ctx.fillStyle = `rgba(120,220,180,${0.6 + 0.4 * Math.sin(world.t * 2 + c.x)})`;
       ctx.beginPath(); ctx.roundRect(-3, -13.5, 5, 4, 1); ctx.fill();
     }
     if (world.tiers.car >= 2) {                                   // a magnetic door sign on the side
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-16, -6, 12, 5, 1); ctx.fill();
-      ctx.fillStyle = world.sign; ctx.font = `700 4px ${UI_FONT}`; ctx.fillText('MONTEITH', -10, -2.2);
+      ctx.save(); ctx.scale(c.dir, 1);
+      ctx.fillStyle = world.sign; ctx.font = `700 4px ${UI_FONT}`; ctx.fillText('MONTEITH', -10 * c.dir, -2.2);
+      ctx.restore();
     }
     if (world.tiers.car >= 3) {                                   // the electric fleet: green flash and a plug
       ctx.fillStyle = 'rgba(110,220,160,.55)'; ctx.beginPath(); ctx.roundRect(-20, 2, 40, 4, 2); ctx.fill();

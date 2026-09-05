@@ -544,7 +544,9 @@ export function Game() {
 
         {/* ---------- Middle: what to buy ---------- */}
         <div class="game-mid">
-          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? (narrow ? 'Best value first. Tap and hold for what it does.' : 'Best value first. Hover for what it does.') : 'Tap a few doors – the first upgrade is only a few pounds away.'}>
+          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? (narrow ? 'Best value first. Tap and hold for what it does.' : 'Best value first. Hover for what it does.')
+              : s.upgrades.length > 3 ? 'Nothing here is worth much next to what you already earn – keep growing and more will be.'
+              : 'Tap a few doors – the first upgrade is only a few pounds away.'}>
             <div class="upgrade-row">
               {upgrades.map((u) => (
                 <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 && now - (s.runStartedAt || 0) > 15000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
@@ -618,13 +620,15 @@ export function Game() {
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.progress * 100)}%` }} /></div>
               <div class="row-between">
                 <span class="muted" title={`${fmtMoney(outlook.earned)} of ${fmtMoney(outlook.target)}`}>{fmtMoney(outlook.earned)} earned so far</span>
-                <strong>{Math.floor(outlook.progress * 100)}% of the way</strong>
+                <strong>{Math.floor(outlook.progress * 100)}% of the doublings</strong>
               </div>
               {outlook.fraction >= 1 ? (
                 <p class="small mt expand-slow">
                   You have done what this stage asked for. Hand over now, or stay on this patch a while:
-                  every ten times over the figure is worth twice the Legacy Stars.
-                  {G.stayingBonus(s) > 1.02 ? <> Staying on so far has earned you <strong>{Math.round((G.stayingBonus(s) - 1) * 100)}% more</strong>.</> : null}
+                  every ten times over the figure is worth 30% more Legacy Stars, and another 3% on
+                  everything you will ever earn.
+                  {G.stayingBonus(s) > 1.02 ? <> Staying on this run is worth <strong>{Math.round((G.stayingBonus(s) - 1) * 100)}% more stars</strong> so far.</> : null}
+                  {s.stayBonus > 0 ? <> Staying on has earned you <strong>+{Math.round(s.stayBonus * 100)}% on everything, for good</strong> – of a possible +{Math.round(G.STAY_KEEPS_TOTAL * 100)}%.</> : null}
                 </p>
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
