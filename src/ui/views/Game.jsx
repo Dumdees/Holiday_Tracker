@@ -87,7 +87,9 @@ function bigJumpsLeft(outlook) {
 function howFar(outlook) {
   if (outlook.fraction >= 1) return 'You have done it.';
   if (outlook.fraction >= 0.85) return 'You are nearly there.';
-  if (outlook.fraction >= 0.5) return 'You are over halfway.';
+  if (outlook.fraction >= 0.6) return 'You are well over halfway.';
+  if (outlook.fraction >= 0.42) return 'You are about halfway.';
+  if (outlook.fraction >= 0.28) return 'You are about a third of the way.';
   if (outlook.fraction >= 0.2) return 'You are about a quarter of the way.';
   // Counted in how many times the takings still have to double, not as a share of the money. A share
   // of the money reads as "nearly there" when you have six thousand pounds of a hundred and twenty
@@ -268,7 +270,7 @@ export function Game() {
       <div class="confirm">
         <div class="confirm-icon"><Icon name="sun" size={28} /></div>
         <h2>Welcome back!</h2>
-        <p class="soft">Your team kept going for the {fmtSeconds(away.seconds)} you were away. They did <strong>{fmtNum(Math.floor(away.visits))} visits</strong> and earned <strong>{fmtMoney(away.earned)}</strong>. It is already in the bank.</p>
+        <p class="soft">Your team kept going for the {fmtSeconds(away.seconds)} you were away. They did <strong>{fmtNum(Math.floor(away.visits))} visits</strong> and earned <strong>{fmtMoney(away.earned)}</strong>.{away.handovers ? '' : ' It is already in the bank.'}</p>
         {away.efficiency < 1 ? <p class="muted small">They work at half speed while nobody is here. The on-call phone speeds them up.</p> : null}
         {away.handovers ? (
           <p class="soft">The team handed the patch over <strong>{away.handovers === 1 ? 'once' : `${away.handovers} times`}</strong> while you were away, and earned <strong>{away.stars} Legacy {away.stars === 1 ? 'Star' : 'Stars'}</strong>. You are up to {levelInfo(game.value.level).name} now.</p>
@@ -304,6 +306,12 @@ export function Game() {
   const earning = G.productionPerSecond(s, now);
   const shop = G.unlockedBuildings(s).map((b) => G.buildingOffer(s, b.id, buyQty === 'max' ? Math.max(1, G.maxAffordable(s, b.id)) : buyQty, now, earning));
   const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
+  // Only call it the best buy if it is actually worth buying. A row whose own line reads "it would
+  // take for ever to pay for itself" cannot also be the best value on the shelf – that is two
+  // opposite answers an inch apart, and it stops the player trusting either of them.
+  const NEVER_PAYS = 60 * 3600;
+  const bestBuyShown = bestBuy && bestBuy.gain / bestBuy.income >= 0.005
+    && Number.isFinite(bestBuy.payback) && bestBuy.payback < NEVER_PAYS ? bestBuy : null;
   // Rungs you have left far behind are folded away: at the far stages there are dozens of them and
   // every one reads "earns nothing extra just now".
   // ...and so are the ones you could not afford in ten minutes of takings, which at the far stages
@@ -620,7 +628,7 @@ export function Game() {
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
                   <span class="upgrade-cost">{fmtPrice(u.cost)}</span>
-                  <span class="upgrade-pay">{gainPct(u) || (u.kind === 'conditional' ? 'pays when your round suits it' : 'saves a job')}</span>
+                  <span class="upgrade-pay">{gainPct(u) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}</span>
                 </button>
               ))}
             </div>
@@ -631,22 +639,23 @@ export function Game() {
             ) : null}
           </Card>
 
-          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="The one marked Best buy is the best value right now." actions={
+          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle={bestBuyShown ? 'The one marked Best buy is the best value right now.'
+              : 'Nothing here is worth much just now – try the Upgrades, or keep going a while.'} actions={
             <div class="qty-picker" role="group" aria-label="How many to buy"><span class="qty-label">Buy</span>
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => { chosenQty.current = true; setBuyQty(q); }}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
             <ul class="building-list">
               {rows.map((b) => (
                 <li key={b.id}>
-                  <button type="button" class={`building-row ${b.affordable ? 'affordable' : ''} ${bestBuy && bestBuy.id === b.id ? 'best' : ''} ${fmtPrice(b.cost).length > 18 ? 'wide-price' : ''}`} onClick={() => onBuy(b)} disabled={!b.affordable}
+                  <button type="button" class={`building-row ${b.affordable ? 'affordable' : ''} ${bestBuyShown && bestBuyShown.id === b.id ? 'best' : ''} ${fmtPrice(b.cost).length > 18 ? 'wide-price' : ''}`} onClick={() => onBuy(b)} disabled={!b.affordable}
                     title={`${b.name} – ${b.blurb}\nYou will see: ${b.visual}${b.milestone ? `\nBuy ${fmtNum(b.milestone.remaining)} more and they all get ${fmtTimes(b.milestoneFactor)}.` : ''}`} data-test={`buy-${b.id}`}>
                     <span class="building-emoji">{b.emoji}</span>
                     <span class="building-main">
                       <span class="building-name">
                         <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
                         {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
-                        {bestBuy && bestBuy.id === b.id && b.gain / b.income >= 0.005 ? <span class="best-chip">Best buy</span> : null}
-                        {biggestStep && biggestStep.id === b.id && (!bestBuy || bestBuy.id !== b.id) ? <span class="best-chip step-chip">Biggest lift</span> : null}
+                        {bestBuyShown && bestBuyShown.id === b.id ? <span class="best-chip">Best buy</span> : null}
+                        {biggestStep && biggestStep.id === b.id && (!bestBuyShown || bestBuyShown.id !== b.id) ? <span class="best-chip step-chip">Biggest lift</span> : null}
                       </span>
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0

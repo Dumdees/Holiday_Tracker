@@ -28,7 +28,7 @@ export const SIDES = {
  */
 export const BUILDINGS = [
   { id: 'carer', side: 'team', name: 'Carer', plural: 'Carers', emoji: '👩‍⚕️', baseCost: 15, rate: 0.8, level: 0, blurb: 'A kind pair of hands, a lanyard and a good pair of shoes.' , visual: 'A carer walks out of the office and starts a round.'},
-  { id: 'client', side: 'work', name: 'Someone to look after', plural: 'People you look after', emoji: '🏠', baseCost: 120, rate: 3.2, level: 0, blurb: 'A front door, a kettle and somebody pleased to see you.' , visual: 'Another front door on the street, with the light on.'},
+  { id: 'client', side: 'work', name: 'Someone to look after', plural: 'People you look after', eachSubject: 'Everybody you look after', emoji: '🏠', baseCost: 120, rate: 3.2, level: 0, blurb: 'A front door, a kettle and somebody pleased to see you.' , visual: 'Another front door on the street, with the light on.'},
   { id: 'keysafe', side: 'team', name: 'Key safe', plural: 'Key safes', emoji: '🔑', baseCost: 960, rate: 12.8, level: 0, blurb: 'No more waiting on the step. The little box by the door.' , visual: 'A little key box goes up beside a door.'},
   { id: 'package', side: 'work', name: 'Care package', plural: 'Care packages', emoji: '📋', baseCost: 7680, rate: 51.2, level: 0, blurb: 'Agreed hours, written down, four calls a day.' , visual: 'A care folder appears on the doorstep.'},
   { id: 'car', side: 'team', name: 'Care car', plural: 'Care cars', emoji: '🚗', baseCost: 61440, rate: 204.8, level: 1, blurb: 'Door to door in the rain, with a magnetic sign on the side.' , visual: 'A liveried car joins the road.'},
@@ -78,8 +78,11 @@ export function beyondBuilding(n) {
   const where = FURTHER_OUT[Math.min(lap, FURTHER_OUT.length - 1)];
   const name = lap ? `${base}, ${where}` : base;
   const plural = lap ? `${base}s, ${where}` : `${base}s`;
+  // The same name without the comma, for sentences. "Every one of your live-in carers, in the deep
+  // field brings in..." opens a clause and never closes it, and it reads as a stumble.
+  const plainPlural = lap ? `${base}s ${where}` : `${base}s`;
   return {
-    id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural, emoji: n % 2 ? '🪐' : '✨',
+    id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural, plainPlural, emoji: n % 2 ? '🪐' : '✨',
     baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n),
     level: 9 + Math.ceil(n / BEYOND_PER_LEVEL),
     blurb: BEYOND_BLURBS[(n - 1) % BEYOND_BLURBS.length],
@@ -209,6 +212,19 @@ const TIER_NAMES = {
   starship: ['Warp rotas', 'Cosy cabins', 'Infinite kindness'],
 };
 
+/**
+ * How a rung is named inside a sentence. Most of them read fine as "every one of your carers", but
+ * two shapes do not: "every one of your people you look after" is not something anybody can read,
+ * and a far rung's name carries a comma that opens a clause and never closes it.
+ */
+function eachSubject(b) {
+  return b.eachSubject || `Every one of your ${(b.plainPlural || b.plural).toLowerCase()}`;
+}
+
+function manyOf(b) {
+  return (b.plainPlural || b.plural).toLowerCase();
+}
+
 /** The plain "twice as good" upgrades: the baseline everything else has to beat. */
 const TIERS = [];
 for (const b of BUILDINGS) {
@@ -216,9 +232,9 @@ for (const b of BUILDINGS) {
     TIERS.push({
       id: `${b.id}-t${i + 1}`, name: TIER_NAMES[b.id][i], emoji: b.emoji, kind: 'building', building: b.id,
       cost: b.baseCost * TIER_COST[i], archetype: 'kit', mult: TIER_MULT[i],
-      blurb: `Every one of your ${b.plural.toLowerCase()} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
+      blurb: `${eachSubject(b)} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
       visual: `${TIER_NAMES[b.id][i]} ${TIER_WHERE[b.id]}.`,
-      question: `Only worth buying if you already have plenty of ${b.plural.toLowerCase()}.`,
+      question: `Only worth buying if you already have plenty of ${manyOf(b)}.`,
       unlock: (s) => (s.buildings[b.id] || 0) >= count,
     });
   });
@@ -255,8 +271,8 @@ const CONDITIONALS = [
 
 /** The tenth of anything doubles it. These make that step bigger still. */
 const MILESTONE_UPS = [
-  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'The every-ten prize is a bit bigger than it was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
-  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'The every-ten prize is bigger again than it already was.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
+  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every tenth one you buy makes them all better. Now it makes them better still.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
+  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every tenth one you buy makes them all better. This lifts that again, by more.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
 ];
 
 /** What a visit is worth: who is paying, and what you are trusted to do. */
@@ -538,8 +554,8 @@ export function stageUpgrades(level) {
         question: 'The other side’s discount. Whichever side you are feeding, one of these is for you.',
         visual: 'A fuel card and a folder of receipts on the office desk.' },
       { key: 'eighth', seconds: 14, name: 'The rota holds', emoji: '🗓️', kind: 'milestone', archetype: 'milestone', milestoneEvery: 1.25,
-        blurb: 'You get the every-ten prize after eight instead of ten, on everything you own.',
-        question: 'The prize itself is no bigger – it just comes round sooner. Best when you buy in armfuls.',
+        blurb: 'Every tenth one you buy makes them all better. Now it happens at every eighth.',
+        question: 'It is no bigger – it just comes round sooner. Best when you buy in armfuls.',
         visual: 'The bunting over the office goes up earlier than it used to.' },
       { key: 'word', seconds: 10, name: 'Word gets round', emoji: '🗣️', kind: 'global', archetype: 'rate', mult: 1.6,
         blurb: `All across ${lowerWhere}, everything you own earns half as much again.`, question: 'Cheaper than the big lift and it arrives sooner.',
@@ -559,7 +575,7 @@ export function stageUpgrades(level) {
         blurb: `All across ${lowerWhere}, every visit is worth twice as much again.`, question: 'Doubles the value of everything a second time. Save for it.',
         visual: 'The coins coming into the office get bigger again.' },
       { key: 'mile', seconds: 34, name: 'Every tenth counts for more', emoji: '🎖️', kind: 'milestone', archetype: 'milestone', add: 0.25,
-        blurb: 'The every-ten prize is a quarter bigger than it was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.',
+        blurb: 'Every tenth one you buy makes them all better. Now it is a quarter better again.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.',
         visual: 'More bunting over the office than last time.' },
       { key: 'gaps', seconds: 24, name: 'Cover the gaps', emoji: '🫱', kind: 'conditional', archetype: 'conditional', sideFloor: 0.8, mult: 1,
         share: () => 1, label: 'whatever shape the round is in',
@@ -608,7 +624,7 @@ export function stageUpgrades(level) {
         blurb: `All across ${lowerWhere}, every visit is worth more than twice as much.`, question: 'The biggest single lift a stage ever offers. Save the run for it.',
         visual: 'A framed agreement hangs behind the office desk.' },
       { key: 'milebig', seconds: 58, name: 'Every tenth is a milestone', emoji: '🏅', kind: 'milestone', archetype: 'milestone', add: 0.35,
-        blurb: 'The every-ten prize is a third bigger than it was.',
+        blurb: 'Every tenth one you buy makes them all better. Now it is a third better again.',
         question: 'The biggest milestone lift there is, and it touches everything you will ever buy.',
         visual: 'Bunting from the office all the way down the street.' },
     ],
@@ -645,9 +661,11 @@ export function stageUpgrades(level) {
       FAR_KIT.forEach((name, i) => {
         out.push({
           // Named after what it goes on, never after a number: "Warm boxes 16" told nobody anything.
-          id: `${b.id}-t${i + 1}`, name: `${name} for the ${b.plural.toLowerCase()}`, emoji: b.emoji, kind: 'building', building: b.id,
+          // The rung comes first in the name. Two tiles called "Quiet engines for the ..." differ only
+          // in words the box cuts off, and then they read as the same tile twice.
+          id: `${b.id}-t${i + 1}`, name: `${b.plainPlural}: ${name.toLowerCase()}`, emoji: b.emoji, kind: 'building', building: b.id,
           costSeconds: [5, 18, 55][i] * (r + 1), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
-          blurb: `Every one of your ${b.plural.toLowerCase()} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
+          blurb: `${eachSubject(b)} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
           visual: `${name} on every one of them, out on the horizon.`,
           question: `Worth it once you have plenty of them.`,
           unlock: (s) => (s.buildings[b.id] || 0) >= TIER_AT[i],
