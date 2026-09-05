@@ -18,9 +18,13 @@ import {
 import { fmtMoney } from './format.js';
 
 export const SAVE_VERSION = 2;
-const OFFLINE_CAP_SECONDS = 8 * 3600;
-const OFFLINE_CAP_ONCALL = 12 * 3600;
-const OFFLINE_PACE = 0.15;        // an hour away carries the round this far towards the finish line
+const OFFLINE_CAP_SECONDS = 16 * 3600;
+const OFFLINE_CAP_ONCALL = 24 * 3600;
+const OFFLINE_HANDOVERS = 3;      // how many patches the team may hand over while you are away
+const OFFLINE_HANDOVERS_ONCALL = 5;
+const OFFLINE_HANDOVERS_NIGHT = 8;
+const OFFLINE_STAR_SHARE = 0.6;   // and what share of the stars a hand-over you were not there for pays
+const OFFLINE_PACE = 1.1;         // how many runs an hour away is worth, before the halving
 const OFFLINE_REACH = 0.8;        // and never further than this, so there is always something left to do
 const ADMIN_COLLECT_EVERY = 5;
 const SPAWN_LIFETIME = 13;
@@ -37,6 +41,8 @@ export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level);
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
 export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
+export const STAY_KEEPS = 0.08;    // what every ten times over the line is worth, for ever
+export const STAY_KEEPS_MAX = 2;   // and the most one run can add
 export const STAY_BONUS = 1.5;    // extra stars for every ten times over the finish line you go
 export const STAY_BONUS_MAX = 12; // and never more than twelve times, however long you stay
 export const STAY_LIFTS = 0.15;   // and a long stay lifts the next figure by this much of where you got to
@@ -67,6 +73,8 @@ export function newGame(now = Date.now()) {
     invoices: 0,
     runEarned: 0,
     peakAtTarget: 0,           // what you were earning when the finish line was crossed
+    stayBonus: 0,              // what carrying runs on past their figure has been worth, for ever
+    runStartIncome: 0,         // what you were earning when this run began
     bestRating: 0,             // the best the agency has ever been rated
     pace: [],                   // a short trail of (seconds into the run, earned so far)
     lifetimeEarned: 0,
@@ -170,23 +178,38 @@ export function applyOffline(state, now) {
   if (rate <= 0) return null;
   const efficiency = state.perks.includes('nightshift') ? 1 : oncall ? 0.8 : 0.5;
   // A round grows by multiplying, so how far through a run you are is a matter of how many times
-  // the takings have doubled, not of how much money is on the table. Time away carries the round
-  // that far along, which comes to the same share of the run whatever stage you are at.
-  const reach = Math.min(OFFLINE_REACH, (seconds / 3600) * OFFLINE_PACE * efficiency);
+  // the takings have doubled, not of how much money is on the table. Time away is measured in whole
+  // runs: it carries the one in progress along, and then the team hands the patch over without you.
+  let budget = (seconds / 3600) * OFFLINE_PACE * efficiency;
+  const step = Math.min(budget, OFFLINE_REACH);
   const logTarget = Math.log10(1 + expandRequirement(state));
   const logEarned = Math.log10(1 + Math.max(0, state.runEarned || 0));
-  const wanted = Math.pow(10, logEarned + reach * Math.max(0, logTarget - logEarned)) - 1;
+  const wanted = Math.pow(10, logEarned + step * Math.max(0, logTarget - logEarned)) - 1;
   const earned = Math.max(rate * seconds * efficiency, wanted - (state.runEarned || 0), 0);
   const visits = visitsPerSecond(state) * seconds * efficiency;
   state.visits += visits;
-  // The office banks what came in while you were away, whether or not you collect by hand when you
-  // are here – otherwise a night away shows on no figure at all until you find the right button.
   credit(state, earned);
   state.offlineReturns += 1;
+  budget -= step;
+  // If there was time for whole runs on top, the team saw them through – at a share of the stars,
+  // and only so many, so there is still a patch to come back to.
+  const most = state.perks.includes('nightshift') ? OFFLINE_HANDOVERS_NIGHT : oncall ? OFFLINE_HANDOVERS_ONCALL : OFFLINE_HANDOVERS;
+  let handovers = 0, stars = 0;
+  while (budget >= 1 && handovers < most) {
+    const need = expandRequirement(state) - state.runEarned;
+    if (need > 0) credit(state, need);
+    const due = Math.max(1, Math.floor(starsOnExpand(state) * OFFLINE_STAR_SHARE));
+    const before = state.starsEarned;
+    if (!expand(state, now)) break;
+    state.starsEarned = before + due;      // a share of what you would have earned yourself
+    stars += due;
+    handovers += 1;
+    budget -= 1;
+  }
   // The hours away are not part of the run, and nothing was measured during them.
-  state.runStartedAt = (state.runStartedAt || now) + seconds * 1000;
+  state.runStartedAt = now;
   state.pace = [];
-  return { seconds, earned, visits, efficiency, reach };
+  return { seconds, earned, visits, efficiency, reach: step, handovers, stars };
 }
 
 // ---------- The maths ----------
@@ -221,6 +244,13 @@ export function milestoneFactor(state) {
 }
 
 /** How many milestones a count has passed, and what that is worth. */
+/** How much sooner the milestones come round, from anything on the shelf that says they do. */
+export function milestonePace(state) {
+  let f = 1;
+  for (const u of ownedUpgrades(state)) if (u.milestoneEvery) f *= u.milestoneEvery;
+  return f;
+}
+
 export function milestonesPassed(count) {
   let n = 0;
   for (const m of MILESTONES) if (count >= m) n++;
@@ -261,7 +291,7 @@ export function buildingRate(state, id) {
   const b = buildingDef(state, id);
   if (!b || !b.rate) return 0;
   const count = state.buildings[id] || 0;
-  let mult = Math.pow(milestoneFactor(state), milestonesPassed(count));
+  let mult = Math.pow(milestoneFactor(state), milestonesPassed(count * milestonePace(state)));
   for (const u of ownedUpgrades(state)) {
     if (u.kind === 'building' && u.building === id) mult *= u.mult || 2;
     if (u.kind === 'side' && u.side === b.side) mult *= 1 + u.flat;
@@ -327,7 +357,13 @@ export function ratingInfo(state) {
 export function boardMetrics(state) {
   const work = sideRate(state, 'work');
   const team = sideRate(state, 'team');
-  return { work, team, visits: combineSides(work, team), ratingIndex: ratingIndex(state), ratingScore: ratingScore(state) };
+  // Anything that says the thinner side is covered lifts it towards the fuller one before the two
+  // are put together, so a lopsided round still gets most of its visits done.
+  let f = 0;
+  for (const u of ownedUpgrades(state)) if (u.sideFloor) f = Math.max(f, u.sideFloor);
+  const w = f > 0 ? Math.max(work, team * f) : work;
+  const t = f > 0 ? Math.max(team, work * f) : team;
+  return { work, team, visits: combineSides(w, t), ratingIndex: ratingIndex(state), ratingScore: ratingScore(state) };
 }
 
 export function visitsPerSecond(state, m = boardMetrics(state)) {
@@ -376,6 +412,7 @@ export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state
   }
   mult *= RATINGS[m.ratingIndex].mult;
   mult *= Math.pow(STAGE_BONUS, state.level);   // every stage you have reached, for ever
+  mult *= 1 + (state.stayBonus || 0);          // and every run you carried on with past its figure
   mult *= 1 + 0.01 * state.achievements.length;
   mult *= starBonus(state.starsEarned);
   mult *= Math.pow(1.3, legacyPerks(state));
@@ -452,10 +489,17 @@ export function rungPrice(state, b) {
   return b.baseCost * Math.pow(STAGE_BONUS, state.level);
 }
 
+/** How many of a rung are priced as though you did not own them yet. */
+export function bulkAllowance(state) {
+  let n = 0;
+  for (const u of ownedUpgrades(state)) n += u.bulkPrice || 0;
+  return n;
+}
+
 export function buildingCost(state, id, qty = 1) {
   const b = buildingDef(state, id);
   if (!b) return Infinity;
-  const owned = state.buildings[id] || 0;
+  const owned = Math.max(0, (state.buildings[id] || 0) - bulkAllowance(state));
   const base = rungPrice(state, b);
   let total = 0;
   for (let i = 0; i < qty; i++) total += unitCost(base, owned + i);
@@ -471,7 +515,7 @@ export function buildingCost(state, id, qty = 1) {
 function maxAffordableFor(state, id, funds) {
   const b = buildingDef(state, id);
   if (!b) return 0;
-  const owned = state.buildings[id] || 0;
+  const owned = Math.max(0, (state.buildings[id] || 0) - bulkAllowance(state));
   const discount = costDiscount(state, id);
   const base = rungPrice(state, b);
   let n = 0, total = 0;
@@ -497,7 +541,8 @@ export function maxAffordable(state, id) {
 export function shelfReference(state, def) {
   const target = expandRequirement(state);
   const at = Math.pow(10, Math.log10(1 + target) * (def.along || 0)) - 1;   // takings when it appears
-  return Math.max(1, at * RUN_DOUBLING);
+  // Floored on what the run opened with, or the first few would be free the moment they appeared.
+  return Math.max(1, at * RUN_DOUBLING, (state.runStartIncome || 0) * SHELF_FLOOR);
 }
 
 export function upgradeCost(state, id) {
@@ -670,10 +715,15 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
   // Pennies are folded away with the outgrown rungs. A shelf half full of things worth a hundredth
   // of a percent reads as a shelf with nothing on it, however cheap they are. The bar is raised as
   // far as it will go while there is still a proper shelf to shop from.
+  let folded = null;
   for (const bar of PENNY_BARS) {
     const worthwhile = rest.filter((u) => !(u.gain > 0) || u.gain >= income * bar);
-    if (worthwhile.length >= Math.min(rest.length, SHELF_KEEP)) { rest = worthwhile; break; }
+    folded = worthwhile;
+    if (worthwhile.length >= Math.min(rest.length, SHELF_KEEP)) break;
   }
+  // Even when nothing clears the lowest bar, the pennies are still folded away: a shelf of twelve
+  // tiles all reading the same thing is worse than a short shelf that means something.
+  rest = folded || rest;
   const shown = [...rest.slice(0, Math.max(0, limit - quiet.length)), ...quiet].sort(order);
   return Object.assign(shown, { total: all.length });
 }
@@ -716,8 +766,14 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   const behind = live.filter((c) => c.share < 0.98).sort((a, b) => a.share - b.share)[0];
   const gap = worth.work / Math.max(worth.team, 1e-9);
   const side = (!worth.work && !worth.team) ? 'balanced' : gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
-  const tip = side === 'work' ? ' A minute of takings buys more by taking work on.'
-    : side === 'team' ? ' A minute of takings buys more by putting it into the team.'
+  // Where the side that is already ahead is also the cheaper pound, say why, or the strip reads as
+  // nonsense: "your team could cover three times the work – put it into the team".
+  const ahead = ratio > 1.1 ? 'team' : ratio < 0.9 ? 'work' : 'balanced';
+  const odd = side !== 'balanced' && side === ahead;
+  const tip = side === 'work'
+    ? (odd ? ' Work is ahead already, but a minute of takings still buys more of it than of the team.' : ' A minute of takings buys more by taking work on.')
+    : side === 'team'
+      ? (odd ? ' The team is ahead already, but a minute of takings still buys more of it than of the work.' : ' A minute of takings buys more by putting it into the team.')
       : ' A minute of takings is worth about the same on either side.';
   // Only mention a bonus that pulls the same way as the advice, or the strip argues with itself.
   const pulls = (c) => (/team|rushed|same carer|tidy|led/i.test(`${c.name} ${c.label}`) ? 'team' : 'work');
@@ -918,6 +974,7 @@ export function expandRequirement(state) {
 }
 
 /** The plain fraction of the way there, and how long the rest looks like taking. */
+export const SHELF_FLOOR = 0.5;     // no shelf item costs less than this many seconds of the opening rate
 export const RUN_DOUBLING = 0.3;    // how fast a run's takings grow, per second
 export const PACE_EVERY = 5;       // how often the trail takes a reading, in seconds
 export const PACE_TRAIL = 40;      // how far back it looks
@@ -995,7 +1052,9 @@ export function stayingBonus(state) {
 export function starsOnExpand(state) {
   const share = state.perks && state.perks.includes('founders') ? 1.25 : 1;
   const due = (starsForLifetime(state.lifetimeEarned) - state.starsEarned) * share * stayingBonus(state);
-  return Math.max(0, Math.floor(due));
+  // Never nothing. A hand-over that pays no star at all is a promise broken, and the arrears can be
+  // empty simply because the last one already banked the decade.
+  return Math.max(1, Math.floor(due));
 }
 
 /** Apply the starting bonuses from perks to a fresh run. */
@@ -1022,12 +1081,16 @@ export function expand(state, now = Date.now()) {
   const bestRun = Math.max(state.bestRun || 0, state.runEarned);
   const level = state.level + 1;
   const overshoot = Math.max(0, state.runEarned - expandRequirement(state));
+  // Carrying a run on past its figure is worth something that lasts, and worth it in the same
+  // currency as a stage: stars are only three per cent each and could never bridge the gap.
+  const overBy = overshoot > 0 ? Math.log10(state.runEarned / expandRequirement(state)) : 0;
+  const stayBonus = (state.stayBonus || 0) + Math.min(STAY_KEEPS_MAX, STAY_KEEPS * overBy);
   const keep = {
     startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,
     bestRun, level, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
     perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet,
     cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
-    bestRating: state.bestRating || 0,
+    bestRating: state.bestRating || 0, stayBonus,
     // The office does not forget how to run its own payroll because the patch got bigger.
     upgrades: state.upgrades.filter((id) => KEEPS_ITS_SYSTEMS.has(id)),
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
@@ -1044,6 +1107,7 @@ export function expand(state, now = Date.now()) {
   const kit = startingKit(state.level);
   state.buildings = { ...state.buildings, ...kit };
   applyStartPerks(state);
+  state.runStartIncome = steadyIncome(state);
   // Anything the run earned beyond what it was asked for comes with you – but only a minute and a
   // half of what the new round earns. Any more and the money from the old patch buys the whole
   // ladder in the first few seconds, and the new patch is over before it has started.

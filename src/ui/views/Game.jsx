@@ -237,7 +237,9 @@ export function Game() {
         <div class="confirm-icon"><Icon name="sun" size={28} /></div>
         <h2>Welcome back!</h2>
         <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}. It is already in the bank.</p>
-        {away.reach >= 0.15 ? <p class="soft">That is <strong>{away.reach >= 0.75 ? 'most of the way' : away.reach >= 0.55 ? 'about halfway' : away.reach >= 0.35 ? 'about a third of the way' : 'a good start'}</strong> to {G.nextLevel(game.value).name}.</p> : null}
+        {away.handovers ? (
+          <p class="soft">The team handed the patch over <strong>{away.handovers === 1 ? 'once' : `${away.handovers} times`}</strong> while you were away, and earned <strong>{away.stars} Legacy {away.stars === 1 ? 'Star' : 'Stars'}</strong>. You are on {levelInfo(game.value.level).name.toLowerCase()} now.</p>
+        ) : away.reach >= 0.15 ? <p class="soft">That is <strong>{away.reach >= 0.75 ? 'most of the way' : away.reach >= 0.55 ? 'about halfway' : away.reach >= 0.35 ? 'about a third of the way' : 'a good start'}</strong> to {G.nextLevel(game.value).name}.</p> : null}
         <div class="modal-actions"><Button variant="primary" onClick={() => close()}>Lovely</Button></div>
       </div>
     ), { size: 'sm', ariaLabel: 'Welcome back' });
@@ -273,9 +275,16 @@ export function Game() {
   // every one reads "earns nothing extra just now".
   // ...and so are the ones you could not afford in ten minutes of takings, which at the far stages
   // is most of the list and every one of them reads the same.
-  const outgrown = shop.filter((b) => b !== bestBuy && earning > 0
-    && ((b.count > 0 && b.gain < earning * 0.001) || (b.cost > earning * 600 && shop.indexOf(b) > 2)));
-  const rows = showOld ? shop : shop.filter((b) => !outgrown.includes(b));
+  const outgrown = shop.filter((b) => b !== bestBuy && earning > 0 && b.count > 0 && b.gain < earning * 0.001);
+  // ...and the ones you have never owned and could not afford in ten minutes are a different thing
+  // again: not left behind, just too dear for now.
+  const tooDear = shop.filter((b) => b !== bestBuy && earning > 0 && !outgrown.includes(b)
+    && b.count === 0 && b.cost > earning * 600 && shop.indexOf(b) > 2);
+  // When everything on the shelf pays for itself in a second, payback stops telling you anything,
+  // so the row that moves you furthest is named as well.
+  const biggestStep = shop.reduce((a, b) => (b.affordable && b.gain > (a ? a.gain : 0) ? b : a), null);
+  const folded = [...outgrown, ...tooDear];
+  const rows = showOld ? shop : shop.filter((b) => !folded.includes(b));
   const hint = nextStep(s, shop);
   // Ten at a time is the sensible way to shop – but only once ten of something is twenty seconds
   // of takings. Before that it turns the opening into a long wait with nothing to press.
@@ -524,7 +533,7 @@ export function Game() {
               <div class="rating-row"><span class="rating-emoji">{rating.emoji}</span><strong>{rating.name}</strong></div>
             {G.activeConditionals(s, metrics).length ? (
               <ul class="cond-list">
-                {G.activeConditionals(s, metrics).map((c) => <li key={c.id} class={c.on ? 'on' : 'off'}>{c.on ? '✅' : '⚪'} {c.name} <span class="muted small">{c.on ? 'is paying now' : `pays ${c.label}`}</span></li>)}
+                {G.activeConditionals(s, metrics).map((c) => <li key={c.id} class={c.on ? 'on' : c.share >= 0.25 ? 'part' : 'off'}>{c.on ? '✅' : c.share >= 0.25 ? '🟡' : '⚪'} {c.name} <span class="muted small">{c.on ? 'is paying in full' : c.share >= 0.25 ? `is paying ${Math.round(c.share * 100)}% – more ${c.label}` : `pays ${c.label}`}</span></li>)}
               </ul>
             ) : null}
             {rating.next ? (
@@ -538,7 +547,7 @@ export function Game() {
           <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? (narrow ? 'Best value first. Tap and hold for what it does.' : 'Best value first. Hover for what it does.') : 'Tap a few doors – the first upgrade is only a few pounds away.'}>
             <div class="upgrade-row">
               {upgrades.map((u) => (
-                <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
+                <button key={u.id} type="button" class={`upgrade-tile ${u.affordable ? 'affordable' : ''} ${now - firstSeen.current.get(u.id) < 12000 && now - (s.runStartedAt || 0) > 15000 ? 'new' : ''}`} onClick={() => onUpgrade(u)} disabled={!u.affordable}
                   title={`${u.name} – ${u.blurb}\n${u.question}\nYou will see: ${u.visual}\n${gainLine(u)}${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}`} data-test={`upgrade-${u.id}`}>
                   <span class="upgrade-emoji">{u.emoji}</span>
                   <span class="upgrade-name">{u.name}</span>
@@ -569,6 +578,7 @@ export function Game() {
                         <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
                         {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
                         {bestBuy && bestBuy.id === b.id && b.gain / b.income >= 0.005 ? <span class="best-chip">Best value</span> : null}
+                        {biggestStep && biggestStep.id === b.id && (!bestBuy || bestBuy.id !== b.id) ? <span class="best-chip step-chip">Biggest step</span> : null}
                       </span>
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0
@@ -587,9 +597,12 @@ export function Game() {
                 <li class="building-locked">🔒 <strong>{nextLocked.name}</strong> unlocks when you hand over and reach {levelInfo(nextLocked.level).name.toLowerCase()} {levelInfo(nextLocked.level).emoji}</li>
               ) : null}
             </ul>
-            {outgrown.length ? (
+            {folded.length ? (
               <button type="button" class="shop-more" onClick={() => setShowOld((v) => !v)}>
-                {showOld ? 'Tidy the older rungs away' : `Show ${fmtNum(outgrown.length)} older ${outgrown.length === 1 ? 'rung' : 'rungs'} you have left behind`}
+                {showOld ? 'Tidy the rest away'
+                  : outgrown.length && tooDear.length ? `Show ${fmtNum(outgrown.length)} left behind and ${fmtNum(tooDear.length)} too dear for now`
+                  : outgrown.length ? `Show ${fmtNum(outgrown.length)} older ${outgrown.length === 1 ? 'rung' : 'rungs'} you have left behind`
+                  : `Show ${fmtNum(tooDear.length)} too dear for now`}
               </button>
             ) : null}
           </Card>

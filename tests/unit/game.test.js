@@ -476,7 +476,12 @@ describe('time passing', () => {
     assert.ok(c.funds > b.funds);
     const d = make();
     const capped = g.applyOffline(d, T0 + 40 * 3600 * 1000);
-    assert.equal(capped.seconds, 8 * 3600);
+    assert.equal(capped.seconds, 16 * 3600, 'a long absence pays for a night and a day, no more');
+    // A night away is long enough that the team sees the round through and hands the patch over.
+    const e = make();
+    const night = g.applyOffline(e, T0 + 8 * 3600 * 1000);
+    assert.ok(night.handovers >= 1, `a night away is worth a hand-over, got ${night.handovers}`);
+    assert.ok(night.stars >= 1 && e.starsEarned >= night.stars, 'and the stars that go with it');
   });
 
   test('a boost that is still running survives closing and reopening the game', () => {

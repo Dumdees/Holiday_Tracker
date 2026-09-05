@@ -184,3 +184,6 @@ body.game-open .toast-host .toast:nth-last-child(n+3) { display: none; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* The second chip: the row that moves you furthest, when payback stops discriminating. */
+.best-chip.step-chip { background: var(--sage-soft, #e8f1e9); color: var(--sage-ink, #2f6b45); border-color: var(--sage, #6fa582); }
