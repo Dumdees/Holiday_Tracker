@@ -762,8 +762,10 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   const ratio = m.team / m.work;
   // A plain description of the board, with no direction in it. The advice below is the only thing
   // that points anywhere, so the two halves of the strip can never argue with each other.
-  const state_ = ratio > 1.1 ? `Your team could cover ${ratio < 2 ? 'more work than you have' : `${Math.round(ratio)} times the work you have`}.`
-    : ratio < 0.9 ? `There is ${ratio > 0.5 ? 'more work than the team can cover' : `${Math.round(1 / ratio)} times the work your team can cover`}.`
+  // Short. The two figures either side of this strip already say how far apart the sides are, and on
+  // a phone every extra clause is another line of red text over the picture.
+  const state_ = ratio > 1.1 ? 'Your team is ahead of the work.'
+    : ratio < 0.9 ? 'There is more work than your team can cover.'
     : 'The two sides are level.';
   // Name the bonus that is furthest from paying in full: that is the one the board is costing you.
   const live = activeConditionals(state, m);
@@ -772,13 +774,9 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   const side = (!worth.work && !worth.team) ? 'balanced' : gap > 1.25 ? 'work' : gap < 0.8 ? 'team' : 'balanced';
   // Where the side that is already ahead is also the cheaper pound, say why, or the strip reads as
   // nonsense: "your team could cover three times the work – put it into the team".
-  const ahead = ratio > 1.1 ? 'team' : ratio < 0.9 ? 'work' : 'balanced';
-  const odd = side !== 'balanced' && side === ahead;
-  const tip = side === 'work'
-    ? (odd ? ' Work is ahead already, but a minute of takings still buys more of it than of the team.' : ' A minute of takings buys more by taking work on.')
-    : side === 'team'
-      ? (odd ? ' The team is ahead already, but a minute of takings still buys more of it than of the work.' : ' A minute of takings buys more by putting it into the team.')
-      : ' A minute of takings is worth about the same on either side.';
+  const tip = side === 'work' ? ' Spend the next minute taking work on.'
+    : side === 'team' ? ' Spend the next minute on the team.'
+      : ' Either side is worth about the same just now.';
   // Only mention a bonus that pulls the same way as the advice, or the strip argues with itself.
   const pulls = (c) => (/team|rushed|same carer|tidy|led/i.test(`${c.name} ${c.label}`) ? 'team' : 'work');
   const agrees = behind && (side === 'balanced' || pulls(behind) === side) ? behind : null;
@@ -786,8 +784,10 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   // paying in full" reads like a word is missing.
   const full = live.find((c) => c.share >= 0.999);
   const holding = agrees
-    ? ` Your bonus "${agrees.name}" would pay more ${agrees.label}.`
+    ? ` Your bonus "${agrees.name}" is not paying in full yet.`
     : (full ? ` Your bonus "${full.name}" is paying in full.` : '');
+  // Two clauses at most. On a phone this is four lines of red text under the picture, and the third
+  // sentence – which the rating card already says, word for word – was the one that got skipped.
   if (!worth.work && !worth.team) return { side: 'balanced', ratio, advice: `${state_}${holding}` };
   return { side, ratio, advice: `${state_}${holding}${tip}` };
 }

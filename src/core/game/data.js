@@ -144,7 +144,7 @@ export const RATING_UPGRADE_POINTS = 6; // each quality upgrade owned
 export const PERKS = [
   { id: 'perk-admin', name: 'Head office', emoji: '🏛️', cost: 2, blurb: 'Every new run starts with the payments collected for you.' },
   { id: 'alumni', name: 'Alumni network', emoji: '🎓', cost: 5, blurb: 'Start each run with 5 carers and 5 people to look after.' },
-  { id: 'magnet', name: 'Prismatic magnet', emoji: '🌈', cost: 9, blurb: 'Prismatic carers appear twice as often.' },
+  { id: 'magnet', name: 'Everybody has good days', emoji: '🌈', cost: 9, blurb: 'Carers have a brilliant shift twice as often.' },
   { id: 'cards', name: 'Card collector', emoji: '💌', cost: 9, blurb: 'Thank-you cards appear twice as often.' },
   { id: 'playbook', name: 'Franchise playbook', emoji: '📘', cost: 18, blurb: 'Everything costs a tenth less.' },
   // Three pairs at the same price, so there is a real "which of these first?" rather than a list
@@ -192,12 +192,12 @@ const TIER_NAMES = {
   car: ['Sat navs', 'Magnetic door signs', 'An electric fleet'],
   directpay: ['Simple invoices', 'Standing orders', 'A family portal'],
   coordinator: ['The whiteboard rota', 'A rota app', 'Smart matching'],
-  council: ['Electronic call monitoring', 'Framework paperwork', 'An uplift, at last'],
+  council: ['Call monitoring on every contract', 'Framework paperwork', 'An uplift, at last'],
   supervisor: ['Hi-vis and a clipboard', 'Competency sign-off', 'Practice leads'],
   discharge: ['Home-first team', 'Same-day starts', 'A desk on the ward'],
   office: ['A decent kettle', 'Cake Fridays', 'The good biscuits'],
   framework: ['Preferred provider', 'Block hours', 'County-wide'],
-  academy: ['The Care Certificate', 'A moving and handling suite', 'A simulation room'],
+  academy: ['Certificates for the whole academy', 'A moving and handling suite', 'A simulation room'],
   chc: ['Complex care training', 'Clinical supervision', 'Delegated healthcare'],
   nurse: ['Clinical leads', 'An on-call clinician', 'Specialist pathways'],
   group: ['A shared back office', 'One group brand', 'A board of trustees'],
@@ -214,7 +214,7 @@ for (const b of BUILDINGS) {
     TIERS.push({
       id: `${b.id}-t${i + 1}`, name: TIER_NAMES[b.id][i], emoji: b.emoji, kind: 'building', building: b.id,
       cost: b.baseCost * TIER_COST[i], archetype: 'kit', mult: TIER_MULT[i],
-      blurb: `Every one of your ${b.plural.toLowerCase()} brings in ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as much.`,
+      blurb: `Every one of your ${b.plural.toLowerCase()} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
       visual: `${TIER_NAMES[b.id][i]} ${TIER_WHERE[b.id]}.`,
       question: `Only worth buying if you already have plenty of ${b.plural.toLowerCase()}.`,
       unlock: (s) => (s.buildings[b.id] || 0) >= count,
@@ -253,13 +253,13 @@ const CONDITIONALS = [
 
 /** The tenth of anything doubles it. These make that step bigger still. */
 const MILESTONE_UPS = [
-  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every ten of anything you own is worth a bit more than it was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
-  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every tenth of anything is worth 2.5 times instead of 2.2.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
+  { id: 'mile-1', name: 'We mark the tenth', emoji: '🎉', add: 0.2, cost: 1.5e6, archetype: 'milestone', blurb: 'Every ten you own is worth a bit more again than it already was.', question: 'Every ten you have ever bought is worth more, and so is every ten still to come.', unlock: (s) => Object.values(s.buildings).some((n) => n >= 25) },
+  { id: 'mile-2', name: 'Long service all round', emoji: '🎖️', add: 0.3, cost: 2e10, archetype: 'milestone', blurb: 'Every ten you own is worth more again than it already was.', question: 'The single biggest number in the game if you own a lot of everything.', unlock: (s) => s.upgrades.includes('mile-1') && Object.values(s.buildings).some((n) => n >= 100) },
 ];
 
 /** What a visit is worth: who is paying, and what you are trusted to do. */
 const VALUES = [
-  { id: 'val-private', name: 'Private clients', emoji: '💷', mult: 1.6, cost: 9000, blurb: 'Every visit is worth half as much again.', question: 'A flat, dependable boost – the safe pick when nothing else is close.', unlock: (s) => s.runEarned >= 4000 },
+  { id: 'val-private', name: 'Paying for it themselves', emoji: '💷', mult: 1.6, cost: 9000, blurb: 'Every visit is worth half as much again.', question: 'A flat, dependable boost – the safe pick when nothing else is close.', unlock: (s) => s.runEarned >= 4000 },
   { id: 'val-fair', name: 'A fair hourly rate', emoji: '⚖️', mult: 1.5, cost: 4e5, blurb: 'Every visit is worth half as much again.', question: 'Negotiated, not squeezed. Boring, reliable, always fine to buy.', unlock: (s) => s.runEarned >= 2e5 },
   { id: 'val-specialist', name: 'Specialist care', emoji: '🧠', mult: 1.7, cost: 3e7, blurb: 'Every visit is worth two thirds more.', question: 'Big, and it never needs anything else. Weigh it against a bonus you would have to keep buying for.', unlock: (s) => s.runEarned >= 1.5e7 },
   { id: 'val-nhs', name: 'NHS rates', emoji: '🩺', mult: 1.8, cost: 5e9, blurb: 'Every visit is worth nearly twice as much.', question: 'The biggest simple lift in the middle of the game.', unlock: (s) => s.runEarned >= 2e9 },
@@ -290,7 +290,7 @@ const DISCOUNTS = [
   { id: 'disc-recruit', name: 'Refer a friend', emoji: '🫂', kind: 'discount', building: 'carer', factor: 0.85, cost: 9000, blurb: 'Carers cost a bit less, for good.', question: 'Only pays back if you are going to keep hiring.', unlock: (s) => (s.buildings.carer || 0) >= 40 },
   { id: 'disc-safes', name: 'Key safes by the box', emoji: '📦', kind: 'discount', building: 'keysafe', factor: 0.8, cost: 260000, blurb: 'Key safes cost a fifth less, for good.', question: 'Key safes stay worth buying long after their own income has faded.', unlock: (s) => (s.buildings.keysafe || 0) >= 30 },
   { id: 'disc-mileage', name: 'Mileage sorted properly', emoji: '⛽', kind: 'discount', building: 'car', factor: 0.8, cost: 5.5e6, blurb: 'Care cars cost a fifth less, for good.', question: 'Cars are the priciest thing you buy in bulk early on.', unlock: (s) => (s.buildings.car || 0) >= 25 },
-  { id: 'disc-homes', name: 'Word gets round', emoji: '🗣️', kind: 'discount', building: 'client', factor: 0.85, cost: 12000, blurb: 'Taking somebody new on costs a bit less, for good.', question: 'The same idea for the work side as Refer a friend is for the team.', unlock: (s) => (s.buildings.client || 0) >= 40 },
+  { id: 'disc-homes', name: 'People recommend you', emoji: '🗣️', kind: 'discount', building: 'client', factor: 0.85, cost: 12000, blurb: 'Taking somebody new on costs a bit less, for good.', question: 'The same idea for the work side as Refer a friend is for the team.', unlock: (s) => (s.buildings.client || 0) >= 40 },
 ];
 
 /** Quality investments. These also push the rating up. */
@@ -550,7 +550,7 @@ export function stageUpgrades(level) {
     // Half a run of saving: the things you plan for.
     [
       { key: 'work', seconds: 20, name: 'Every door on the books', emoji: '🏠', kind: 'side', archetype: 'synergy', side: 'work', flat: 0.6,
-        blurb: `${where}: all of your work brings in half as much again.`, question: 'The work-side twin. Which side are you feeding?',
+        blurb: `${where}: all of your work brings in half as much again.`, question: 'The same thing for the front doors instead of the carers. Which half are you growing?',
         visual: 'The lights come on behind every door at once.' },
       { key: 'rate2', seconds: 26, name: 'Paid what the work is worth', emoji: '💷', kind: 'value', archetype: 'rate', mult: 2,
         blurb: `${where}: every visit is worth twice as much again.`, question: 'Doubles the value of everything a second time. Save for it.',
@@ -588,7 +588,7 @@ export function stageUpgrades(level) {
         share: (s) => Math.min(1, Object.values(s.buildings).filter((n) => n >= 25).length / Math.max(6, Math.round(unlockedRungs(s) * 0.55))),
         label: 'the more different things you own twenty-five of',
         wants: (s) => Math.max(6, Math.round(unlockedRungs(s) * 0.55)),
-        blurb: 'Everything earns up to half as much again, in full once you own twenty-five each of more than half the rungs you have.',
+        blurb: 'Everything earns up to half as much again, in full once you own twenty-five each of more than half the different things you have.',
         question: 'Pays for going broad rather than deep. Nothing else in the game asks for that.',
         visual: 'A little of everything on the street at once.' },
       { key: 'all2', seconds: 60, name: 'The whole patch lifts again', emoji: '🌟', kind: 'global', archetype: 'rate', mult: 1.8,
@@ -641,11 +641,12 @@ export function stageUpgrades(level) {
       const b = beyondBuilding(first + r);
       FAR_KIT.forEach((name, i) => {
         out.push({
-          id: `${b.id}-t${i + 1}`, name: `${name} ${first + r}`, emoji: b.emoji, kind: 'building', building: b.id,
+          // Named after what it goes on, never after a number: "Warm boxes 16" told nobody anything.
+          id: `${b.id}-t${i + 1}`, name: `${name} for the ${b.plural.toLowerCase()}`, emoji: b.emoji, kind: 'building', building: b.id,
           costSeconds: [5, 18, 55][i] * (r + 1), archetype: 'kit', icon: b.emoji, mult: TIER_MULT[i],
-          blurb: `${b.plural} are ${TIER_MULT[i] === 2 ? 'twice' : `${TIER_MULT[i]} times`} as good.`,
-          visual: `${name} on every ${b.name.toLowerCase()}, counted on the horizon.`,
-          question: `Worth it once you own a lot of ${b.plural.toLowerCase()}.`,
+          blurb: `Every one of your ${b.plural.toLowerCase()} brings in ${TIER_MULT[i] === 2 ? 'twice' : TIER_MULT[i] === 2.5 ? 'two and a half times' : 'three times'} as much.`,
+          visual: `${name} on every one of them, out on the horizon.`,
+          question: `Worth it once you have plenty of them.`,
           unlock: (s) => (s.buildings[b.id] || 0) >= TIER_AT[i],
         });
       });
@@ -758,8 +759,8 @@ export const ACHIEVEMENTS = [
   { id: 'street-1000', name: 'A thousand front doors', emoji: '🏙️', blurb: 'Look after 1,000 people.', test: (s) => (s.buildings.client || 0) >= 1000 },
   { id: 'safes-500', name: 'Keys for everybody', emoji: '🗝️', blurb: 'Fit 500 key safes.', test: (s) => (s.buildings.keysafe || 0) >= 500 },
   { id: 'kit-full', name: 'Everything upgraded', emoji: '🧰', blurb: 'Own 60 upgrades in one run.', test: (s) => s.upgrades.length >= 60 },
-  { id: 'earn-1qa', name: 'A thousand billion billion', emoji: '💫', blurb: 'Earn a thousand billion billion pounds in one run.', test: (s) => s.runEarned >= 1e15 },
-  { id: 'earn-1sx', name: 'A trillion billion', emoji: '🌠', blurb: 'Earn a trillion billion pounds in one run.', test: (s) => s.runEarned >= 1e21 },
+  { id: 'earn-1qa', name: 'A million billion', emoji: '💫', blurb: 'Earn a million billion pounds in one run.', test: (s) => s.runEarned >= 1e15 },
+  { id: 'earn-1sx', name: 'A thousand billion billion', emoji: '🌠', blurb: 'Earn a thousand billion billion pounds in one run.', test: (s) => s.runEarned >= 1e21 },
   { id: 'expand-9', name: 'Red planet', emoji: '🔴', blurb: 'Reach Mars.', test: (s) => s.level >= 9 },
   { id: 'expand-12', name: 'Further still', emoji: '✨', blurb: 'Go three stages past Mars.', test: (s) => s.level >= 12 },
   { id: 'stars-250', name: 'A whole sky', emoji: '🌌', blurb: 'Earn 250 Legacy Stars.', test: (s) => s.starsEarned >= 250 },
@@ -767,7 +768,7 @@ export const ACHIEVEMENTS = [
   { id: 'legacy-3', name: 'The name goes further', emoji: '🌟', blurb: 'Buy three of the endless Legacy perks.', test: (s) => s.perks.filter((id) => /^legacy-/.test(id)).length >= 3 },
   { id: 'expand-16', name: 'Out past the last light', emoji: '🌌', blurb: 'Reach the seventh stage past Mars.', test: (s) => s.level >= 16 },
   { id: 'expand-20', name: 'No end to it', emoji: '♾️', blurb: 'Reach the eleventh stage past Mars.', test: (s) => s.level >= 20 },
-  { id: 'earn-1no', name: 'A billion billion billion', emoji: '🪐', blurb: 'Earn a billion billion billion pounds in one run.', test: (s) => s.runEarned >= 1e30 },
+  { id: 'earn-1no', name: 'A thousand billion billion billion', emoji: '🪐', blurb: 'Earn a thousand billion billion billion pounds in one run.', test: (s) => s.runEarned >= 1e30 },
   { id: 'clicks-25k', name: 'Still on the round', emoji: '🤲', blurb: 'Do 25,000 visits yourself.', test: (s) => s.clicks >= 25000 },
   { id: 'far-kit', name: 'Kitted out past Mars', emoji: '✨', blurb: 'Buy kit for four of the things out past the starship.', test: (s) => s.upgrades.filter((id) => /^beyond-\d+-t/.test(id)).length >= 4 },
   { id: 'stars-500', name: 'Half a thousand stars', emoji: '⭐', blurb: 'Earn 500 Legacy Stars.', test: (s) => s.starsEarned >= 500 },

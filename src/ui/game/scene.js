@@ -889,10 +889,10 @@ export function createScene(canvas, { onCoin } = {}) {
     };
     const last = world.houses[world.houses.length - 1];
     const moreDoors = Math.max(0, world.homes - world.houses.length);
-    if (last && moreDoors > 0) chip(`+${fmtCount(moreDoors)} more doors`, Math.min(W - 52, last.x + 44), pavementY() - 58);
+    if (last && moreDoors > 0) chip(moreDoors === 1 ? '+1 more door' : `+${fmtCount(moreDoors)} more doors`, Math.min(W - 52, last.x + 44), pavementY() - 58);
     const drawnCarers = Math.max(0, world.agents.length - 1);
     const moreCarers = Math.max(0, (world.teamSize || 0) - drawnCarers);
-    if (moreCarers > 0) chip(`+${fmtCount(moreCarers)} on the round`, officeX() + 46, pavementY() + 26);
+    if (moreCarers > 0) chip(moreCarers === 1 ? '+1 more on the round' : `+${fmtCount(moreCarers)} on the round`, officeX() + 46, pavementY() + 26);
   }
 
   /**

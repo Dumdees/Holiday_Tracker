@@ -1,15 +1,16 @@
-// Friendly big numbers for the game: £1,234 → £1.23 million → £4.5 trillion billion.
+// Friendly big numbers for the game: £1,234 → £1.23 million → £4.5 million billion.
 //
-// Past a thousand trillion the proper names are ones nobody has ever said out loud – and worse,
-// half of them look alike, so "£40.5 sextillion" and "£51.1 quintillion" sitting on the same row
-// cannot be told apart at a glance. So the big ones are counted in billions instead, stacked: one
-// more "billion" always means a thousand million times bigger, and two numbers can be compared just
-// by counting the word.
-const NAMES = ['', 'thousand', 'million', 'billion', 'trillion'];
+// Past a thousand billion the proper names are ones nobody has ever said out loud – and worse, half
+// of them look alike, so "£40.5 sextillion" and "£51.1 quintillion" sitting on the same row cannot be
+// told apart at a glance. So the big ones are counted in billions instead, stacked: one more
+// "billion" always means a thousand million times bigger, and two numbers can be compared just by
+// counting the word. Only thousand, million and billion are ever used, so there are never two
+// different systems on one screen to weigh against each other.
+const NAMES = ['', 'thousand', 'million', 'billion'];
 const BILLION = 1e9;
-const STACK_FROM = 1e15;      // where the names people know run out
+const STACK_FROM = 1e12;      // where the names people know run out
 
-/** Anything up to a thousand trillion, in the words everybody knows. */
+/** Anything up to a thousand billion, in the three words everybody knows. */
 function inWordsWeKnow(n, digits) {
   if (n < 1000) return n < 10 && !Number.isInteger(n) ? n.toFixed(1).replace(/\.0$/, '') : Math.floor(n).toLocaleString('en-GB');
   if (n < 1e6) return Math.floor(n).toLocaleString('en-GB');
@@ -89,5 +90,21 @@ export function fmtTimes(mult) {
 export function fmtPrice(n, income) {
   const money = fmtMoney(n, { short: true });
   if (money.length <= 22 || !(income > 0)) return money;
-  return `${fmtSeconds(n / income)} of takings`;
+  return fmtTakings(n / income);
+}
+
+/** A price said as how long it would take you to earn it, in words rather than on a stopwatch. */
+export function fmtTakings(seconds) {
+  if (!Number.isFinite(seconds)) return 'more than you will ever have';
+  if (seconds < 1) return 'pocket change';
+  if (seconds < 20) return 'a few seconds’ takings';
+  if (seconds < 90) return 'about a minute’s takings';
+  if (seconds < 20 * 60) return `about ${Math.max(2, Math.round(seconds / 60))} minutes’ takings`;
+  if (seconds < 45 * 60) return 'about half an hour’s takings';
+  if (seconds < 90 * 60) return 'about an hour’s takings';
+  if (seconds < 20 * 3600) return `about ${Math.round(seconds / 3600)} hours’ takings`;
+  if (seconds < 36 * 3600) return 'about a day’s takings';
+  if (seconds < 10 * 86400) return `about ${Math.round(seconds / 86400)} days’ takings`;
+  if (seconds < 60 * 86400) return `about ${Math.round(seconds / (7 * 86400))} weeks’ takings`;
+  return 'far more than you earn';
 }

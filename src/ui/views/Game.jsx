@@ -40,7 +40,7 @@ function fmtPaybackAs(seconds, lead) {
   if (seconds < 90) { const n = Math.max(1, Math.round(seconds)); return `${lead} ${n} second${n === 1 ? '' : 's'}`; }
   if (seconds < 5400) return `${lead} about ${Math.round(seconds / 60)} minutes`;
   if (seconds < 60 * 3600) return `${lead} about ${Math.round(seconds / 3600)} hours`;
-  return 'too dear for now – save up for it';
+  return 'it would take for ever to pay for itself';
 }
 
 /** Why something shows no payback time – never "saves a job" unless it really does. */
@@ -79,14 +79,25 @@ function listNames(names) {
  * bar counts how many times they have doubled – but "37% of the doublings" is not something anybody
  * can picture, so it says it the way you would say it out loud.
  */
+function bigJumpsLeft(outlook) {
+  const earned = Math.max(outlook.earned, 1);
+  return Math.max(0, Math.ceil(Math.log2(outlook.target / earned)));
+}
+
+/** The last few jumps, so the bar and the words beside it are drawn from the same counting. */
+const JUMPS_SHOWN = 8;
+function barFill(outlook) {
+  if (outlook.fraction >= 1) return 1;
+  return 1 - Math.min(bigJumpsLeft(outlook), JUMPS_SHOWN) / JUMPS_SHOWN;
+}
+
 function howFar(outlook) {
   if (outlook.fraction >= 1) return 'you have done it';
   // Counted in how many times the takings still have to double, not as a share of the money. A share
   // of the money reads as "nearly there" when you have six thousand pounds of a hundred and twenty
   // thousand, because the last double is most of the money – and that is a lie to anybody reading
   // the figure printed next to it.
-  const earned = Math.max(outlook.earned, 1);
-  const jumps = Math.max(0, Math.ceil(Math.log2(outlook.target / earned)));
+  const jumps = bigJumpsLeft(outlook);
   if (jumps <= 1) return 'one more big jump';
   if (jumps <= 2) return 'two more big jumps';
   if (jumps <= 3) return 'three more big jumps';
@@ -266,7 +277,7 @@ export function Game() {
         <h2>Welcome back!</h2>
         <p class="soft">Your team kept going while you were away for {fmtSeconds(away.seconds)}: <strong>{fmtNum(Math.floor(away.visits))} visits</strong> worth <strong>{fmtMoney(away.earned)}</strong>{away.efficiency < 1 ? ' (at half speed – the on-call phone makes it faster)' : ''}. It is already in the bank.</p>
         {away.handovers ? (
-          <p class="soft">The team handed the patch over <strong>{away.handovers === 1 ? 'once' : `${away.handovers} times`}</strong> while you were away, and earned <strong>{away.stars} Legacy {away.stars === 1 ? 'Star' : 'Stars'}</strong>. You are on {levelInfo(game.value.level).name.toLowerCase()} now.</p>
+          <p class="soft">The team handed the patch over <strong>{away.handovers === 1 ? 'once' : `${away.handovers} times`}</strong> while you were away, and earned <strong>{away.stars} Legacy {away.stars === 1 ? 'Star' : 'Stars'}</strong>. You are up to {levelInfo(game.value.level).name} now.</p>
         ) : away.reach >= 0.15 ? <p class="soft">That is <strong>{away.reach >= 0.75 ? 'most of the way' : away.reach >= 0.55 ? 'about halfway' : away.reach >= 0.35 ? 'about a third of the way' : 'a good start'}</strong> to {G.nextLevel(game.value).name}.</p> : null}
         <div class="modal-actions"><Button variant="primary" onClick={() => close()}>Lovely</Button></div>
       </div>
@@ -413,7 +424,7 @@ export function Game() {
             {u.blurb}<br /><br />
             {u.question}<br /><br />
             <span class="muted">You will see: {u.visual}</span><br /><br />
-            <strong>{gainLine(u)}{fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}</strong>
+            <strong>{gainLine(u)}{(fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)).replace(/^./, (c) => c.toUpperCase())}.</strong>
           </>
         ),
         confirmLabel: `Buy for ${fmtMoney(u.cost, { short: true })}`, icon: 'zap',
@@ -490,7 +501,7 @@ export function Game() {
           <div class="world-hud" ref={hudRef}>
             <div class="game-funds-main">{fmtMoney(s.funds, { short: narrow })}</div>
             <div class="world-rate">{fmtRate(rate, { short: narrow })} · {fmtMoney(perClick, { short: narrow })} per visit</div>
-            {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? tapShare >= 0.5 ? 'more than half of what you earn' : tapShare >= 0.25 ? 'a good part of what you earn' : tapShare >= 0.08 ? 'a fair bit of what you earn' : 'a small part of what you earn' : 'worth little yet – knocking upgrades change that'}</div> : null}
+            {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? tapShare >= 0.5 ? 'more than half of what you earn' : tapShare >= 0.25 ? 'a good part of what you earn' : tapShare >= 0.08 ? 'a fair bit of what you earn' : 'a small part of what you earn' : 'worth little yet – the upgrades about your own visits change that'}</div> : null}
           </div>
           <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
           {activeEffects.length ? (
@@ -559,7 +570,7 @@ export function Game() {
             </div>
             {s.prismaticHires.length ? (
               <p class="team-shifts">🌈 Shifts the team still talks about: {listNames(s.prismaticHires)}. Everybody picked something up
-                {' '}– everything earns {fmtPercent(1 + 0.03 * s.prismaticHires.length)} because of them.</p>
+                {' '}– everything earns a little more because of them.</p>
             ) : null}
             {s.log.length ? <ul class="game-log">{s.log.slice(0, 4).map((l, i) => <li key={i}><span>{l.emoji}</span> {l.text}</li>)}</ul> : null}
           </Card>
@@ -577,7 +588,7 @@ export function Game() {
               </ul>
             ) : null}
             {rating.next ? (
-              <p class="muted small">Coordinators, supervisors, academies and the quality upgrades all count towards your rating. Buy {fmtNum(rating.next.score - rating.score)} points' worth more to be rated {rating.next.name.toLowerCase()}.</p>
+              <p class="muted small">Coordinators, supervisors, academies and the quality upgrades all count towards your rating. Take on more of them to be rated {rating.next.name}.</p>
             ) : <p class="muted small">There is nothing above this. Everybody knows it.</p>}
           </Card>
         </div>
@@ -657,16 +668,16 @@ export function Game() {
               <p class="soft">{outlook.fraction >= 1
                 ? 'You have earned enough to hand this patch over whenever you like. You start again with a small round, keep every badge, and unlock bigger things to buy.'
                 : `Earn ${fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.`}</p>
-              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.progress * 100)}%` }} /></div>
+              <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(barFill(outlook) * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, barFill(outlook) * 100)}%` }} /></div>
               <div class="row-between">
                 <span class="muted" title={`${fmtMoney(outlook.earned)} of ${fmtMoney(outlook.target)}`}>{fmtMoney(outlook.earned)} earned so far</span>
-                <strong>{howFar(outlook)}</strong>
+                <strong title="A big jump is your takings doubling.">{howFar(outlook)}</strong>
               </div>
               {outlook.fraction >= 1 ? (
                 <p class="small mt expand-slow">
                   You have done it. Hand over now, or stay on a while – the longer you leave it, the more
                   Legacy Stars you get, and everything you earn from now on goes up a little too.
-                  {s.stayBonus > 0 ? <> Staying on has earned you <strong>{fmtPercent(1 + s.stayBonus)} on everything, for good</strong>.</> : null}
+                  {s.stayBonus > 0 ? <> Staying on has made everything you earn <strong>{fmtTimes(1 + s.stayBonus)}</strong>, for good.</> : null}
                 </p>
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
@@ -690,7 +701,7 @@ export function Game() {
           ) : null}
 
           {rightTab === 'stars' ? (
-            <Card title="Legacy Stars" icon="star" subtitle={`${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · they make everything ${fmtTimes(G.starBonus(s.starsEarned))}, for good`}>
+            <Card title="Legacy Stars" icon="star" subtitle={s.starsEarned ? `${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · they make everything ${fmtTimes(G.starBonus(s.starsEarned))}, for good` : 'None yet. Hand a patch over and they start making everything better, for good.'}>
               <ul class="perk-list">
                 {G.perkList(s).map((p) => (
                   <li key={p.id} class={`perk ${p.owned ? 'owned' : p.affordable ? 'affordable' : ''}`}>

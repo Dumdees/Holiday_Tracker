@@ -668,8 +668,9 @@ test('friendly numbers', () => {
   // thousand million times bigger, and two numbers can be compared by counting the word.
   assert.equal(fmtMoney(1e15), '£1 million billion');
   assert.equal(fmtMoney(1e18), '£1 billion billion');
-  assert.equal(fmtMoney(4.05e22), '£40.5 trillion billion');
-  assert.ok(!/illion/.test(fmtMoney(1e33).replace(/billion|million|trillion/g, '')), 'no names nobody uses');
+  assert.equal(fmtMoney(4.05e22), '£40,500 billion billion');
+  assert.ok(!/illion/.test(fmtMoney(1e33).replace(/billion|million/g, '')), 'only the words everybody knows');
+  assert.ok(!/trillion/.test(fmtMoney(3e12)), 'not even trillion – two systems on one screen cannot be compared');
   const big = fmtMoney(1e30), bigger = fmtMoney(1e33);
   const count = (s) => s.split('billion').length - 1;
   assert.ok(count(bigger) >= count(big), 'a bigger number never has fewer billions in it');
