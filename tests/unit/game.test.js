@@ -95,8 +95,9 @@ describe('what makes things better', () => {
     const one = g.buildingRate(s, 'carer');
     const nine = g.buildingRate({ ...s, buildings: { ...s.buildings, carer: 9 } }, 'carer');
     assert.ok(Math.abs(one / nine - 2) < 1e-9, 'the tenth carer doubles every carer');
-    assert.equal(g.milestonesPassed(5000), MILESTONES.length + 1, 'they carry on past the table');
-    assert.ok(g.nextMilestone(5000).at > 5000, 'and there is another one coming');
+    const past = MILESTONES[MILESTONES.length - 1] * 2;
+    assert.equal(g.milestonesPassed(past), MILESTONES.length + 1, 'they carry on past the table');
+    assert.ok(g.nextMilestone(past).at > past, 'and there is another one coming');
     assert.equal(g.milestonesPassed(1e9), MILESTONES.length + g.MILESTONES_BEYOND, 'but they do stop');
     assert.equal(g.milestoneFactor(s), 2);
     assert.equal(g.milestoneFactor({ ...s, upgrades: ['mile-1'] }), 2.2);
@@ -357,8 +358,9 @@ describe('handing over', () => {
     assert.ok(g.expandRequirement(s) >= LEVELS[1].threshold);
     // The finish line is worked out when the run starts and never moves again, so the bar cannot go
     // backwards and a lucky rainbow cannot push it away.
-    assert.equal(g.runTargetFor(6, 0, 1e12), 1e12 * g.RUN_BEAT, 'six times what the last run was asked for');
-    assert.equal(g.runTargetFor(3, 0, 1e12), 1e12 * g.RUN_BEAT_EARLY, 'and rather more while the stages are still short');
+    assert.equal(g.runTargetFor(12, 0, 1e12), 1e12 * g.RUN_BEAT, 'six times what the last run was asked for');
+    assert.ok(g.runTargetFor(3, 0, 1e12) > 1e12 * g.RUN_BEAT, 'and rather more while the stages are still short');
+    assert.ok(g.runTargetFor(3, 0, 1e12) < g.runTargetFor(0, 0, 1e12), 'easing back as the stages go up');
     assert.equal(g.runTargetFor(3, 1e10, 0), 1e10 * g.RUN_SECONDS, 'or two minutes at the last run’s best rate');
     assert.equal(g.runTargetFor(0, 0, 0), LEVELS[1].threshold, 'or the stage figure, at the very start');
     const mid = { ...g.newGame(T0), level: 3, runTarget: 5e9, runEarned: 1e9 };
@@ -372,8 +374,10 @@ describe('handing over', () => {
     assert.ok(g.starBonus(0) === 1 && g.starBonus(50) > 1.5);
     const r = g.expand(s, T0 + 1000);
     assert.equal(r.level, 1);
-    // What the run earned beyond its figure comes with you, up to twice the figure itself.
-    assert.equal(s.funds, Math.min(6e5 - 1.2e5, 1.2e5 * 2));
+    // What the run earned beyond its figure comes with you, but only a minute and a half of what
+    // the new round earns – any more and the old patch's money buys the whole ladder at once.
+    assert.ok(s.funds > 0 && s.funds <= g.CARRY_SECONDS * g.steadyIncome(s) + 1e-6, `carried ${s.funds}`);
+    assert.ok(s.funds <= 6e5 - 1.2e5, 'and never more than the run actually overshot by');
     assert.deepEqual(s.upgrades, []);
     assert.deepEqual(s.buildings, g.startingKit(1), 'you keep a little round to start again with');
     assert.ok(g.productionPerSecond(s, T0 + 1000) > 0, 'a new run is never dead');

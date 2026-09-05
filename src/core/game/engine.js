@@ -33,9 +33,10 @@ const STAGE_BONUS = 1.6;          // what reaching a stage is worth, for ever
 const COST_EASE_AT = 1000;        // after this many, prices climb more gently so they stay finite
 const COST_GROWTH_LATE = 1.04;
 /** One visit of your own is never worth more than this much of a second's takings. */
-export function clickShareCap(level) { return 0.1 + 0.03 * level; }
+export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level); }
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
+export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
 export const BRANCH_RETHINK = 3;   // how often a hand-over reopens what you are known for
 export const TAPS_A_SECOND = 2;    // what a brisk round of door-knocking looks like, for scoring
 
@@ -335,11 +336,21 @@ export function conditionShare(u, state, m) {
 }
 
 /** How much of the total a scaling branch is worth right now. */
-function scalingBonus(state, u) {
+export const SETTLE_IN = 300;      // how long a patch takes to get to know you, in seconds
+export const SETTLE_FROM = 0.4;    // and what the scaling choices pay before it does
+
+/**
+ * What a scaling choice is worth: the more of the thing you own, and the longer you have stayed on
+ * this patch. Reputation takes time to build, so these reward seeing a run through where the flat
+ * choices pay everything they are going to pay in the first minute.
+ */
+function scalingBonus(state, u, now = Date.now()) {
   const froms = Array.isArray(u.from) ? u.from : [u.from];
   let count = 0;
   for (const f of froms) count += state.buildings[f] || 0;
-  return Math.min(u.cap, u.per * count);
+  const settled = Math.max(0, (now - (state.runStartedAt || now)) / 1000) / SETTLE_IN;
+  const ramp = SETTLE_FROM + (1 - SETTLE_FROM) * Math.min(1, settled);
+  return Math.min(u.cap, u.per * count) * ramp;
 }
 
 /** Everything that multiplies all income: upgrades, conditions, rating, morale, stars, effects. */
@@ -349,7 +360,7 @@ export function globalMultiplier(state, now = Date.now(), m = boardMetrics(state
     if (u.kind === 'global') mult *= u.mult;
     else if (u.kind === 'conditional') mult *= 1 + (u.mult - 1) * conditionShare(u, state, m);
     else if (u.kind === 'branch-council') mult *= u.mult;
-    else if (u.kind === 'branch-scaling') mult *= u.mult * (1 + scalingBonus(state, u));
+    else if (u.kind === 'branch-scaling') mult *= u.mult * (1 + scalingBonus(state, u, now));
   }
   mult *= RATINGS[m.ratingIndex].mult;
   mult *= Math.pow(STAGE_BONUS, state.level);   // every stage you have reached, for ever
@@ -577,7 +588,13 @@ export function nextLockedBuilding(state) {
 }
 
 export function availableUpgrades(state) {
-  return upgradesFor(state.level).filter((u) => !state.upgrades.includes(u.id) && u.unlock(state));
+  return upgradesFor(state.level).filter((u) => {
+    if (state.upgrades.includes(u.id) || !u.unlock(state)) return false;
+    // A bigger share of your own visits is worth nothing once the share is at its limit for this
+    // stage, so it is not put on the shelf pretending otherwise.
+    if (u.kind === 'clickpct' && !(clickShareGain(state, u) > 0)) return false;
+    return true;
+  });
 }
 
 /**
@@ -605,7 +622,7 @@ export function upgradeShop(state, now = Date.now(), limit = 12) {
   // Two places are kept for the things that do a job rather than earn – the office admin, the
   // on-call phone, a share of your own visits – so a whole kind of upgrade is never pushed off the
   // shelf by things with a payback time.
-  const quiet = all.filter((u) => !(u.gain > 0)).slice(0, 2);
+  const quiet = all.filter((u) => !(u.gain > 0) && u.kind !== 'discount').slice(0, 2);
   let rest = all.filter((u) => !quiet.includes(u));
   // Pennies are folded away with the outgrown rungs. A shelf half full of things worth a hundredth
   // of a percent reads as a shelf with nothing on it, however cheap they are. The bar is raised as
@@ -799,10 +816,10 @@ export function nextLevel(state) {
 export const RUN_SECONDS = 420;
 /** ...and this many times what the last run was asked for, so the stages lengthen a little each time. */
 export const RUN_BEAT = 6;
-/** The first few stages ask for rather more, so they last long enough to learn anything. */
+/** What the earliest stages ask for instead, easing back to the figure above by stage eight. */
 export const RUN_BEAT_EARLY = 9;
 /** ...and never more than this many times, however far a lucky run overshot. */
-export const RUN_BEAT_MAX = 200;
+export const RUN_BEAT_MAX = 25;
 /** How hard the printed prices climb as the runs get bigger. 1 keeps them exactly in step. */
 export const PRICE_CLIMB = 0.4;
 const FIRST_TARGET = 1.2e5;
@@ -816,9 +833,9 @@ const FIRST_TARGET = 1.2e5;
  */
 export function runTargetFor(level, lastPeak, lastTarget) {
   const first = lastTarget || lastPeak ? 0 : levelInfo(1).threshold;   // only the very first run
-  // The first few stages ask for more, so a new player is not wiping the board every ninety
-  // seconds before they have worked out what any of it does.
-  const beat = level < 5 ? RUN_BEAT_EARLY : RUN_BEAT;
+  // The early stages ask for more, easing back as the runs get long enough on their own, so a new
+  // player is not wiping the board every ninety seconds before they know what any of it does.
+  const beat = Math.max(RUN_BEAT, RUN_BEAT_EARLY - level * 0.4);
   const byTarget = (lastTarget || 0) * beat;
   const byPeak = (lastPeak || 0) * RUN_SECONDS;
   // A run that overshoots hugely would otherwise set the next one an impossible figure, so the
@@ -927,10 +944,7 @@ export function expand(state, now = Date.now()) {
   const peak = Math.max(state.runPeak || 0, steadyIncome(state));
   const bestRun = Math.max(state.bestRun || 0, state.runEarned);
   const level = state.level + 1;
-  // Anything the run earned beyond what it was asked for comes with you, up to twice the figure
-  // itself – so a night away, or a run you left going, is money in the new patch's pocket rather
-  // than money thrown in the bin.
-  const banked = Math.min(Math.max(0, state.runEarned - expandRequirement(state)), expandRequirement(state) * 2);
+  const overshoot = Math.max(0, state.runEarned - expandRequirement(state));
   const keep = {
     startedAt: state.startedAt, lifetimeEarned: state.lifetimeEarned, achievements: state.achievements,
     bestRun, level, starsEarned: state.starsEarned + gained, starsSpent: state.starsSpent,
@@ -939,7 +953,6 @@ export function expand(state, now = Date.now()) {
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
     // The next run's finish line, worked out now and left alone until it is crossed.
     lastPeak: peak, runPeak: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)), pace: [],
-    funds: banked,
     // What you are known for is a decision about the agency, not about one round, so it stays with
     // you. Every third hand-over it is opened up again, in case you want to be known for something
     // else now the patch is bigger.
@@ -950,6 +963,10 @@ export function expand(state, now = Date.now()) {
   const kit = startingKit(state.level);
   state.buildings = { ...state.buildings, ...kit };
   applyStartPerks(state);
+  // Anything the run earned beyond what it was asked for comes with you – but only a minute and a
+  // half of what the new round earns. Any more and the money from the old patch buys the whole
+  // ladder in the first few seconds, and the new patch is over before it has started.
+  state.funds = Math.min(overshoot, CARRY_SECONDS * steadyIncome(state));
   addLog(state, levelInfo(state.level).emoji, `Handed over and grew to ${levelInfo(state.level).name.toLowerCase()} – ${gained} Legacy ${gained === 1 ? 'Star' : 'Stars'} earned`, now);
   return { gained, level: state.level, kit };
 }

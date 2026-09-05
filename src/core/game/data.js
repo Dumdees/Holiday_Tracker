@@ -14,7 +14,7 @@
 export const COST_GROWTH = 1.15;
 
 /** Owning this many of something doubles what each one does. "The tenth" and onwards. */
-export const MILESTONES = [10, 25, 50, 100, 200, 400, 700, 1000, 1500, 2500];
+export const MILESTONES = [10, 25, 50, 75, 100, 140, 180, 230, 300, 400];
 
 /** The two sides of the business. */
 export const SIDES = {
@@ -66,9 +66,13 @@ const BEYOND_BLURBS = [
 export const BEYOND_PER_LEVEL = 2;
 export function beyondBuilding(n) {
   const last = BUILDINGS[BUILDINGS.length - 1];
-  const name = `${BEYOND_NAMES[(n - 1) % BEYOND_NAMES.length]}${n > BEYOND_NAMES.length ? ` ${Math.ceil(n / BEYOND_NAMES.length)}` : ''}`;
+  const base = BEYOND_NAMES[(n - 1) % BEYOND_NAMES.length];
+  const round = n > BEYOND_NAMES.length ? Math.ceil(n / BEYOND_NAMES.length) : 0;
+  // "Colony ward 2" pluralises as "Colony wards 2", not "Colony ward 2s".
+  const name = round ? `${base} ${round}` : base;
+  const plural = round ? `${base}s ${round}` : `${base}s`;
   return {
-    id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural: `${name}s`, emoji: n % 2 ? '🪐' : '✨',
+    id: `beyond-${n}`, side: n % 2 ? 'work' : 'team', name, plural, emoji: n % 2 ? '🪐' : '✨',
     baseCost: last.baseCost * Math.pow(8, n), rate: last.rate * Math.pow(4, n),
     level: 9 + Math.ceil(n / BEYOND_PER_LEVEL),
     blurb: BEYOND_BLURBS[(n - 1) % BEYOND_BLURBS.length],
@@ -301,16 +305,16 @@ export const BRANCHES = [
     slot: 'buyer', name: 'Who do you work for?', emoji: '🤝', level: 1,
     blurb: 'Most of your work is going to come from one place. Which?',
     options: [
-      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.9, blurb: 'Everything earns 90% more.', question: 'Flat, simple, and worth the most in the first few minutes of every run.' },
+      { id: 'buyer-private', name: 'Private clients', emoji: '💷', kind: 'global', mult: 1.55, blurb: 'Everything earns 55% more.', question: 'Flat, simple, and the most you can earn in the first few minutes of a run.' },
       { id: 'buyer-council', name: 'The council framework', emoji: '🏛️', kind: 'branch-council', mult: 1.45, discount: 0.45, blurb: 'Everything earns 45% more, and taking on work costs 55% less.', question: 'Cheaper work means more of it – best if you buy in bulk.' },
-      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.55, per: 0.05, from: 'chc', cap: 6, blurb: 'Everything earns 55% more, plus 5% for every NHS-funded package, up to +600%.', question: 'Nothing to begin with, more than anything else by the end of a long run.' },
+      { id: 'buyer-nhs', name: 'NHS packages', emoji: '🩺', kind: 'branch-scaling', mult: 1.5, per: 0.012, from: ['package', 'chc'], cap: 6, blurb: 'Everything earns 50% more, plus 1.2% for every care package you run, and every NHS-funded one counts too, up to +600%. The longer you stay on a patch, the more of it you get.', question: 'Least of the three for the first few minutes, most of them by the end of a long run.' },
     ],
   },
   {
     slot: 'growth', name: 'How do you grow?', emoji: '🌱', level: 3,
     blurb: 'Everybody grows differently. What is your way?',
     options: [
-      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.25, per: 0.02, from: 'carer', cap: 5, blurb: 'Everything earns 25% more, plus 2% for every carer, up to +500%.', question: 'Grows with the team and nothing else. Keep hiring and nothing beats it.' },
+      { id: 'grow-people', name: 'More hands', emoji: '👥', kind: 'branch-scaling', mult: 1.15, per: 0.02, from: 'carer', cap: 5, blurb: 'Everything earns 15% more, plus 2% for every carer, up to +500%. The longer you stay on a patch, the more of it you get.', question: 'Slow to start and nothing beats it late. Best when you mean to stay on this patch a while.' },
       { id: 'grow-kit', name: 'Better kit', emoji: '🧰', kind: 'branch-council', discountSide: 'team', mult: 1.8, discount: 0.3, blurb: 'Everything earns 80% more, and carers, key safes, cars and offices all cost 70% less.', question: 'Not a bonus but a discount: everything on the team side costs 70% less, for ever.' },
       { id: 'grow-rates', name: 'Better rates', emoji: '📈', kind: 'value', mult: 2.4, clickBoost: 3, blurb: 'Every visit is worth 140% more, and your own visits are worth three times as much again.', question: 'Flat, immediate, and the only one that rewards tapping doors yourself.' },
     ],
@@ -319,9 +323,9 @@ export const BRANCHES = [
     slot: 'known', name: 'What are you known for?', emoji: '🏅', level: 5,
     blurb: 'Every good agency is known for something.',
     options: [
-      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.5, per: 0.01, from: 'client', cap: 5, blurb: 'Everything earns 50% more, plus 1% for everybody you look after, up to +500%.', question: 'Rewards a long client list and life story work – the longer the better.' },
+      { id: 'known-dementia', name: 'Dementia care', emoji: '🧠', kind: 'branch-scaling', mult: 1.35, per: 0.01, from: 'client', cap: 5, blurb: 'Everything earns 35% more, plus 1% for everybody you look after, up to +500%. The longer you stay on a patch, the more of it you get.', question: 'Rewards a long client list and life story work – the longer the better.' },
       { id: 'known-reablement', name: 'Reablement', emoji: '🌤️', kind: 'branch-council', mult: 2.6, discount: 0.4, blurb: 'Everything earns 160% more, and taking on work costs 60% less.', question: 'Short, intensive, and people leave you better than they arrived. Best on a quick run.' },
-      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.55, per: 0.05, from: ['chc', 'nurse'], cap: 6, blurb: 'Everything earns 55% more, plus 5% for every NHS package and nurse-led team, up to +600%.', question: 'The hardest work, and nothing else climbs as high.' },
+      { id: 'known-complex', name: 'Complex care', emoji: '🧑‍⚕️', kind: 'branch-scaling', mult: 1.6, per: 0.05, from: ['chc', 'nurse'], cap: 6, blurb: 'Everything earns 60% more, plus 5% for every NHS package and nurse-led team, up to +600%. The longer you stay on a patch, the more of it you get.', question: 'The hardest work, and nothing else climbs as high.' },
     ],
   },
 ];
@@ -467,8 +471,8 @@ export function stageUpgrades(level) {
       blurb: 'Your own visits earn another 1% of the team’s income every second.', question: 'Cheap, and it keeps your own tapping worth doing.',
       visual: 'Your own carer keeps walking the round with everybody else.' },
     { key: 'syn', seconds: 5.5, name: 'Whatever you have most of', emoji: settled.emoji, kind: 'synergy', archetype: 'synergy',
-      fromSide: side, to: `*${side}`, per: 0.0025, cap: 4,
-      blurb: `Whichever part of your ${side} you own most of makes all the rest 0.25% better for each one, up to +400%.`,
+      fromSide: side, to: `*${side}`, per: 0.01, cap: 2,
+      blurb: `Whichever part of your ${side} you own most of makes all the rest 1% better for each one, up to +200%.`,
       question: `Grows with your biggest ${side} rung, so it keeps paying more all run rather than topping out early.`,
       visual: 'The thing you have the most of, everywhere you look.' },
     { key: 'team', seconds: 8, name: 'The whole team lifts', emoji: '👥', kind: 'side', archetype: 'synergy', side: 'team', flat: 0.6,

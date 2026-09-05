@@ -422,7 +422,7 @@ export function Game() {
           <div class="world-hud" ref={hudRef}>
             <div class="game-funds-main">{fmtMoney(s.funds, { short: narrow })}</div>
             <div class="world-rate">{fmtRate(rate)} · {fmtMoney(perClick)} per visit</div>
-            <div class="world-taps">Your own visits: {tapShare >= 0.005 ? `${Math.round(tapShare * 100)}% of everything you earn` : 'worth little yet – knocking upgrades change that'}</div>
+            {rate > 0 ? <div class="world-taps">Your own visits: {tapShare >= 0.005 ? `${Math.round(tapShare * 100)}% of everything you earn` : 'worth little yet – knocking upgrades change that'}</div> : null}
           </div>
           <div class="world-level">{rating.emoji} {rating.name}{s.prismaticHires.length ? ` · ${s.prismaticHires.length} 🌈` : ''}</div>
           {activeEffects.length ? (
@@ -549,7 +549,9 @@ export function Game() {
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0
                           ? <>{gainWords(b.gain / b.income)}<span class="muted"> · {fmtPayback(b.payback, b.side)}</span></>
-                          : (metrics.team <= 0 ? 'nobody to do the visits yet – take on a carer first' : metrics.work <= 0 ? 'nobody to visit yet – take somebody on first' : 'earns nothing extra just now')}
+                          : (metrics.team <= 0 && b.side === 'work' ? 'nobody to do the visits yet – take on a carer first'
+                            : metrics.work <= 0 && b.side === 'team' ? 'nobody to visit yet – take somebody on first'
+                            : b.side === 'team' ? 'gets the visits started' : 'earns nothing extra just now')}
                         {b.milestone ? <span class="milestone-pip"> · {fmtNum(b.milestone.remaining)} more and every one is {b.milestoneFactor}× better</span> : null}
                       </span>
                     </span>
@@ -578,7 +580,7 @@ export function Game() {
               <p class="soft">Earn {fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.progress * 100)}%` }} /></div>
               <div class="row-between">
-                <span class="muted">{fmtMoney(outlook.earned)} of {fmtMoney(outlook.target)} earned</span>
+                <span class="muted" title={`${fmtMoney(outlook.earned)} of ${fmtMoney(outlook.target)}`}>{fmtMoney(outlook.earned)} earned so far</span>
                 <strong>{Math.floor(outlook.progress * 100)}% of the way</strong>
               </div>
               {outlook.fraction >= 1 ? (
@@ -586,7 +588,7 @@ export function Game() {
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
                   {outlook.seconds === null
-                    ? s.invoices > 0
+                    ? s.invoices > 0 && outlook.earned <= 0
                       ? 'Nothing counts towards this until the payments are collected – there is money waiting.'
                       : 'Just getting going – give it a minute and it will say how long this run should take.'
                     : Number.isFinite(outlook.seconds)
