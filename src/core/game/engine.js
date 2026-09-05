@@ -37,12 +37,11 @@ export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level);
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
 export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
-export const STAY_BONUS = 0.3;    // extra stars for every ten times over the finish line you go
-export const STAY_BONUS_MAX = 2;  // and never more than double, however long you stay
+export const STAY_BONUS = 1;    // extra stars for every ten times over the finish line you go
+export const STAY_BONUS_MAX = 5;  // and never more than five times, however long you stay
 export const STAY_LIFTS = 0.15;   // and a long stay lifts the next figure by this much of where you got to
 export const KEEPS_ITS_SYSTEMS = new Set(['admin', 'direct-debit', 'oncall']);
 export const CHIP_QTY = 10;        // the quantity the shop's Best value chip is judged at
-export const SMALL_CHANGE = 1e-6;  // below this share of the run's figure an upgrade is left behind
 export const BRANCH_RETHINK = 3;   // how often a hand-over reopens what you are known for
 export const TAPS_A_SECOND = 2;    // what a brisk round of door-knocking looks like, for scoring
 
@@ -55,7 +54,7 @@ export function tapShare(state, now = Date.now()) {
   const all = productionPerSecond(state, now) + tap;
   return all > 0 ? tap / all : 0;
 }
-export const MILESTONES_BEYOND = 3;   // how many more doublings there are past the printed table
+export const MILESTONES_BEYOND = 6;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
 export function newGame(now = Date.now()) {
@@ -218,7 +217,7 @@ function ownedUpgrades(state) {
 export function milestoneFactor(state) {
   let f = 2;
   for (const u of ownedUpgrades(state)) if (u.kind === 'milestone') f += u.add || 0.2;
-  return Math.min(4, f);      // every tenth is worth this much, and it stops at four
+  return Math.min(5, f);      // every tenth is worth this much, and it stops at five
 }
 
 /** How many milestones a count has passed, and what that is worth. */
@@ -618,18 +617,9 @@ export function nextLockedBuilding(state) {
   return BUILDINGS.find((b) => b.level > state.level) || null;
 }
 
-// Kinds of upgrade that a bigger patch simply leaves behind. Conditionals, quality and the things
-// that save you a job are never retired: they gate each other, and they are decisions rather than
-// steps on a ladder.
-const RETIRABLE = new Set(['kit', 'rate', 'click', 'discount', 'synergy', 'conditional', 'quality']);
-
 export function availableUpgrades(state) {
-  // Anything worth a millionth of what this run has to earn is small change on a patch this size.
-  // Without this the twentieth run opens with exactly the same nine purchases as the sixth.
-  const smallChange = expandRequirement(state) * SMALL_CHANGE;
   return upgradesFor(state.level).filter((u) => {
     if (state.upgrades.includes(u.id) || !u.unlock(state)) return false;
-    if (RETIRABLE.has(u.archetype) && !/^stage-\d+-/.test(u.id) && (u.cost || 0) < smallChange) return false;
     // A bigger share of your own visits is worth nothing once the share is at its limit for this
     // stage, so it is not put on the shelf pretending otherwise.
     if (u.kind === 'clickpct' && !(clickShareGain(state, u) > 0)) return false;

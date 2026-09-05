@@ -600,8 +600,14 @@ describe('the rule that everything you buy changes the street', () => {
         return 1;
       };
       const points = shelf.map(along);
-      for (let i = 1; i < points.length; i++) assert.ok(points[i] >= points[i - 1], 'they arrive in order');
-      assert.ok(points[0] <= 0.2 && points[points.length - 1] >= 0.85, 'spread across the whole run');
+      // Within each band of three the order is rotated by the stage, so a new stage does not read
+      // like the last one – but the bands themselves still arrive in order across the run.
+      for (let b = 3; b < points.length; b += 3) {
+        const before = Math.max(...points.slice(b - 3, b));
+        const after = Math.min(...points.slice(b, b + 3));
+        assert.ok(after >= before - 1e-9, 'the bands arrive in order');
+      }
+      assert.ok(Math.min(...points) <= 0.2 && Math.max(...points) >= 0.85, 'spread across the whole run');
       for (const u of shelf) assert.ok(u.visual && u.name && u.blurb && u.icon, `${u.id} is fully written`);
     }
     const far = { ...board(), level: LEVELS.length + 3, buildings: { carer: 400, client: 400, 'beyond-1': 200, 'beyond-2': 60, 'beyond-3': 20, 'beyond-4': 5 } };

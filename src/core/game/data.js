@@ -444,6 +444,20 @@ const runTargetOf = (s) => (s.runTarget > 0 ? s.runTarget : levelInfo(s.level + 
 const unlockedRungs = (s) => BUILDINGS.filter((b) => b.level <= s.level).length + Math.max(0, (s.level - 9) * BEYOND_PER_LEVEL);
 const FAR_KIT = ['Warm boxes', 'Quiet engines', 'Deep-space kettles'];
 
+/**
+ * The order the twelve arrive in at a given stage: the same four bands of three every time, with
+ * the three inside each band rotated by the stage number. Cheap things still come early and dear
+ * things late, so the pricing holds, but no two stages in a row read the same way.
+ */
+function shelfOrder(level) {
+  const out = [];
+  for (let band = 0; band < 4; band++) {
+    const turn = (level + band) % 3;
+    for (let i = 0; i < 3; i++) out.push(band * 3 + ((i + turn) % 3));
+  }
+  return out;
+}
+
 export function stageUpgrades(level) {
   if (STAGE_CACHE.has(level)) return STAGE_CACHE.get(level);
   const info = levelInfo(level);
@@ -514,7 +528,10 @@ export function stageUpgrades(level) {
 
   const out = shelf.map((item, i) => {
     const { key, seconds, ...rest } = item;
-    const along = 0.02 + (0.92 - 0.02) * (i / (shelf.length - 1));
+    // Which of the twelve turns up when is shuffled a little from stage to stage, within bands of
+    // three so the price and the moment still match, so a new stage does not arrive in exactly the
+    // order the last one did.
+    const along = 0.02 + (0.92 - 0.02) * (shelfOrder(level)[i] / (shelf.length - 1));
     return {
       ...rest,
       id: `stage-${level}-${key}`,
