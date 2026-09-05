@@ -37,7 +37,12 @@ export function clickShareCap(level) { return Math.min(0.9, 0.1 + 0.05 * level);
 export const PENNY_BARS = [0.05, 0.01, 0.005];   // shares of your income an upgrade has to clear
 export const SHELF_KEEP = 6;       // how many earning tiles a shelf should keep if it can
 export const CARRY_SECONDS = 25;   // how much of the new round's income a hand-over may carry over
-export const STAY_BONUS = 1;      // extra stars for every ten times over the finish line you go
+export const STAY_BONUS = 0.3;    // extra stars for every ten times over the finish line you go
+export const STAY_BONUS_MAX = 2;  // and never more than double, however long you stay
+export const STAY_LIFTS = 0.15;   // and a long stay lifts the next figure by this much of where you got to
+export const KEEPS_ITS_SYSTEMS = new Set(['admin', 'direct-debit', 'oncall']);
+export const CHIP_QTY = 10;        // the quantity the shop's Best value chip is judged at
+export const SMALL_CHANGE = 1e-6;  // below this share of the run's figure an upgrade is left behind
 export const BRANCH_RETHINK = 3;   // how often a hand-over reopens what you are known for
 export const TAPS_A_SECOND = 2;    // what a brisk round of door-knocking looks like, for scoring
 
@@ -50,7 +55,7 @@ export function tapShare(state, now = Date.now()) {
   const all = productionPerSecond(state, now) + tap;
   return all > 0 ? tap / all : 0;
 }
-export const MILESTONES_BEYOND = 8;   // how many more doublings there are past the printed table
+export const MILESTONES_BEYOND = 3;   // how many more doublings there are past the printed table
 
 /** A brand-new game. Every field the maths reads is set here, so nothing can ever be undefined. */
 export function newGame(now = Date.now()) {
@@ -213,7 +218,7 @@ function ownedUpgrades(state) {
 export function milestoneFactor(state) {
   let f = 2;
   for (const u of ownedUpgrades(state)) if (u.kind === 'milestone') f += u.add || 0.2;
-  return Math.min(6, f);      // every tenth is worth this much, and it stops at six
+  return Math.min(4, f);      // every tenth is worth this much, and it stops at four
 }
 
 /** How many milestones a count has passed, and what that is worth. */
@@ -613,9 +618,18 @@ export function nextLockedBuilding(state) {
   return BUILDINGS.find((b) => b.level > state.level) || null;
 }
 
+// Kinds of upgrade that a bigger patch simply leaves behind. Conditionals, quality and the things
+// that save you a job are never retired: they gate each other, and they are decisions rather than
+// steps on a ladder.
+const RETIRABLE = new Set(['kit', 'rate', 'click', 'discount', 'synergy', 'conditional', 'quality']);
+
 export function availableUpgrades(state) {
+  // Anything worth a millionth of what this run has to earn is small change on a patch this size.
+  // Without this the twentieth run opens with exactly the same nine purchases as the sixth.
+  const smallChange = expandRequirement(state) * SMALL_CHANGE;
   return upgradesFor(state.level).filter((u) => {
     if (state.upgrades.includes(u.id) || !u.unlock(state)) return false;
+    if (RETIRABLE.has(u.archetype) && !/^stage-\d+-/.test(u.id) && (u.cost || 0) < smallChange) return false;
     // A bigger share of your own visits is worth nothing once the share is at its limit for this
     // stage, so it is not put on the shelf pretending otherwise.
     if (u.kind === 'clickpct' && !(clickShareGain(state, u) > 0)) return false;
@@ -673,11 +687,20 @@ export function bottleneck(state, m = boardMetrics(state), now = Date.now()) {
   const income = productionPerSecond(state, now);
   const budget = Math.max(income * 60, 1);
   const worth = { work: 0, team: 0 };
+  // The row the shop puts its Best value chip on, so the advice can never point the other way.
+  let chip = null;
   for (const b of unlockedBuildings(state)) {
+    const offer = buildingOffer(state, b.id, CHIP_QTY, now, income);
+    if (offer.gain > 0 && offer.gain >= income * 0.005 && (!chip || offer.payback < chip.payback)) chip = { side: b.side, payback: offer.payback };
     const qty = maxAffordableFor(state, b.id, budget);
     if (!qty) continue;                       // only what a minute's takings would really buy
     const gain = buildingGain(state, b.id, qty, now, income);
     if (gain > worth[b.side]) worth[b.side] = gain;
+  }
+  // Where a minute's takings and the chip disagree, say nothing rather than argue with the shop.
+  if (chip && worth.work > 0 && worth.team > 0) {
+    const byBudget = worth.team > worth.work ? 'team' : 'work';
+    if (byBudget !== chip.side) { worth.work = 0; worth.team = 0; }
   }
   const ratio = m.team / m.work;
   // A plain description of the board, with no direction in it. The advice below is the only thing
@@ -955,7 +978,7 @@ export function canExpand(state) {
 export function stayingBonus(state) {
   const want = expandRequirement(state);
   if (!(want > 0) || !(state.runEarned > want)) return 1;
-  return 1 + STAY_BONUS * Math.log10(state.runEarned / want);
+  return Math.min(STAY_BONUS_MAX, 1 + STAY_BONUS * Math.log10(state.runEarned / want));
 }
 
 export function starsOnExpand(state) {
@@ -979,7 +1002,11 @@ function applyStartPerks(state) {
 export function expand(state, now = Date.now()) {
   if (!canExpand(state)) return null;
   const gained = starsOnExpand(state);
-  const peak = state.peakAtTarget || Math.max(state.runPeak || 0, steadyIncome(state));
+  // The next figure is set from what you were earning when the line was crossed, so overshooting
+  // does not raise it in proportion – but a long stay does lift it a little, so staying on is a
+  // trade rather than something for nothing.
+  const crossed = state.peakAtTarget || Math.max(state.runPeak || 0, steadyIncome(state));
+  const peak = Math.max(crossed, STAY_LIFTS * steadyIncome(state));
   const bestRun = Math.max(state.bestRun || 0, state.runEarned);
   const level = state.level + 1;
   const overshoot = Math.max(0, state.runEarned - expandRequirement(state));
@@ -989,6 +1016,8 @@ export function expand(state, now = Date.now()) {
     perks: state.perks, prismaticHires: state.prismaticHires, prismaticsMet: state.prismaticsMet,
     cardsOpened: state.cardsOpened, offlineReturns: state.offlineReturns, playedLate: state.playedLate,
     bestRating: state.bestRating || 0,
+    // The office does not forget how to run its own payroll because the patch got bigger.
+    upgrades: state.upgrades.filter((id) => KEEPS_ITS_SYSTEMS.has(id)),
     clicks: state.clicks, visits: state.visits, collections: state.collections, log: state.log,
     // The next run's finish line, worked out now and left alone until it is crossed.
     lastPeak: peak, runPeak: 0, peakAtTarget: 0, runTarget: runTargetFor(level, peak, expandRequirement(state)), pace: [],
@@ -1059,13 +1088,15 @@ export function clickSpawn(state, now = Date.now(), rng = Math.random) {
     state.prismaticsMet += 1;
     effect = pickWeighted(PRISMATIC_EFFECTS, rng);
     const early = (state.spawnsThisRun || 0) <= 2 && state.level === 0;   // the first two are gentle
-    if (effect.id === 'care-burst') amount = Math.max(25, Math.min(prod * (early ? 90 : 900), Math.max(state.funds * 0.15, prod * 120)));
+    // Held against what this run has to earn as well as against the rate, so a lucky week is a
+    // lovely moment rather than the thing that decides how far you get.
+    if (effect.id === 'care-burst') amount = Math.max(25, Math.min(prod * (early ? 90 : 900), Math.max(state.funds * 0.15, prod * 120), expandRequirement(state) * 0.05));
     if (effect.id === 'lucky-hire') state.prismaticHires = [...(state.prismaticHires || []), spawn.name];
   } else {
     state.cardsOpened += 1;
     effect = pickWeighted(CARD_EFFECTS, rng);
     const early = (state.cardsOpened || 0) <= 1 && state.level === 0;
-    if (effect.id === 'card-cash') amount = Math.max(10, Math.min(prod * (early ? 45 : 60 + Math.floor(rng() * 240)), Math.max(state.funds * 0.1, prod * 60)));
+    if (effect.id === 'card-cash') amount = Math.max(10, Math.min(prod * (early ? 45 : 60 + Math.floor(rng() * 240)), Math.max(state.funds * 0.1, prod * 60), expandRequirement(state) * 0.02));
   }
   if (amount > 0) credit(state, amount);
   if (effect.seconds) {

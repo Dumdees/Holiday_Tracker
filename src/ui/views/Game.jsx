@@ -271,7 +271,10 @@ export function Game() {
   const bestBuy = shop.reduce((a, b) => (b.payback < (a ? a.payback : Infinity) ? b : a), null);
   // Rungs you have left far behind are folded away: at the far stages there are dozens of them and
   // every one reads "earns nothing extra just now".
-  const outgrown = shop.filter((b) => b !== bestBuy && b.count > 0 && earning > 0 && b.gain < earning * 0.001);
+  // ...and so are the ones you could not afford in ten minutes of takings, which at the far stages
+  // is most of the list and every one of them reads the same.
+  const outgrown = shop.filter((b) => b !== bestBuy && earning > 0
+    && ((b.count > 0 && b.gain < earning * 0.001) || (b.cost > earning * 600 && shop.indexOf(b) > 2)));
   const rows = showOld ? shop : shop.filter((b) => !outgrown.includes(b));
   const hint = nextStep(s, shop);
   // Ten at a time is the sensible way to shop – but only once ten of something is twenty seconds
@@ -368,7 +371,14 @@ export function Game() {
     if (narrow) {
       const ok = await confirm({
         title: `${u.emoji} ${u.name}`,
-        message: `${u.blurb}\n\n${u.question}\n\nYou will see: ${u.visual}\n\n${gainLine(u)}${fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}`,
+        message: (
+          <>
+            {u.blurb}<br /><br />
+            {u.question}<br /><br />
+            <span class="muted">You will see: {u.visual}</span><br /><br />
+            <strong>{gainLine(u)}{fmtPayback(u.payback, null) || noPaybackReason(u, u.kind === 'conditional' ? G.conditionShare(u, s, metrics) : 0)}</strong>
+          </>
+        ),
         confirmLabel: `Buy for ${fmtMoney(u.cost, { short: true })}`, icon: 'zap',
       });
       if (!ok) return;

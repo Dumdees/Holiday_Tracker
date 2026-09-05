@@ -900,7 +900,7 @@ export function createScene(canvas, { onCoin } = {}) {
     const gy = pavementY();
     // Better rates: a proper pay board over the office, one line for each rise.
     if (g.rate) {
-      const x = officeX(), top = gy - 132;
+      const x = officeX() + 96, top = gy - 132;   // clear of the payments bubble over the office
       ctx.fillStyle = day > 0.5 ? 'rgba(255,255,255,.9)' : 'rgba(40,34,60,.85)';
       ctx.beginPath(); ctx.roundRect(x - 30, top, 60, 10 + g.rate * 9, 4); ctx.fill();
       ctx.strokeStyle = '#E5A93B'; ctx.lineWidth = 1.5; ctx.stroke();
