@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as g from '../../src/core/game/engine.js';
 import { BUILDINGS, UPGRADES, BRANCH_OPTIONS, BRANCHES, ACHIEVEMENTS, PERKS, LEVELS, MILESTONES, RATINGS, levelInfo, upgradesFor, upgradeIcon, beyondBuilding } from '../../src/core/game/data.js';
 import { DRAWS, MARKS } from '../../src/ui/game/scene.js';
-import { fmtMoney, fmtNum, fmtSeconds } from '../../src/core/game/format.js';
+import { fmtMoney, fmtNum, fmtSeconds, fmtTimes } from '../../src/core/game/format.js';
 
 const T0 = Date.UTC(2026, 8, 2, 9, 0, 0);
 /** A board with sensible amounts of everything, for probing the maths. */
@@ -662,7 +662,27 @@ test('friendly numbers', () => {
   assert.equal(fmtMoney(1.5e6), '£1.50 million');
   assert.equal(fmtNum(2.5), '2.5');
   assert.equal(fmtSeconds(75), '1m 15s');
-  assert.equal(fmtSeconds(3600 * 5), '5h');
+  assert.equal(fmtSeconds(3600 * 5), '5 hours');
+  // Past a thousand trillion the proper names are ones nobody says out loud, and several look
+  // alike, so the big money is counted in billions instead – one more "billion" is always a
+  // thousand million times bigger, and two numbers can be compared by counting the word.
+  assert.equal(fmtMoney(1e15), '£1 million billion');
+  assert.equal(fmtMoney(1e18), '£1 billion billion');
+  assert.equal(fmtMoney(4.05e22), '£40.5 trillion billion');
+  assert.ok(!/illion/.test(fmtMoney(1e33).replace(/billion|million|trillion/g, '')), 'no names nobody uses');
+  const big = fmtMoney(1e30), bigger = fmtMoney(1e33);
+  const count = (s) => s.split('billion').length - 1;
+  assert.ok(count(bigger) >= count(big), 'a bigger number never has fewer billions in it');
+  // Short is fewer figures, never a shorter word: "£8.6 million billion", never "£8.6Sp".
+  assert.ok(/million billion/.test(fmtMoney(8.56e15, { short: true })));
+});
+
+test('how much better something is, in words', () => {
+  assert.equal(fmtTimes(2), 'twice as good');
+  assert.equal(fmtTimes(2.95), 'three times as good');
+  assert.equal(fmtTimes(1.6), 'half as good again');
+  assert.equal(fmtTimes(1), 'no better');
+  assert.ok(!/[×x]|\d+\.\d/.test(fmtTimes(2.95)), 'never a times sign or a decimal');
 });
 
 test('the team is named after the real carers on the books', () => {

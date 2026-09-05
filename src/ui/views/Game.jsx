@@ -16,7 +16,7 @@ import { Icon } from '../components/Icon.jsx';
 import { carers, settings } from '../../store/store.js';
 import * as G from '../../core/game/engine.js';
 import { TICKER, SIDES, levelInfo } from '../../core/game/data.js';
-import { fmtMoney, fmtNum, fmtRate, fmtSeconds, fmtPercent } from '../../core/game/format.js';
+import { fmtMoney, fmtNum, fmtRate, fmtSeconds, fmtPercent, fmtTimes } from '../../core/game/format.js';
 import { game, offlineReport, startGame, saveGame, scheduleSave, mutate, resetGame } from '../game/gameStore.js';
 import { createScene } from '../game/scene.js';
 
@@ -40,7 +40,7 @@ function fmtPaybackAs(seconds, lead) {
   if (seconds < 90) { const n = Math.max(1, Math.round(seconds)); return `${lead} ${n} second${n === 1 ? '' : 's'}`; }
   if (seconds < 5400) return `${lead} about ${Math.round(seconds / 60)} minutes`;
   if (seconds < 60 * 3600) return `${lead} about ${Math.round(seconds / 3600)} hours`;
-  return 'one to save the run for';
+  return 'too dear for now – save up for it';
 }
 
 /** Why something shows no payback time – never "saves a job" unless it really does. */
@@ -74,14 +74,33 @@ function listNames(names) {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
+/**
+ * How far through a stage you are, in words. A run's takings multiply rather than add up, so the
+ * bar counts how many times they have doubled – but "37% of the doublings" is not something anybody
+ * can picture, so it says it the way you would say it out loud.
+ */
+function howFar(outlook) {
+  const p = outlook.progress;
+  if (outlook.fraction >= 1) return 'you have done it';
+  if (p >= 0.9) return 'nearly there';
+  if (p >= 0.72) return 'most of the way';
+  if (p >= 0.55) return 'over halfway';
+  if (p >= 0.45) return 'about halfway';
+  if (p >= 0.28) return 'about a third of the way';
+  if (p >= 0.12) return 'made a start';
+  return 'just getting going';
+}
+
 /** How much more a row would bring in, said the way a person would say it. */
 function gainWords(share) {
   if (share >= 4) return `${fmtNum(Math.round(share))} times what you earn now`;
   if (share >= 0.9) return 'about twice what you earn now';
-  if (share >= 0.4) return 'another half of everything you earn';
-  if (share >= 0.01) return `+${Math.round(share * 100)}% more coming in`;
-  if (share >= 0.0001) return `+${(share * 100).toFixed(2)}% more coming in`;
-  return 'a trickle more coming in';
+  if (share >= 0.55) return 'about half as much again';
+  if (share >= 0.25) return 'about a third as much again';
+  if (share >= 0.12) return 'a good bit more coming in';
+  if (share >= 0.04) return 'a bit more coming in';
+  if (share >= 0.005) return 'a little more coming in';
+  return 'barely anything, but it all counts';
 }
 
 /** True on a phone-sized screen, so the big figures can be shortened rather than clipped. */
@@ -100,15 +119,16 @@ function usePhoneWidth() {
  * that do something else say what they do, in the same shape, so tiles can be compared at a glance.
  */
 function gainPct(u) {
-  if (u.gain > 0 && u.income > 0) {
-    const pct = (u.gain / u.income) * 100;
-    if (pct >= 100000) return 'a step change';
-    return pct >= 1000 ? `+${fmtNum(Math.round(pct))}%` : pct >= 1 ? `+${Math.round(pct)}%` : pct >= 0.05 ? `+${pct.toFixed(1)}%` : 'a trickle';
+  if (u.gain > 0 && u.income > 0) return gainWords(u.gain / u.income);
+  if (u.kind === 'discount') {
+    const off = 1 - (u.factor || u.sideDiscount || 1);
+    return off >= 0.45 ? 'about half price' : off >= 0.3 ? 'about a third off' : off >= 0.2 ? 'about a quarter off' : 'a bit cheaper';
   }
-  if (u.kind === 'discount') return `−${Math.round((1 - (u.factor || u.sideDiscount || 1)) * 100)}% to buy`;
-  if (u.kind === 'clickpct') { const add = u.clickAdd || 0; return add > 0 ? `+${(add * 100).toFixed(add < 0.01 ? 1 : 0)}% a tap` : 'nothing more, you are at the limit'; }
-  if (u.kind === 'click') return `×${u.mult || 2} a tap`;
-  if (u.clickBoost) return `×${u.clickBoost} a tap`;
+  if (u.kind === 'clickpct') { const add = u.clickAdd || 0; return add > 0 ? 'your own visits pay more' : 'nothing more, you are at the limit'; }
+  if (u.kind === 'click' || u.clickBoost) {
+    const m = u.clickBoost || u.mult || 2;
+    return m >= 3 ? 'your own visits pay a lot more' : 'your own visits pay double';
+  }
   return '';
 }
 
@@ -189,8 +209,8 @@ export function Game() {
         }
         const events = G.tick(st, dt, now, Math.random, names);
         const badges = events.filter((e) => e.kind === 'achievement').map((e) => e.achievement);
-        if (badges.length === 1) toast(`${badges[0].emoji} Badge earned: ${badges[0].name} – everything earns 1% more`, { kind: 'success', duration: 5000 });
-        else if (badges.length > 1) toast(`🎉 ${badges.length} badges at once: ${badges.map((b) => b.name).join(', ')} – everything earns ${badges.length}% more`, { kind: 'success', duration: 6000 });
+        if (badges.length === 1) toast(`${badges[0].emoji} Badge earned: ${badges[0].name}. Everything earns a bit more.`, { kind: 'success', duration: 5000 });
+        else if (badges.length > 1) toast(`🎉 ${badges.length} badges at once! Everything earns a bit more.`, { kind: 'success', duration: 5000 });
         if (badges.length) { setConfetti((c) => c + 1); sceneRef.current?.celebrate('achievement'); }
         for (const e of events) {
           if (e.kind === 'spawn' && e.spawn.type === 'prismatic') toast(`🌈 ${e.spawn.name} is having a brilliant shift – go and say hello!`, { kind: 'info', duration: 6000 });
@@ -474,12 +494,12 @@ export function Game() {
 
         {/* The one number that drives every decision: which side is behind. */}
         <div class="balance-strip" data-test="balance">
-          <span class="balance-label">🏠 {fmtNum(metrics.work)} wanted</span>
+          <span class="balance-label">🏠 {fmtNum(metrics.work)} visits wanted</span>
           <span class="balance-bar" role="img" aria-label={`Work ${Math.round(workShare)} per cent, team ${100 - Math.round(workShare)} per cent`}>
             <span class="balance-work" style={{ width: `${workShare}%` }} />
             <span class="balance-team" style={{ width: `${100 - workShare}%` }} />
           </span>
-          <span class="balance-label">👥 {fmtNum(metrics.team)} deliverable</span>
+          <span class="balance-label">👥 your team can do {fmtNum(metrics.team)}</span>
           <span class={`balance-advice side-${balance.side}`}>{balance.advice}</span>
         </div>
 
@@ -533,18 +553,23 @@ export function Game() {
               <div class="rating-row"><span class="rating-emoji">{rating.emoji}</span><strong>{rating.name}</strong></div>
             {G.activeConditionals(s, metrics).length ? (
               <ul class="cond-list">
-                {G.activeConditionals(s, metrics).map((c) => <li key={c.id} class={c.on ? 'on' : c.share >= 0.25 ? 'part' : 'off'}>{c.on ? '✅' : c.share >= 0.25 ? '🟡' : '⚪'} {c.name} <span class="muted small">{c.on ? 'is paying in full' : c.share >= 0.25 ? `is paying ${Math.round(c.share * 100)}% – more ${c.label}` : `pays ${c.label}`}</span></li>)}
+                {G.activeConditionals(s, metrics).map((c) => (
+                  <li key={c.id} class={c.on ? 'on' : c.share >= 0.25 ? 'part' : 'off'}>
+                    {c.on ? '✅' : c.share >= 0.25 ? '🟡' : '⚪'} <strong>{c.name}</strong>
+                    <span class="muted small"> — {c.on ? 'paying in full.' : c.share >= 0.25 ? 'paying some of what it can.' : 'not paying yet.'} It pays more {c.label}.</span>
+                  </li>
+                ))}
               </ul>
             ) : null}
             {rating.next ? (
-              <p class="muted small">Coordinators, supervisors, academies and the quality upgrades all count towards the next one. {fmtNum(rating.next.score - rating.score)} more to {rating.next.name}.</p>
+              <p class="muted small">Coordinators, supervisors, academies and the quality upgrades all count towards your rating. Buy {fmtNum(rating.next.score - rating.score)} points' worth more to be rated {rating.next.name.toLowerCase()}.</p>
             ) : <p class="muted small">There is nothing above this. Everybody knows it.</p>}
           </Card>
         </div>
 
         {/* ---------- Middle: what to buy ---------- */}
         <div class="game-mid">
-          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? (narrow ? 'Best value first. Tap and hold for what it does.' : 'Best value first. Hover for what it does.')
+          <Card title="Upgrades" icon="zap" padded={false} class="upgrade-card" subtitle={upgrades.length ? (narrow ? 'Best thing first. Tap one to see what it does.' : 'Best thing first. Point at one to see what it does.')
               : s.upgrades.length > 3 ? 'Nothing here is worth much next to what you already earn – keep growing and more will be.'
               : 'Tap a few doors – the first upgrade is only a few pounds away.'}>
             <div class="upgrade-row">
@@ -560,12 +585,12 @@ export function Game() {
             </div>
             {upgrades.total > upgrades.length || showAllUpgrades ? (
               <button type="button" class="shop-more" onClick={() => setShowAllUpgrades((v) => !v)}>
-                {showAllUpgrades ? 'Just the best dozen' : `Show ${fmtNum(upgrades.total - upgrades.length)} more`}
+                {showAllUpgrades ? 'Just the best twelve' : `Show ${fmtNum(upgrades.total - upgrades.length)} more`}
               </button>
             ) : null}
           </Card>
 
-          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="What a minute of takings buys you most of." actions={
+          <Card title="Shop" icon="briefcase" class="shop-card" padded={false} subtitle="The best thing to spend your money on is at the top." actions={
             <div class="qty-picker" role="group" aria-label="How many to buy">
               {[1, 10, 'max'].map((q) => <button key={q} type="button" class={`qty ${buyQty === q ? 'active' : ''}`} onClick={() => { chosenQty.current = true; setBuyQty(q); }}>{q === 'max' ? 'Max' : `×${q}`}</button>)}
             </div>}>
@@ -579,8 +604,8 @@ export function Game() {
                       <span class="building-name">
                         <span class={`side-dot side-${b.side}`} title={SIDES[b.side].hint}>{SIDES[b.side].emoji}</span>
                         {b.name}{b.count ? <span class="building-owned">{fmtNum(b.count)}</span> : null}
-                        {bestBuy && bestBuy.id === b.id && b.gain / b.income >= 0.005 ? <span class="best-chip">Best value</span> : null}
-                        {biggestStep && biggestStep.id === b.id && (!bestBuy || bestBuy.id !== b.id) ? <span class="best-chip step-chip">Biggest step</span> : null}
+                        {bestBuy && bestBuy.id === b.id && b.gain / b.income >= 0.005 ? <span class="best-chip">Best buy</span> : null}
+                        {biggestStep && biggestStep.id === b.id && (!bestBuy || bestBuy.id !== b.id) ? <span class="best-chip step-chip">Biggest jump</span> : null}
                       </span>
                       <span class="building-sub muted">
                         {b.gain > 0 && b.income > 0
@@ -588,7 +613,7 @@ export function Game() {
                           : (metrics.team <= 0 && b.side === 'work' ? 'nobody to do the visits yet – take on a carer first'
                             : metrics.work <= 0 && b.side === 'team' ? 'nobody to visit yet – take somebody on first'
                             : b.side === 'team' ? 'gets the visits started' : 'earns nothing extra just now')}
-                        {b.milestone ? <span class="milestone-pip"> · {fmtNum(b.milestone.remaining)} more and every one is {b.milestoneFactor}× better</span> : null}
+                        {b.milestone ? <span class="milestone-pip"> · buy {fmtNum(b.milestone.remaining)} more and they all get {fmtTimes(b.milestoneFactor)}</span> : null}
                       </span>
                     </span>
                     <span class="building-buy"><span class="building-cost">{fmtMoney(b.cost)}</span><span class="muted small">+{fmtRate(b.gain)}</span></span>
@@ -601,10 +626,8 @@ export function Game() {
             </ul>
             {folded.length ? (
               <button type="button" class="shop-more" onClick={() => setShowOld((v) => !v)}>
-                {showOld ? 'Tidy the rest away'
-                  : outgrown.length && tooDear.length ? `Show ${fmtNum(outgrown.length)} left behind and ${fmtNum(tooDear.length)} too dear for now`
-                  : outgrown.length ? `Show ${fmtNum(outgrown.length)} older ${outgrown.length === 1 ? 'rung' : 'rungs'} you have left behind`
-                  : `Show ${fmtNum(tooDear.length)} too dear for now`}
+                {showOld ? 'Hide the rest'
+                  : `Show ${fmtNum(folded.length)} more things to buy`}
               </button>
             ) : null}
           </Card>
@@ -616,19 +639,19 @@ export function Game() {
 
           {rightTab === 'grow' ? (
             <Card title={`Next: ${next.name} ${next.emoji}`} icon="trending-up" class={`expand-card ${G.canExpand(s) ? 'ready' : ''}`}>
-              <p class="soft">Earn {fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.</p>
+              <p class="soft">{outlook.fraction >= 1
+                ? 'You have earned enough to hand this patch over whenever you like. You start again with a small round, keep every badge, and unlock bigger things to buy.'
+                : `Earn ${fmtMoney(G.expandRequirement(s))} in this run to hand the patch over. You start again with a small round, keep every badge, and unlock bigger things to buy.`}</p>
               <div class="expand-bar" role="progressbar" aria-valuenow={Math.round(outlook.progress * 100)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.max(1, outlook.progress * 100)}%` }} /></div>
               <div class="row-between">
                 <span class="muted" title={`${fmtMoney(outlook.earned)} of ${fmtMoney(outlook.target)}`}>{fmtMoney(outlook.earned)} earned so far</span>
-                <strong>{Math.floor(outlook.progress * 100)}% of the doublings</strong>
+                <strong>{howFar(outlook)}</strong>
               </div>
               {outlook.fraction >= 1 ? (
                 <p class="small mt expand-slow">
-                  You have done what this stage asked for. Hand over now, or stay on this patch a while:
-                  every ten times over the figure is worth 30% more Legacy Stars, and another 3% on
-                  everything you will ever earn.
-                  {G.stayingBonus(s) > 1.02 ? <> Staying on this run is worth <strong>{Math.round((G.stayingBonus(s) - 1) * 100)}% more stars</strong> so far.</> : null}
-                  {s.stayBonus > 0 ? <> Staying on has earned you <strong>+{Math.round(s.stayBonus * 100)}% on everything, for good</strong> – of a possible +{Math.round(G.STAY_KEEPS_TOTAL * 100)}%.</> : null}
+                  You have done it. Hand over now, or stay on a while – the longer you leave it, the more
+                  Legacy Stars you get, and everything you earn from now on goes up a little too.
+                  {s.stayBonus > 0 ? <> Staying on has earned you <strong>{fmtPercent(1 + s.stayBonus)} on everything, for good</strong>.</> : null}
                 </p>
               ) : (
                 <p class={`small mt ${outlook.seconds > 1800 ? 'expand-slow' : 'muted'}`}>
@@ -652,7 +675,7 @@ export function Game() {
           ) : null}
 
           {rightTab === 'stars' ? (
-            <Card title="Legacy Stars" icon="star" subtitle={`${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · everything ${fmtPercent(G.starBonus(s.starsEarned))} forever`}>
+            <Card title="Legacy Stars" icon="star" subtitle={`${s.starsEarned} earned · ${G.starsAvailable(s)} to spend · they make everything ${fmtTimes(G.starBonus(s.starsEarned))}, for good`}>
               <ul class="perk-list">
                 {G.perkList(s).map((p) => (
                   <li key={p.id} class={`perk ${p.owned ? 'owned' : p.affordable ? 'affordable' : ''}`}>
